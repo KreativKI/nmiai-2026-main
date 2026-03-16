@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Data (too large for git)
+agent-*/data/
+agent-*/models/*.pt
+agent-*/models/*.bin
+agent-*/models/*.safetensors
+shared/models/*.pt
+shared/models/*.bin
+shared/models/*.safetensors
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.local
+.auth/
+*.key
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Competition outputs (keep predictions in submissions/)
+agent-*/best_model.pth
+
+# Node (if dashboard is added)
+node_modules/
+.next/
