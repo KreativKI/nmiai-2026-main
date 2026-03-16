@@ -17,7 +17,8 @@ for track in cv ml nlp; do
   echo "=== agent-${track} ==="
   cd "$BASE/agent-${track}"
 
-  python3 -m venv .venv
+  # Use Python 3.13 (3.14 has sentence-transformers hang bug)
+  /Volumes/DevDrive/homebrew/bin/python3.13 -m venv .venv
   PIP="$BASE/agent-${track}/.venv/bin/pip"
 
   "$PIP" install --upgrade pip --quiet
@@ -27,9 +28,12 @@ for track in cv ml nlp; do
     scikit-learn \
     xgboost \
     lightgbm \
+    catboost \
     pandas \
     numpy \
-    matplotlib
+    scipy \
+    matplotlib \
+    optuna
 
   # Deep learning (CPU by default, GPU via Vertex)
   "$PIP" install --quiet \

@@ -1,54 +1,40 @@
 # Session Handoff -- NM i AI 2026 Setup
 
 **Date:** 2026-03-16
-**Phase:** Infrastructure setup (CODE phase of Boris workflow)
-**Status:** Partially complete
+**Phase:** Infrastructure setup -- Boris REVIEW + VALIDATE complete
+**Status:** Core infrastructure ready. Pre-competition prep remaining.
 
 ## What's Done
 
-1. **settings.local.json** -- Full DevDrive permissions (Bash, Read, Write, Edit)
-2. **~/.claude/settings.json** -- Updated user-level permissions for full DevDrive access
-3. **setup.sh** -- Folder structure script (run and verified)
-4. **setup-venvs.sh** -- Python venv creation script (written, NOT yet run)
-5. **PLAYBOOK.md** -- Master competition-day playbook
-6. **templates/CLAUDE-TRACK.md** -- Agent CLAUDE.md template
-7. **templates/RULES-TEMPLATE.md** -- rules.md template
-8. **templates/DECISION-FRAMEWORK.md** -- Build/fork/adapt decision tree
-9. **templates/COMMUNICATION-PROTOCOL.md** -- Intelligence folder protocol
-10. **templates/status-schema.json** -- status.json schema
-11. **shared/templates/** -- 5 baseline templates (tabular, image classification, text classification, object detection, RAG)
-12. **.gitignore** -- Python + Node + competition ignores
-13. **Git repo initialized** -- Initial commit on main branch
-14. **Git worktrees created** -- 3 worktrees for parallel agent work
+1. **Repo scaffolding** -- setup.sh created and verified
+2. **Python venvs** -- All 3 created and validated (torch 2.10, sklearn 1.8, xgboost 3.2, MPS available)
+3. **Agent system prompts** -- Track-specific CLAUDE.md for CV, ML, NLP (enhanced via cowork methodology)
+4. **Templates** -- 5 baseline templates, all reviewed and bug-fixed
+5. **Git worktrees** -- 3 branches (agent-cv, agent-ml, agent-nlp) with intelligence/ symlinked to main
+6. **GitHub remote** -- git@github.com:KreativKI/nmiai-multiagent.git (private, SSH)
+7. **Permissions** -- .claude/settings.local.json deployed to main + all 3 worktrees (full access)
+8. **Boris REVIEW** -- Code reviewer ran, 8 findings, all addressed
+9. **Boris VALIDATE** -- Import checks pass on all 3 venvs
 
-## Git Worktrees
+## Git State
 
-| Worktree | Path | Branch |
-|----------|------|--------|
-| Main (orchestrator) | `/Volumes/devdrive/github_dev/nmiai_multiagent` | main |
-| CV Agent | `/Volumes/devdrive/github_dev/nmiai-worktree-cv` | agent-cv |
-| ML Agent | `/Volumes/devdrive/github_dev/nmiai-worktree-ml` | agent-ml |
-| NLP Agent | `/Volumes/devdrive/github_dev/nmiai-worktree-nlp` | agent-nlp |
+| Branch | Commit | Status |
+|--------|--------|--------|
+| main | 1b94f3c | Pushed to origin |
+| agent-cv | 1b94f3c | Fast-forwarded from main |
+| agent-ml | 1b94f3c | Fast-forwarded from main |
+| agent-nlp | 1b94f3c | Fast-forwarded from main |
 
-## What's Left (Boris REVIEW > SIMPLIFY > VALIDATE)
+## What's Left
 
-### Must Do
-- [ ] Run Boris REVIEW on all created files (code-reviewer agent)
-- [ ] Run Boris SIMPLIFY (code-simplifier agent)
-- [ ] Run Boris VALIDATE (build-validator: verify setup.sh runs clean, all files present)
-- [ ] Run setup-venvs.sh (creates Python venvs with dependencies, ~5 min)
-- [ ] Deploy CLAUDE.md to each worktree (customize per track: cv, ml, nlp)
-- [ ] Copy .claude/settings.local.json to each worktree
-- [ ] Create GitHub remote repo and push
-
-### Should Do Before Competition
-- [ ] Pre-download model weights to shared/models/
-- [ ] Test baseline templates actually run (import check at minimum)
-- [ ] Copy reusable tools from NM_I_AI_dash (batch.py, ab_compare.py, lib.py)
-- [ ] Set up Matilda intel delivery to intelligence/ folders
+### Should Do Before Competition (March 18 evening)
+- [ ] Pre-download model weights to shared/models/ (ResNet50, EfficientNet-B0, YOLOv8n, all-MiniLM-L6-v2)
+- [ ] Test baseline templates end-to-end with dummy data
+- [ ] Copy useful stats tools from NM_I_AI_dash (compute_stats, welch_ttest)
 - [ ] Verify Claude remote connection works from JC's phone
+- [ ] Decide Matilda setup (Mac mini Claude Code session watching intelligence/ folder)
 
-## Key Files Reference
-- Plan source: This was implemented from the plan approved in the planning session
-- Existing infrastructure: `/Volumes/devdrive/github_dev/NM_I_AI_dash/`
-- Boris template: `/Volumes/devdrive/templates/Boris_Master/`
+### Nice to Have
+- [ ] Pre-cache HuggingFace models in shared/models/
+- [ ] Write a quick health-check script (verify venvs, imports, intelligence/ symlinks)
+- [ ] Set up Matilda's CLAUDE.md (orchestrator role)
