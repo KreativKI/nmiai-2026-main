@@ -54,7 +54,8 @@ for track in cv ml nlp; do
   # CV-specific (all agents get it, lightweight)
   pip install --quiet \
     opencv-python-headless \
-    Pillow
+    Pillow \
+    ultralytics
 
   deactivate
   echo "  Done: agent-${track}/.venv"

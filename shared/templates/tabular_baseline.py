@@ -13,7 +13,7 @@ Produces: predictions on test set, local CV score.
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import cross_val_score, StratifiedKFold, KFold
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import StandardScaler, OrdinalEncoder
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.compose import ColumnTransformer
@@ -50,13 +50,6 @@ def build_pipeline(numeric_features, categorical_features):
         ("scaler", StandardScaler()),
     ])
 
-    categorical_transformer = Pipeline(steps=[
-        ("imputer", SimpleImputer(strategy="constant", fill_value="missing")),
-        ("encoder", LabelEncoder()),
-    ])
-
-    # For categorical, we use OrdinalEncoder instead since LabelEncoder is 1D only
-    from sklearn.preprocessing import OrdinalEncoder
     categorical_transformer = Pipeline(steps=[
         ("imputer", SimpleImputer(strategy="constant", fill_value="missing")),
         ("encoder", OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)),

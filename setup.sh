@@ -17,7 +17,13 @@ for track in cv ml nlp; do
   mkdir -p "agent-${track}/data"
   mkdir -p "agent-${track}/models"
   mkdir -p "agent-${track}/tests"
-  echo "{\"agent\":\"agent-${track}\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"track\":\"${track}\",\"phase\":\"waiting\",\"state\":\"waiting\",\"approach\":\"\",\"confidence\":0,\"local_score\":0,\"best_submitted_score\":0,\"submissions_count\":0,\"blockers\":[],\"hours_since_improvement\":0,\"rules_last_read\":\"\"}" > "agent-${track}/status.json"
+  # Map short track names to schema enum values
+  case "$track" in
+    cv) schema_track="computer-vision" ;;
+    ml) schema_track="machine-learning" ;;
+    nlp) schema_track="nlp" ;;
+  esac
+  echo "{\"agent\":\"agent-${track}\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"track\":\"${schema_track}\",\"phase\":\"waiting\",\"state\":\"waiting\",\"approach\":\"\",\"confidence\":0,\"local_score\":0,\"best_submitted_score\":0,\"submissions_count\":0,\"blockers\":[],\"hours_since_improvement\":0,\"rules_last_read\":\"\"}" > "agent-${track}/status.json"
   touch "agent-${track}/MEMORY.md"
   touch "agent-${track}/rules.md"
   touch "agent-${track}/plan.md"
