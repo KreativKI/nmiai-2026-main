@@ -4,6 +4,7 @@
 # Run AFTER setup.sh
 
 set -e
+trap 'echo "ERROR: failed at line $LINENO in agent-${track:-unknown}"' ERR
 
 BASE="/Volumes/devdrive/github_dev/nmiai_multiagent"
 cd "$BASE"
@@ -17,12 +18,12 @@ for track in cv ml nlp; do
   cd "$BASE/agent-${track}"
 
   python3 -m venv .venv
-  source .venv/bin/activate
+  PIP="$BASE/agent-${track}/.venv/bin/pip"
 
-  pip install --upgrade pip --quiet
+  "$PIP" install --upgrade pip --quiet
 
   # Core ML packages (all tracks need these)
-  pip install --quiet \
+  "$PIP" install --quiet \
     scikit-learn \
     xgboost \
     lightgbm \
@@ -31,33 +32,32 @@ for track in cv ml nlp; do
     matplotlib
 
   # Deep learning (CPU by default, GPU via Vertex)
-  pip install --quiet \
+  "$PIP" install --quiet \
     torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
   # NLP / transformers
-  pip install --quiet \
+  "$PIP" install --quiet \
     transformers \
     sentence-transformers
 
   # API clients
-  pip install --quiet \
+  "$PIP" install --quiet \
     anthropic \
     google-generativeai \
     openai
 
   # Networking
-  pip install --quiet \
+  "$PIP" install --quiet \
     aiohttp \
     websockets \
     requests
 
   # CV-specific (all agents get it, lightweight)
-  pip install --quiet \
+  "$PIP" install --quiet \
     opencv-python-headless \
     Pillow \
     ultralytics
 
-  deactivate
   echo "  Done: agent-${track}/.venv"
   cd "$BASE"
 done

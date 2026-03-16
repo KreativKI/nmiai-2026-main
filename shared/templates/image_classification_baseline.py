@@ -149,20 +149,24 @@ def main():
 
     train_transform, val_transform = get_transforms()
 
-    # Load dataset
+    # Load dataset (train and val get separate transforms to avoid augmentation leak)
     if TRAIN_CSV:
-        full_dataset = CSVImageDataset(TRAIN_CSV, transform=train_transform)
+        train_full = CSVImageDataset(TRAIN_CSV, transform=train_transform)
+        val_full = CSVImageDataset(TRAIN_CSV, transform=val_transform)
     else:
         from torchvision.datasets import ImageFolder
-        full_dataset = ImageFolder(os.path.join(DATA_DIR, "train"), transform=train_transform)
+        train_full = ImageFolder(os.path.join(DATA_DIR, "train"), transform=train_transform)
+        val_full = ImageFolder(os.path.join(DATA_DIR, "train"), transform=val_transform)
 
-    # Split into train/val
-    val_size = int(len(full_dataset) * VAL_SPLIT)
-    train_size = len(full_dataset) - val_size
-    train_dataset, val_dataset = random_split(
-        full_dataset, [train_size, val_size],
-        generator=torch.Generator().manual_seed(42)
+    # Split into train/val (same indices, different transforms)
+    val_size = int(len(train_full) * VAL_SPLIT)
+    train_size = len(train_full) - val_size
+    generator = torch.Generator().manual_seed(42)
+    train_indices, val_indices = random_split(
+        range(len(train_full)), [train_size, val_size], generator=generator
     )
+    train_dataset = torch.utils.data.Subset(train_full, train_indices.indices)
+    val_dataset = torch.utils.data.Subset(val_full, val_indices.indices)
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)

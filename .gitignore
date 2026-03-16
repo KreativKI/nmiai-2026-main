@@ -15,9 +15,19 @@ agent-*/data/
 agent-*/models/*.pt
 agent-*/models/*.bin
 agent-*/models/*.safetensors
+agent-*/models/*.onnx
+agent-*/models/*.ckpt
+agent-*/models/*.h5
+agent-*/models/*.pkl
+agent-*/models/*.joblib
 shared/models/*.pt
 shared/models/*.bin
 shared/models/*.safetensors
+shared/models/*.onnx
+shared/models/*.ckpt
+shared/models/*.h5
+shared/models/*.pkl
+shared/models/*.joblib
 
 # IDE
 .vscode/

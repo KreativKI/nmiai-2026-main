@@ -16,8 +16,8 @@
 [ ] Matilda running on Mac mini
 [ ] GCP Vertex L4 access verified
 [ ] Git repo initialized with SSH remote
-[ ] Python venvs created (run setup.sh + setup-venvs.sh)
-[ ] All pip packages installed and verified
+[ ] Python venvs exist (verify: ls agent-cv/.venv/bin/python; if missing run setup-venvs.sh)
+[ ] Pip packages verified (run: agent-cv/.venv/bin/python -c "import torch, sklearn, xgboost; print('OK')")
 [ ] Model cache populated (shared/models/)
 [ ] Claude remote connection tested (can send from phone)
 [ ] Each agent terminal has Claude Code session started

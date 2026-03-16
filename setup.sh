@@ -4,6 +4,7 @@
 # Creates 3 agent workspaces with venvs and shared templates
 
 set -e
+trap 'echo "ERROR: failed at line $LINENO"' ERR
 
 BASE="/Volumes/devdrive/github_dev/nmiai_multiagent"
 cd "$BASE"
