@@ -68,14 +68,21 @@
 **Key insight:** Seeds 3-4 (zero observations) scored HIGHEST. Cross-seed transfer works.
 **Delta:** +32 vs round 3
 
-### Experiment 4: v6 round 5 (deeper stacking)
+### Experiment 4: v6 round 5 (deeper stacking + terrain-aware blending)
 **Date:** 2026-03-20 06:04 UTC
 **Round:** 5
-**Approach:** v6 phased, 9+32+9=50 queries. Max 17 samples on seed 0.
-**Change:** Increased stacking from 3 to 4 passes. 328 terrain changes (very dynamic).
-**Score before:** 71.77 (round 4)
+**Score after:** 67.56 (rank #69)
+**Seeds:** 0:72.6, 1:65.5, 2:67.5, 3:66.8, 4:65.4
+**Key:** Seed 0 improved (72.6 vs 68.8 in R4) thanks to deeper stacking.
+But unobserved seeds worse (65-67 vs 78-84), round had higher entropy (harder).
+**Notes:** Terrain-aware blending helped observed seed but round variance dominates.
+
+### Experiment 5: v6 round 6
+**Date:** 2026-03-20 09:09 UTC
+**Round:** 6
 **Score after:** pending
-**Notes:** 242 alive settlements, 27 factions. Settlement stats captured.
+**Notes:** Most dynamic round yet: 496 terrain changes, 356 settlements, 28 factions.
+Empty->Settlement at 19.3% (highest ever). Forest->Settlement at 26.3%.
 
 ### Experiment 3 (original entry, kept for context):
 **Date:** 2026-03-20 03:36 UTC
