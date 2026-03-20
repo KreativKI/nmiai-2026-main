@@ -408,14 +408,254 @@ def test_register_payment():
 
 
 # ---------------------------------------------------------------------------
+# Tier 2 test cases
+# ---------------------------------------------------------------------------
+
+def test_update_customer():
+    """Test updating an existing customer's phone number."""
+    cust_name = f"QCUpdate{RUN_ID}"
+    email = f"update@{RUN_ID}.no"
+    new_phone = "98765432"
+
+    # Create the customer first (setup)
+    print(f"\n{'='*60}")
+    print(f"TEST: Update Customer (setup: creating customer first)")
+    solve(f"Registrer en kunde med navn {cust_name}, e-post {email}.")
+    time.sleep(0.5)
+
+    def check():
+        data = tx_get("/customer", {"name": cust_name})
+        customers = [c for c in data.get("values", []) if c.get("name") == cust_name]
+        if not customers:
+            return False, f"Customer '{cust_name}' not found after setup"
+        c = customers[0]
+        mobile = c.get("phoneNumberMobile", "")
+        phone = c.get("phoneNumber", "")
+        if str(new_phone) in str(mobile) or str(new_phone) in str(phone):
+            return True, f"Customer '{cust_name}' updated with phone {new_phone}"
+        return False, f"Phone not updated: phoneNumber='{phone}', phoneNumberMobile='{mobile}'"
+
+    verify(
+        "Update Customer",
+        f"Oppdater kunden {cust_name} og legg til mobilnummer {new_phone}.",
+        check,
+    )
+
+
+def test_employee_with_employment():
+    """Test creating an employee with employment details (salary, percentage)."""
+    emp_first = "QCSalary"
+    emp_last = f"Test{RUN_ID}"
+    email = f"salary{RUN_ID}@firma.no"
+    salary = 550000
+
+    def check():
+        data = tx_get("/employee", {"firstName": emp_first, "lastName": emp_last})
+        employees = data.get("values", [])
+        if not employees:
+            return False, f"Employee '{emp_first} {emp_last}' not found"
+        emp = employees[0]
+        emp_id = emp["id"]
+        issues = []
+
+        if emp.get("email") != email:
+            issues.append(f"email: expected '{email}', got '{emp.get('email')}'")
+
+        # Check employment exists
+        emp_data = tx_get("/employee/employment", {"employeeId": emp_id})
+        employments = emp_data.get("values", [])
+        if not employments:
+            issues.append("no employment record (scored: salary/percentage not set)")
+        else:
+            # Check employment details
+            employment_id = employments[0].get("id")
+            if employment_id:
+                details = employments[0].get("employmentDetails", [])
+                if not details:
+                    issues.append("employment exists but no employment details")
+                else:
+                    d = details[0]
+                    actual_salary = d.get("annualSalary", 0)
+                    if actual_salary and abs(actual_salary - salary) > 100:
+                        issues.append(f"salary: expected {salary}, got {actual_salary}")
+
+        if issues:
+            return False, "; ".join(issues)
+        return True, f"Employee '{emp_first} {emp_last}' OK with employment (salary={salary})"
+
+    verify(
+        "Employee with Employment",
+        f"Opprett en ansatt med navn {emp_first} {emp_last}, e-post {email}. "
+        f"Arslonn {salary} kr, stillingsprosent 100%, startdato 01.01.2026.",
+        check,
+        timeout=120,
+    )
+
+
+def test_create_contact():
+    """Test creating a contact for a customer."""
+    cust_name = f"QCKontakt{RUN_ID}"
+    contact_first = "Ola"
+    contact_last = f"Kontakt{RUN_ID}"
+    contact_email = f"ola.kontakt{RUN_ID}@firma.no"
+
+    # Create customer first
+    print(f"\n{'='*60}")
+    print(f"TEST: Create Contact (setup: creating customer first)")
+    solve(f"Registrer en kunde med navn {cust_name}.")
+    time.sleep(0.5)
+
+    def check():
+        # Find customer
+        data = tx_get("/customer", {"name": cust_name})
+        customers = [c for c in data.get("values", []) if c.get("name") == cust_name]
+        if not customers:
+            return False, f"Customer '{cust_name}' not found"
+        cust_id = customers[0]["id"]
+
+        # Find contact
+        contact_data = tx_get("/contact", {"customerId": cust_id})
+        contacts = contact_data.get("values", [])
+        if not contacts:
+            return False, f"No contact found for customer {cust_id}"
+
+        c = contacts[0]
+        issues = []
+        if c.get("firstName") != contact_first:
+            issues.append(f"firstName: expected '{contact_first}', got '{c.get('firstName')}'")
+        if c.get("email") != contact_email:
+            issues.append(f"email: expected '{contact_email}', got '{c.get('email')}'")
+        if issues:
+            return False, "; ".join(issues)
+        return True, f"Contact '{contact_first} {contact_last}' OK for customer '{cust_name}'"
+
+    verify(
+        "Create Contact",
+        f"Opprett en kontaktperson for kunde {cust_name}: {contact_first} {contact_last}, e-post {contact_email}.",
+        check,
+        timeout=90,
+    )
+
+
+def test_credit_note():
+    """Test creating a credit note on an existing invoice."""
+    cust_name = f"QCKredit{RUN_ID}"
+    org_nr = str(955000000 + int(RUN_ID[:5], 16) % 999999)[:9]
+
+    # Create invoice first (setup)
+    print(f"\n{'='*60}")
+    print(f"TEST: Credit Note (setup: creating invoice first)")
+    solve(
+        f"Opprett en faktura til kunde {cust_name} (org.nr {org_nr}) pa 15000 kr eks. mva for Webutvikling. Standard mva.",
+        timeout=120,
+    )
+    time.sleep(1)
+
+    # Find the invoice
+    cust_data = tx_get("/customer", {"name": cust_name})
+    customers = [c for c in cust_data.get("values", []) if c.get("name") == cust_name]
+    if not customers:
+        print("QC FAIL: Setup failed - customer not created for credit note test")
+        global FAIL_COUNT
+        FAIL_COUNT += 1
+        RESULTS.append({"name": "Credit Note", "status": "FAIL", "reason": "setup: customer not created"})
+        return
+
+    cust_id = customers[0]["id"]
+    inv_data = tx_get("/invoice", {
+        "customerId": cust_id,
+        "invoiceDateFrom": "2020-01-01",
+        "invoiceDateTo": "2030-12-31",
+    })
+    invoices = inv_data.get("values", [])
+    if not invoices:
+        print("QC FAIL: Setup failed - no invoice for credit note test")
+        FAIL_COUNT += 1
+        RESULTS.append({"name": "Credit Note", "status": "FAIL", "reason": "setup: invoice not created"})
+        return
+
+    inv_id = invoices[0]["id"]
+    print(f"Setup OK: invoice {inv_id} for {cust_name}")
+
+    def check():
+        # Check if a credit note was created (look for invoices with negative amount or credit note flag)
+        inv_data2 = tx_get("/invoice", {
+            "customerId": cust_id,
+            "invoiceDateFrom": "2020-01-01",
+            "invoiceDateTo": "2030-12-31",
+        })
+        invoices2 = inv_data2.get("values", [])
+        # A credit note creates a new invoice with negative amount
+        credit_notes = [i for i in invoices2 if i.get("amount", 0) < 0]
+        if credit_notes:
+            return True, f"Credit note found: amount={credit_notes[0].get('amount')}"
+        # Also check if original invoice is credited
+        original = [i for i in invoices2 if i.get("id") == inv_id]
+        if original and original[0].get("isCredited"):
+            return True, f"Invoice {inv_id} marked as credited"
+        return False, f"No credit note found for invoice {inv_id} ({len(invoices2)} invoices total)"
+
+    verify(
+        "Credit Note",
+        f"Kunden {cust_name} har en faktura for Webutvikling. Opprett en kreditnota for denne fakturaen. Grunn: Feilaktig fakturert.",
+        check,
+        timeout=120,
+    )
+
+
+def test_multi_line_invoice():
+    """Test creating an invoice with multiple order lines."""
+    cust_name = f"QCMulti{RUN_ID}"
+
+    def check():
+        data = tx_get("/customer", {"name": cust_name})
+        customers = [c for c in data.get("values", []) if c.get("name") == cust_name]
+        if not customers:
+            return False, f"Customer '{cust_name}' not found"
+        cust_id = customers[0]["id"]
+
+        inv_data = tx_get("/invoice", {
+            "customerId": cust_id,
+            "invoiceDateFrom": "2020-01-01",
+            "invoiceDateTo": "2030-12-31",
+        })
+        invoices = inv_data.get("values", [])
+        if not invoices:
+            return False, "No invoice found"
+
+        inv = invoices[0]
+        amount = inv.get("amount", 0)
+        # 3 lines: 5000 + 2000 + 1500 = 8500 eks mva, 10625 inkl 25% mva
+        expected_min = 10000
+        if amount < expected_min:
+            return False, f"Amount too low: {amount} (expected >{expected_min}, 3 lines)"
+        return True, f"Multi-line invoice OK (amount={amount})"
+
+    verify(
+        "Multi-Line Invoice",
+        f"Opprett en faktura til kunde {cust_name} med tre ordrelinjer: "
+        f"Konsultasjon 5000 kr eks. mva, Reiseutgifter 2000 kr eks. mva, "
+        f"Materialer 1500 kr eks. mva. Alle med standard mva-sats.",
+        check,
+        timeout=120,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
+
+# Check for --tier2 flag to run extended tests
+import sys as _sys
+run_tier2 = "--tier2" in _sys.argv
 
 print(f"QC Verification Run: {RUN_ID}")
 print(f"Endpoint: {ENDPOINT}")
 print(f"Sandbox: {TX_BASE}")
+print(f"Mode: {'Tier 1 + Tier 2' if run_tier2 else 'Tier 1 (use --tier2 for extended)'}")
 print(f"{'='*60}")
 
+# Tier 1 tests (always run)
 test_create_customer()
 test_create_employee()
 test_create_product()
@@ -424,6 +664,14 @@ test_create_project()
 test_create_invoice()
 test_create_travel_expense()
 test_register_payment()
+
+# Tier 2 tests (run with --tier2 flag)
+if run_tier2:
+    test_update_customer()
+    test_employee_with_employment()
+    test_create_contact()
+    test_credit_note()
+    test_multi_line_invoice()
 
 # ---------------------------------------------------------------------------
 # Summary

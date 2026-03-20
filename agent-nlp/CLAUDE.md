@@ -19,7 +19,9 @@ If the answer is unclear, choose the faster option.
 4. Read MEMORY.md (last 20 experiments minimum)
 5. Check intelligence/for-nlp-agent/ for new intel from JC (overseer). Messages have self-destruct rules: after completing the task, save any long-term-useful information to CLAUDE.md, plan.md, or MEMORY.md BEFORE deleting the message file.
 6. Read status.json to confirm state
-7. State aloud: "Track: NLP. Score: {X}. Approach: {Y}. Next step: {Z}. Rules last read: now."
+7. Read shared/tools/TOOLS.md for available tools
+8. Read EXPERIMENTS.md for what's already been tried
+9. State aloud: "Track: NLP. Score: {X}. Approach: {Y}. Next step: {Z}. Rules last read: now."
 
 If ANY of these files are missing or empty, stop and report to JC.
 
@@ -274,6 +276,18 @@ gcloud run deploy tripletex-agent \
 2. Register it on the competition platform at https://app.ainm.no/submit/tripletex
 3. Verify by sending a test POST to your `/solve` endpoint
 4. Set an API key on the platform if you want to protect your endpoint
+
+## Pre-Submission Toolchain (MANDATORY before every deploy)
+1. `python3 shared/tools/check_nlp_endpoint.py` -- health check Cloud Run endpoint
+2. `python3 agent-nlp/scripts/qc-verify.py [endpoint]` -- 7 task types with field verification
+3. Do NOT deploy if qc-verify fails
+
+Additional tools:
+- `shared/tools/scrape_leaderboard.py` -- track leaderboard positions
+
+## Shared Tools Location
+All shared tools are in `shared/tools/`. Read TOOLS.md there for full inventory.
+Request new tools from Butler via intelligence/for-ops-agent/TOOL-REQUEST-[name].md
 
 ---
 
