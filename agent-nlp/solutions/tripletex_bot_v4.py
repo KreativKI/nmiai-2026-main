@@ -64,7 +64,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - create_invoice
 - register_payment (existing customer and invoice, register that payment was received)
 - create_credit_note (create credit note on existing invoice)
-- create_travel_expense
+- create_travel_expense (use when prompt mentions reiseregning/travel expense/travel report, even if it also says to create an employee first)
 - delete_employee
 - delete_travel_expense
 - update_customer
@@ -106,16 +106,47 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 """
 
 # ---------------------------------------------------------------------------
-# Common vatType IDs (verified against live API)
+# VAT type lookup (dynamic per sandbox)
 # ---------------------------------------------------------------------------
-VAT_MAP = {25: 3, 15: 31, 12: 32, 0: 5}
+_vat_cache: dict[str, dict[int, int]] = {}
 
 
-def vat_id(rate: int | float | None) -> int:
-    """Map a VAT percentage to Tripletex vatType id."""
+async def lookup_vat_map(c: httpx.AsyncClient, base: str, tok: str) -> dict[int, int]:
+    """Fetch OUTPUT vatType IDs from sandbox and build rate->id map. Cached per base_url."""
+    if base in _vat_cache:
+        return _vat_cache[base]
+
+    r = await tx(c, base, tok, "GET", "/ledger/vatType", params={"count": 200})
+    vat_map = {}
+    if r.get("success") and r.get("data"):
+        for vt in (r["data"] if isinstance(r["data"], list) else [r["data"]]):
+            pct = vt.get("percentage")
+            vid = vt.get("id")
+            name = (vt.get("name") or "").lower()
+            if pct is not None and vid is not None:
+                pct_int = int(round(float(pct)))
+                # Only use OUTPUT vat types (utgaende), skip input (inngaende)
+                is_output = "utg" in name or "output" in name or "sales" in name
+                is_input = "inng" in name or "input" in name or "fradrag" in name
+                if is_input:
+                    continue
+                if pct_int not in vat_map or is_output:
+                    vat_map[pct_int] = vid
+
+    if not vat_map:
+        vat_map = {25: 3, 15: 31, 12: 32, 0: 5}
+        log.warning("VAT lookup returned empty, using hardcoded fallback")
+
+    _vat_cache[base] = vat_map
+    log.info("VAT map for sandbox: %s", vat_map)
+    return vat_map
+
+
+def vat_id_sync(rate: int | float | None, vat_map: dict[int, int]) -> int:
+    """Map a VAT percentage to Tripletex vatType id using looked-up map."""
     if rate is None:
-        return 3  # Default 25%
-    return VAT_MAP.get(int(rate), 3)
+        return vat_map.get(25, 3)
+    return vat_map.get(int(rate), vat_map.get(25, 3))
 
 
 def as_list(data) -> list:
@@ -157,6 +188,22 @@ async def find_invoice_for_customer(c: httpx.AsyncClient, base: str, tok: str, c
         return {"success": False, "error": f"No invoice for customer {cust_id}"}
     invoices = as_list(inv_r["data"])
     return {"success": True, "invoice": invoices[0]}
+
+
+def split_name(f: dict) -> tuple[str, str]:
+    """Extract firstName and lastName from fields, splitting 'name' or 'employeeName' if needed."""
+    first = f.get("firstName", "")
+    last = f.get("lastName", "")
+    if first and last:
+        return first, last
+    # Fallback: split full name field
+    full = f.get("name") or f.get("employeeName") or ""
+    parts = full.strip().split()
+    if len(parts) >= 2:
+        return parts[0], " ".join(parts[1:])
+    elif len(parts) == 1:
+        return parts[0], parts[0]  # Duplicate as last resort
+    return first or "Unknown", last or "Unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -292,16 +339,17 @@ async def exec_create_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
     if not dept_id:
         return {"success": False, "error": "Could not obtain department ID"}
 
+    first, last = split_name(f)
     user_type = f.get("userType", "NO_ACCESS")
     body = {
-        "firstName": f.get("firstName", ""),
-        "lastName": f.get("lastName", ""),
+        "firstName": first,
+        "lastName": last,
         "department": {"id": dept_id},
         "userType": user_type,
     }
     if f.get("email"): body["email"] = f["email"]
     elif user_type in ("STANDARD", "EXTENDED"):
-        body["email"] = f"{f.get('firstName', 'emp').lower()}@company.no"
+        body["email"] = f"{first.lower()}@company.no"
     if f.get("mobile"): body["phoneNumberMobile"] = f["mobile"]
     if f.get("phone"): body["phoneNumber"] = f["phone"]
     if f.get("dateOfBirth"): body["dateOfBirth"] = f["dateOfBirth"]
@@ -316,11 +364,12 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
         return {"success": False, "error": "Could not obtain department ID"}
 
     # Create employee with dateOfBirth (REQUIRED for employment)
+    first, last = split_name(f)
     user_type = f.get("userType", "STANDARD")
-    email = f.get("email") or f"{f.get('firstName', 'emp').lower()}@company.no"
+    email = f.get("email") or f"{first.lower()}@company.no"
     emp_body = {
-        "firstName": f.get("firstName", ""),
-        "lastName": f.get("lastName", ""),
+        "firstName": first,
+        "lastName": last,
         "department": {"id": dept_id},
         "userType": user_type,
         "email": email,
@@ -365,12 +414,19 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
 
 
 async def exec_create_product(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    vat_map = await lookup_vat_map(c, base, tok)
     body = {"name": f.get("productName") or f.get("name", "")}
     if f.get("productNumber"): body["number"] = f["productNumber"]
     if f.get("price") is not None:
         body["priceExcludingVatCurrency"] = float(f["price"])
-    body["vatType"] = {"id": vat_id(f.get("vatRate"))}
-    return await tx(c, base, tok, "POST", "/product", body)
+    body["vatType"] = {"id": vat_id_sync(f.get("vatRate"), vat_map)}
+    r = await tx(c, base, tok, "POST", "/product", body)
+    if not r.get("success") and "vatTypeId" in str(r.get("error", "")):
+        # Retry without vatType (some sandboxes reject explicit VAT codes)
+        log.info("Product POST failed on vatType, retrying without it")
+        del body["vatType"]
+        r = await tx(c, base, tok, "POST", "/product", body)
+    return r
 
 
 async def exec_create_department(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
@@ -409,6 +465,8 @@ async def exec_create_project(c: httpx.AsyncClient, base: str, tok: str, f: dict
 
 
 async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    vat_map = await lookup_vat_map(c, base, tok)
+
     # Step 1: Create customer
     cust_body = {"name": f.get("customerName", ""), "isCustomer": True}
     if f.get("customerOrgNumber"): cust_body["organizationNumber"] = f["customerOrgNumber"]
@@ -423,11 +481,23 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
         accts = as_list(acct_r["data"])
         if accts:
             acct_id = accts[0]["id"]
-            await tx(c, base, tok, "PUT", f"/ledger/account/{acct_id}", {
-                "bankAccountNumber": "19201234568",
-                "bankAccountCountry": {"id": 161},
-                "currency": {"id": 1},
-            })
+            # Check if account already has a bank number
+            existing_bank = accts[0].get("bankAccountNumber")
+            if not existing_bank:
+                bank_r = await tx(c, base, tok, "PUT", f"/ledger/account/{acct_id}", {
+                    "bankAccountNumber": "19201234568",
+                    "bankAccountCountry": {"id": 161},
+                    "currency": {"id": 1},
+                })
+                if not bank_r.get("success"):
+                    log.info("Bank account PUT failed (%d), trying alt number",
+                             bank_r.get("status_code", 0))
+                    # Try alternative bank number
+                    await tx(c, base, tok, "PUT", f"/ledger/account/{acct_id}", {
+                        "bankAccountNumber": "86011117947",
+                        "bankAccountCountry": {"id": 161},
+                        "currency": {"id": 1},
+                    })
 
     # Step 3: Build order lines
     today = f.get("invoiceDate", time.strftime("%Y-%m-%d"))
@@ -448,7 +518,7 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             "description": item.get("description", ""),
             "count": float(item.get("quantity", 1)),
             "unitPriceExcludingVatCurrency": float(item.get("unitPrice", 0)),
-            "vatType": {"id": vat_id(item.get("vatRate"))},
+            "vatType": {"id": vat_id_sync(item.get("vatRate"), vat_map)},
         }
         order_lines.append(line)
 
@@ -464,7 +534,14 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             "orderLines": order_lines,
         }],
     }
-    return await tx(c, base, tok, "POST", "/invoice", invoice_body)
+    r = await tx(c, base, tok, "POST", "/invoice", invoice_body)
+    if not r.get("success") and "vatType" in str(r.get("error", "")).lower():
+        # Retry without vatType on order lines (some sandboxes reject explicit VAT codes)
+        log.info("Invoice POST failed on vatType, retrying without it")
+        for ol in order_lines:
+            ol.pop("vatType", None)
+        r = await tx(c, base, tok, "POST", "/invoice", invoice_body)
+    return r
 
 
 async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
@@ -513,10 +590,11 @@ async def exec_create_credit_note(c: httpx.AsyncClient, base: str, tok: str, f: 
 
 
 async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    # Step 1: Create employee
+    # Step 1: Create employee (pass full fields dict so split_name can find name/employeeName)
+    first, last = split_name(f)
     emp_r = await exec_create_employee(c, base, tok, {
-        "firstName": f.get("firstName", ""),
-        "lastName": f.get("lastName", ""),
+        "firstName": first,
+        "lastName": last,
         "email": f.get("email"),
         "mobile": f.get("mobile"),
     })
