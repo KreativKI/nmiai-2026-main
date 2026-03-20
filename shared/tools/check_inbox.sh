@@ -11,16 +11,24 @@ if [ ! -d "$INBOX" ]; then
     exit 0
 fi
 
-COUNT=$(find "$INBOX" -name "*.md" -newer "$INBOX/.last_check" 2>/dev/null | wc -l | tr -d ' ')
+MARKER="$INBOX/.last_check"
 
-if [ ! -f "$INBOX/.last_check" ]; then
-    COUNT=$(find "$INBOX" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+if [ ! -f "$MARKER" ]; then
+    COUNT=$(find "$INBOX" -maxdepth 1 -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$COUNT" -gt 0 ]; then
+        FILES=$(ls -1 "$INBOX"/*.md 2>/dev/null | xargs -I{} basename {} | head -5)
+        echo "NEW MESSAGES ($COUNT) in intelligence/for-${AGENT}-agent/: $FILES -- Read them now."
+    fi
+    touch "$MARKER"
+    exit 0
 fi
+
+NEW_FILES=$(find "$INBOX" -maxdepth 1 -name "*.md" -newer "$MARKER" 2>/dev/null)
+COUNT=$(echo "$NEW_FILES" | grep -c . 2>/dev/null || echo 0)
 
 if [ "$COUNT" -gt 0 ]; then
-    FILES=$(find "$INBOX" -name "*.md" -newer "$INBOX/.last_check" 2>/dev/null | xargs -I{} basename {} 2>/dev/null | head -3)
-    if [ -z "$FILES" ]; then
-        FILES=$(ls "$INBOX"/*.md 2>/dev/null | xargs -I{} basename {} | head -3)
-    fi
-    echo "NEW MESSAGES ($COUNT) in intelligence/for-${AGENT}-agent/: $FILES — Read them now."
+    NAMES=$(echo "$NEW_FILES" | xargs -I{} basename {} | head -5 | tr '\n' ', ' | sed 's/,$//')
+    echo "NEW MESSAGES ($COUNT) in intelligence/for-${AGENT}-agent/: $NAMES -- Read them now."
 fi
+
+touch "$MARKER"
