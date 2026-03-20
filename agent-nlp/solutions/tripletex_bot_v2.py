@@ -155,7 +155,8 @@ isFixedPrice (bool), projectCategory {id}.
 Create travel expense. REQUIRED: employee {id}.
 Fields: employee {id}, project {id}, department {id}, title (string, short description),
 isChargeable (bool), travelAdvance (number).
-You can include costs inline as an array: costs [{paymentType {id}, amountCurrencyIncVat (number), currency {id}, costCategory {id}, vatType {id}, date (YYYY-MM-DD), comments (string)}].
+IMPORTANT: Do NOT include costs inline. Create the expense first with just employee and title,
+then add costs separately with POST /travelExpense/cost. This avoids complex nested JSON.
 NOTE: paymentType MUST be {id: <int>}. Look up valid IDs with GET /travelExpense/paymentType.
 NOTE: Use "comments" for cost descriptions, NOT "description" (that field does not exist).
 
@@ -246,9 +247,14 @@ List salary types.
 ### GET /ledger/account
 List chart of accounts. Query params: number, isApplicableForSupplierInvoice.
 
+### GET /invoice/paymentType
+List payment types for INCOMING invoice payments. Returns [{id, description}].
+Use the id as paymentTypeId when registering payments on invoices via PUT /invoice/{id}/:payment.
+Common types: "Kontant" (cash), "Betalt til bank" (bank payment).
+WARNING: Do NOT use GET /ledger/paymentTypeOut for invoice payments (those are outgoing/expense types).
+
 ### GET /ledger/paymentTypeOut
-List payment types for outgoing payments (invoices). Returns [{id, description}].
-Use the id as paymentTypeId when registering payments on invoices.
+List payment types for OUTGOING payments (paying bills/expenses). Do NOT use for invoice payments.
 
 ### PUT /employee/{id}
 Update employee. Send full or partial employee object.
@@ -288,7 +294,7 @@ You receive accounting task prompts in 7 languages (Norwegian Bokmal, Nynorsk, E
 ## Sandbox Rules
 The sandbox is mostly fresh and empty, but some tasks have pre-populated data.
 - For CREATE tasks (create employee, customer, product, department, project): do NOT search first. Create directly.
-- For PAYMENT and CREDIT NOTE tasks: the customer and invoice ALREADY EXIST in the sandbox. Find them with GET, then act on them. Do NOT create new invoices.
+- For PAYMENT and CREDIT NOTE tasks: the customer and invoice ALREADY EXIST in the sandbox. Find them with GET, then act on them. Do NOT create new invoices. Always use count=5 on search queries to limit response size.
 - For DELETE tasks: the prompt tells you to delete something. If the entity should already exist (e.g., "delete the employee"), use GET to find it. If not found, create it first then delete it.
 - System entities that always exist: account 1920, admin employee (via whoAmI), countries, currencies, vatTypes, divisions, payment types.
 - Do NOT make GET calls to verify entities you just created (wastes API calls).
@@ -316,8 +322,8 @@ Skipping step 2 causes a 422 error.
 
 ## Payment Registration Sequence
 For tasks that say "register payment" or "registrer betaling" on an existing invoice:
-1. The customer and invoice ALREADY EXIST. Find the invoice: GET /invoice?invoiceDateFrom=2020-01-01&invoiceDateTo=2030-12-31 (add customerId if known). If multiple invoices returned, match by customer name or amount from the prompt.
-2. Look up payment types: GET /ledger/paymentTypeOut. Use the first one (typically id for "nettbank" or manual payment).
+1. The customer and invoice ALREADY EXIST. First find the customer: GET /customer?name=<name>&count=5. Then find their invoice: GET /invoice?customerId=<id>&invoiceDateFrom=2020-01-01&invoiceDateTo=2030-12-31&count=5.
+2. Look up INCOMING payment types: GET /invoice/paymentType. Use "Betalt til bank" (bank payment). Do NOT use /ledger/paymentTypeOut (that is for outgoing payments, wrong direction).
 3. Register payment: PUT /invoice/{{id}}/:payment with query params: paymentDate=YYYY-MM-DD, paidAmount=<amount>, paidAmountCurrency=<amount>, paymentTypeId=<id>.
 Do NOT create a new invoice. The invoice already exists in the sandbox.
 
@@ -325,6 +331,13 @@ Do NOT create a new invoice. The invoice already exists in the sandbox.
 For tasks that say "create credit note" or "kreditnota" for an existing invoice:
 1. Find the invoice: GET /invoice?invoiceDateFrom=2020-01-01&invoiceDateTo=2030-12-31
 2. Create credit note: PUT /invoice/{id}/:createCreditNote with query params: date=YYYY-MM-DD, comment=<reason>.
+
+## Travel Expense Sequence
+1. Create or find the employee (POST /employee or GET /employee)
+2. Look up payment types: GET /travelExpense/paymentType (pick the first one)
+3. Create travel expense with just employee and title: POST /travelExpense
+4. Add each cost separately: POST /travelExpense/cost with travelExpense {{id}}, paymentType {{id}}, amountCurrencyIncVat, currency {{id: 1}}, date
+Do NOT include costs inline in the travelExpense POST. Always add them as separate calls.
 
 ## Employment Details
 If the prompt mentions job title, salary, or start date, create the employee first, then create employment and employment details as separate calls.
@@ -481,7 +494,7 @@ async def call_tripletex(
         return {"error": str(e), "status_code": 500}
 
 
-def truncate_result(result: dict[str, Any], max_chars: int = 4000) -> str:
+def truncate_result(result: dict[str, Any], max_chars: int = 8000) -> str:
     """Serialize an API result to JSON, truncating if it exceeds max_chars."""
     result_str = json.dumps(result, default=str, ensure_ascii=False)
     if len(result_str) <= max_chars:
@@ -582,12 +595,15 @@ async def run_agent(
             candidate = response.candidates[0]
 
             reason = getattr(candidate.finish_reason, "name", None)
+            if reason and reason in ("MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL"):
+                log.warning("Gemini %s on turn %d. Retrying same prompt.", reason, turn + 1)
+                continue  # Retry the same contents without adding anything
             if reason and reason not in ("STOP", "MAX_TOKENS", "FINISH_REASON_UNSPECIFIED"):
                 log.error("Gemini finish_reason=%s. Content may have been blocked.", reason)
 
             if not candidate.content or not candidate.content.parts:
-                log.error("SCORING-ZERO: Gemini returned empty content on turn %d", turn + 1)
-                break
+                log.warning("Gemini empty content on turn %d. Retrying.", turn + 1)
+                continue  # Retry instead of breaking
 
             function_calls = [p for p in candidate.content.parts if p.function_call]
 
