@@ -37,8 +37,9 @@ log = logging.getLogger("tripletex_bot")
 app = FastAPI(title="Tripletex AI Agent", version="1.0")
 
 GCP_PROJECT = os.getenv("GCP_PROJECT", "ai-nm26osl-1779")
-GCP_LOCATION = os.getenv("GCP_LOCATION", "europe-west4")
+GCP_LOCATION = os.getenv("GCP_LOCATION", "us-central1")  # us-central1 has full model roster
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_FALLBACK_MODEL = "gemini-2.5-pro"  # Slower but more reliable on complex JSON
 MAX_AGENT_TURNS = 25
 DEADLINE_SECONDS = 280  # 300s timeout, leave 20s buffer
 
@@ -509,6 +510,58 @@ async def call_tripletex(
         return {"error": str(e), "status_code": 500}
 
 
+def validate_and_fix_body(method: str, path: str, body: str | None) -> str | None:
+    """Intercept and fix common LLM mistakes in API call bodies.
+
+    Gemini sometimes ignores system prompt instructions. This catches
+    known errors before they hit the API and waste efficiency score.
+    """
+    if not body or method not in ("POST", "PUT"):
+        return body
+
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        return body  # Can't fix invalid JSON
+
+    changed = False
+
+    # POST /customer: isCustomer MUST be true
+    if method == "POST" and "/customer" in path and "customer" in path.split("/")[-1]:
+        if not data.get("isCustomer"):
+            data["isCustomer"] = True
+            changed = True
+            log.info("VALIDATOR: Added isCustomer=true to customer POST")
+
+    # POST /product: fix common vatType errors
+    if method == "POST" and "/product" in path:
+        vat = data.get("vatType", {})
+        vat_id = vat.get("id") if isinstance(vat, dict) else None
+        # id=5 is 0% exempt, id=6 is "utgående mva høy sats" which is wrong
+        # Standard 25% = id 3. If LLM picked 5 or 6, fix to 3.
+        if vat_id in (5, 6):
+            data["vatType"] = {"id": 3}
+            changed = True
+            log.info("VALIDATOR: Fixed vatType from %d to 3 (25%% standard)", vat_id)
+
+    # POST /employee: ensure department exists
+    if method == "POST" and path.rstrip("/") == "/employee":
+        if not data.get("department"):
+            log.warning("VALIDATOR: Employee POST missing department (LLM forgot)")
+
+    # POST /invoice: ensure deliveryDate on inline orders
+    if method == "POST" and "/invoice" in path:
+        for order in data.get("orders", []):
+            if not order.get("deliveryDate") and order.get("orderDate"):
+                order["deliveryDate"] = order["orderDate"]
+                changed = True
+                log.info("VALIDATOR: Added deliveryDate from orderDate on inline order")
+
+    if changed:
+        return json.dumps(data, ensure_ascii=False)
+    return body
+
+
 def truncate_result(result: dict[str, Any], max_chars: int = 8000) -> str:
     """Serialize an API result to JSON, truncating if it exceeds max_chars."""
     result_str = json.dumps(result, default=str, ensure_ascii=False)
@@ -569,6 +622,8 @@ async def run_agent(
         types.Content(role="user", parts=user_parts),
     ]
     agent_completed = False
+    consecutive_malformed = 0
+    current_model = GEMINI_MODEL
 
     async with httpx.AsyncClient() as http_client:
         for turn in range(MAX_AGENT_TURNS):
@@ -577,13 +632,13 @@ async def run_agent(
                 log.warning("Approaching 300s timeout (%.0fs elapsed), stopping agent loop", elapsed)
                 break
 
-            log.info("Agent turn %d (api_calls=%d, errors=%d, elapsed=%.0fs)",
-                     turn + 1, api_calls, errors_4xx, elapsed)
+            log.info("Agent turn %d (api_calls=%d, errors=%d, elapsed=%.0fs, model=%s)",
+                     turn + 1, api_calls, errors_4xx, elapsed, current_model)
 
             try:
                 response = await asyncio.to_thread(
                     gemini_client.models.generate_content,
-                    model=GEMINI_MODEL,
+                    model=current_model,
                     contents=contents,
                     config=types.GenerateContentConfig(
                         system_instruction=SYSTEM_PROMPT,
@@ -611,8 +666,27 @@ async def run_agent(
 
             reason = getattr(candidate.finish_reason, "name", None)
             if reason and reason in ("MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL"):
-                log.warning("Gemini %s on turn %d. Retrying same prompt.", reason, turn + 1)
-                continue  # Retry the same contents without adding anything
+                consecutive_malformed += 1
+                log.warning("Gemini %s on turn %d (streak=%d, model=%s).",
+                            reason, turn + 1, consecutive_malformed, current_model)
+                if consecutive_malformed >= 3:
+                    if current_model != GEMINI_FALLBACK_MODEL:
+                        # Switch to more reliable pro model
+                        current_model = GEMINI_FALLBACK_MODEL
+                        log.warning("Switching to fallback model: %s", current_model)
+                    # Also inject a hint to simplify
+                    contents.append(types.Content(role="user", parts=[
+                        types.Part.from_text(
+                            text="Your function call JSON was malformed. "
+                                 "Simplify: use flat JSON, no nested strings. "
+                                 "Ensure all braces and quotes are balanced."
+                        ),
+                    ]))
+                    consecutive_malformed = 0
+                continue
+            else:
+                consecutive_malformed = 0
+
             if reason and reason not in ("STOP", "MAX_TOKENS", "FINISH_REASON_UNSPECIFIED"):
                 log.error("Gemini finish_reason=%s. Content may have been blocked.", reason)
 
@@ -650,7 +724,8 @@ async def run_agent(
                     )
                     continue
 
-                log.info("Calling: %s %s body=%s", method, path, (args.get("body") or "")[:200])
+                body_str = validate_and_fix_body(method, path, args.get("body"))
+                log.info("Calling: %s %s body=%s", method, path, (body_str or "")[:200])
 
                 result = await call_tripletex(
                     client=http_client,
@@ -658,7 +733,7 @@ async def run_agent(
                     session_token=session_token,
                     method=method,
                     path=path,
-                    body=args.get("body"),
+                    body=body_str,
                     query_params=args.get("query_params"),
                 )
 

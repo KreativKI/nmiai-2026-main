@@ -277,13 +277,28 @@ gcloud run deploy tripletex-agent \
 3. Verify by sending a test POST to your `/solve` endpoint
 4. Set an API key on the platform if you want to protect your endpoint
 
-## Pre-Submission Toolchain (MANDATORY before every deploy)
-1. `python3 shared/tools/check_nlp_endpoint.py` -- health check Cloud Run endpoint
-2. `python3 agent-nlp/scripts/qc-verify.py [endpoint]` -- 7 task types with field verification
-3. Do NOT deploy if qc-verify fails
+## Pre-Submission Pipeline (MANDATORY, no exceptions)
 
-Additional tools:
-- `shared/tools/scrape_leaderboard.py` -- track leaderboard positions
+### Target: 100% correctness before submitting
+Each task type only gets 5 submissions/day. A failed submission is a wasted slot that won't come back until 01:00 CET. Spend time fixing to 100% rather than burning slots on partial scores.
+
+### Pipeline steps (run ALL in order):
+1. `python3 -c "import ast; ast.parse(open('agent-nlp/solutions/tripletex_bot_v3.py').read())"` -- syntax check
+2. Deploy to Cloud Run
+3. `curl -s [endpoint]/health` -- health check (must return 200)
+4. `python3 agent-nlp/scripts/qc-verify.py [endpoint]` -- 8 Tier 1 tasks with field verification
+5. QC MUST show 8/8 PASS. If any fail, fix and re-run. Do NOT submit.
+6. `python3 agent-nlp/scripts/qc-verify.py [endpoint] --tier2` -- extended Tier 2 tests
+7. Check Cloud Run logs for MALFORMED_FUNCTION_CALL errors: `gcloud run services logs read tripletex-agent --region europe-west4 --project ai-nm26osl-1779 --limit 50 | grep MALFORMED`
+8. If MALFORMED rate >20% of recent requests, fix before submitting.
+
+### After submission:
+- Record score in EXPERIMENTS.md
+- If score <100%, investigate what fields were wrong before re-submitting same task type
+- Monitor leaderboard: `shared/tools/scrape_leaderboard.py`
+
+### Key principle:
+It is ALWAYS better to spend 1 hour fixing a task type to 100% than to burn 5 submission slots hoping for luck. Bad runs don't lower score, but they waste daily rate limit.
 
 ## Shared Tools Location
 All shared tools are in `shared/tools/`. Read TOOLS.md there for full inventory.
