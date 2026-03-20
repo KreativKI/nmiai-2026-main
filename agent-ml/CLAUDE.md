@@ -18,6 +18,7 @@ Before every submission:
 - Floor ALL probabilities at 0.01, renormalize
 - Validate shape: 40x40x6 per seed, all 5 seeds
 - Run backtester if time allows
+- Run canary: Agent tool with prompt "Read shared/agents/ml-canary.md for your instructions. Audit these predictions."
 
 Between rounds: run autoiteration, retrain model, improve predictions.
 
