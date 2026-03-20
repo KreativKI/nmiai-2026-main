@@ -413,7 +413,7 @@ async def exec_create_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
         emp_r = await tx(c, base, tok, "POST", "/employee/employment", {
             "employee": {"id": emp_id},
             "startDate": start_date,
-            "employmentType": "ORDINARY",
+            "isMainEmployer": True,
         })
         if emp_r.get("success"):
             emp_id_empl = emp_r["data"]["id"]
@@ -520,8 +520,15 @@ async def exec_create_department(c: httpx.AsyncClient, base: str, tok: str, f: d
                 body["departmentNumber"] = i + 1
             last_r = await tx(c, base, tok, "POST", "/department", body)
         return last_r
+    # Handle departmentName as flat list (LLM variant)
+    dept_name = f.get("departmentName") or f.get("name", "")
+    if isinstance(dept_name, list):
+        last_r = {"success": False, "error": "No departments"}
+        for i, n in enumerate(dept_name):
+            last_r = await tx(c, base, tok, "POST", "/department", {"name": n, "departmentNumber": i + 1})
+        return last_r
     # Single department
-    body = {"name": f.get("departmentName") or f.get("name", "")}
+    body = {"name": dept_name}
     if f.get("departmentNumber") is not None:
         body["departmentNumber"] = int(f["departmentNumber"])
     return await tx(c, base, tok, "POST", "/department", body)
@@ -956,7 +963,7 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
         if cust_r.get("success") and cust_r.get("data"):
             supplier_id = cust_r["data"]["id"]
 
-    sup_inv_body = {"invoiceDate": invoice_date, "dueDate": invoice_date, "invoiceNumber": invoice_number,
+    sup_inv_body = {"invoiceDate": invoice_date, "paymentDueDate": invoice_date, "invoiceNumber": invoice_number,
                     "amountCurrency": total_incl_vat, "currency": {"id": 1}}
     if supplier_id: sup_inv_body["supplier"] = {"id": supplier_id}
     sup_inv_r = await tx(c, base, tok, "POST", "/supplierInvoice", sup_inv_body)
@@ -1006,12 +1013,20 @@ async def exec_create_dimension(c: httpx.AsyncClient, base: str, tok: str, f: di
         acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(post_account)})
         acct_id = as_list(acct_r["data"])[0]["id"] if acct_r.get("success") and acct_r.get("data") else None
         if acct_id:
-            posting = {"account": {"id": acct_id}, "amountGross": float(post_amount),
-                       "amountGrossCurrency": float(post_amount), "currency": {"id": 1},
-                       "description": description, "date": post_date}
-            if target_dept_id: posting["department"] = {"id": target_dept_id}
+            posting_debit = {"account": {"id": acct_id}, "amountGross": float(post_amount),
+                             "amountGrossCurrency": float(post_amount), "currency": {"id": 1},
+                             "description": description, "date": post_date}
+            if target_dept_id: posting_debit["department"] = {"id": target_dept_id}
+            # Balanced voucher: add credit posting on account 2400
+            credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 2400})
+            credit_id = as_list(credit_acct_r["data"])[0]["id"] if credit_acct_r.get("success") and credit_acct_r.get("data") else None
+            postings = [posting_debit]
+            if credit_id:
+                postings.append({"account": {"id": credit_id}, "amountGross": -float(post_amount),
+                                 "amountGrossCurrency": -float(post_amount), "currency": {"id": 1},
+                                 "description": description, "date": post_date})
             return await tx(c, base, tok, "POST", "/ledger/voucher", {
-                "date": post_date, "description": description, "postings": [posting]})
+                "date": post_date, "description": description, "postings": postings})
 
     if created_values:
         return {"success": True, "data": {"message": f"Created {len(created_values)} dimension values"}}
