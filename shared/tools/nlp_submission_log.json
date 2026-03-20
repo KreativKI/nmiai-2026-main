@@ -1,0 +1,13 @@
+[
+  {
+    "timestamp": "2026-03-20T13:08:16.995441+00:00",
+    "attempt": 1,
+    "endpoint": "https://tripletex-agent-795548831221.europe-west4.run.app/solve",
+    "success": true,
+    "task_type": "and",
+    "score": null,
+    "checks_passed": null,
+    "total_checks": null,
+    "error": null
+  }
+]
