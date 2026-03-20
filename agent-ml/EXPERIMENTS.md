@@ -65,3 +65,28 @@ compute per-cell surprise between batches, re-target next batch at high-surprise
 **Will test live:** Round 8 (weight ~1.48)
 **Verdict:** Pending live results
 
+## HINDSIGHT-001: Post-round query analysis (rounds 4-6)
+**Date:** 2026-03-20 13:12 UTC
+**Tool:** hindsight.py --cached-only
+
+### Observation boost by seed
+| Round | Seed 0 (deep stack) | Seed 1 (single cov) | Seed 2 (single cov) |
+|-------|---------------------|----------------------|----------------------|
+| R4 | +0.4 | **-5.6** | **-3.9** |
+| R5 | +6.4 | +0.7 | n/a |
+| R6 | +12.8 | +0.3 | n/a |
+| **Avg** | **+6.5** | **-1.5** | **-3.9** |
+
+### Settlement info gain on single-coverage seeds
+R4 seed 1: -11.3, R4 seed 2: -7.1, R5 seed 1: -3.6, R6 seed 1: -6.8
+**Single observation of settlements is WORSE than the transition model.**
+
+### Query targeting
+Only 12% of our queries hit the top-200 highest-error cells.
+Adaptive stacking + hindsight re-targeting should improve this.
+
+### Strategy change applied
+- Skip seed 1/2 coverage entirely (default --max-secondary 0)
+- All 41 remaining queries -> adaptive stacking on seed 0
+- Expected: seed 0 gets ~50 queries (13+ samples/cell) instead of 32+9 split
+
