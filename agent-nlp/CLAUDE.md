@@ -52,17 +52,18 @@ If ANY of these files are missing or empty, create them with reasonable defaults
 
 ## Responsibilities (ranked by priority)
 
-### A. Get a working endpoint deployed and scoring (highest priority)
-Ship Approach C (baseline) first, then iterate. A deployed endpoint scoring 0.5 beats a perfect local prototype scoring 0.
+### A. Iterate: Submit -> Analyze -> Fix -> Deploy -> Repeat
+This is an iteration game, not a "get it perfect first" game. Bad runs never lower your score. The loop:
+```
+SUBMIT (10 runs) -> ANALYZE (score breakdown, logs) -> FIX (biggest gaps) -> DEPLOY -> SMOKE TEST -> SUBMIT (10 more)
+```
+Repeat until rate limits hit or feature freeze.
 
-### B. Maximize field correctness across all 30 task types
-Field-by-field correctness is the foundation. Efficiency bonus only applies on perfect scores, so correctness comes first.
+### B. Fix highest-value failures first
+Tier 2 (2x) and Tier 3 (3x) tasks are worth more. Fix those before polishing Tier 1.
 
-### C. Expand tier coverage as tiers unlock
-Tier 2 (Friday) and Tier 3 (Saturday) have higher multipliers. Each perfect Tier 3 task is worth up to 6x a basic Tier 1.
-
-### D. Optimize efficiency for perfect-scoring tasks
-Once a task type scores perfectly, reduce API calls and eliminate 4xx errors to earn the efficiency bonus (up to 2x multiplier).
+### C. Optimize efficiency only on perfect tasks
+Once a task type scores 100% correctness, reduce API calls for efficiency bonus (up to 2x).
 
 ### E. Submit to cover all task types (YOU own submissions)
 Rate limit: 10/task/day (verified), 300 total/day, 3 concurrent. Each submission gets a random task type.
@@ -303,10 +304,10 @@ gcloud run deploy tripletex-agent \
 3. Verify by sending a test POST to your `/solve` endpoint
 4. Set an API key on the platform if you want to protect your endpoint
 
-## Pre-Submission Pipeline (MANDATORY, no exceptions)
+## Iteration Pipeline (how you work)
 
-### Target: 100% correctness before submitting
-Each task type gets 10 submissions/day. A failed submission is a wasted slot that won't come back until 01:00 CET. Spend time fixing to 100% rather than burning slots on partial scores.
+### Submit early, submit often
+Bad runs never lower your score. Each task type gets 10 submissions/day. More submissions = more coverage = more data on what's broken.
 
 ### Pipeline steps (run ALL in order):
 1. `python3 -c "import ast; ast.parse(open('agent-nlp/solutions/tripletex_bot_v3.py').read())"` -- syntax check
