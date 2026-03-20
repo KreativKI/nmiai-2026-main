@@ -605,34 +605,19 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
                     continue
 
                 # Distance-weighted blending between near and far transitions
+                # Lowered from 0.8/0.6/0.3: backtest BT-001 test 9 showed +0.8 avg
                 dist = dist_map[y, x]
                 if dist <= 1:
-                    w_near = 0.8
-                elif dist <= 3:
                     w_near = 0.6
+                elif dist <= 3:
+                    w_near = 0.4
                 elif dist <= 5:
-                    w_near = 0.3
+                    w_near = 0.2
                 else:
                     w_near = 0.0
 
-                # Also count adjacent forests for settlement survival bonus
-                adj_forests = sum(
-                    1 for dy in (-1, 0, 1) for dx in (-1, 0, 1)
-                    if (dy, dx) != (0, 0)
-                    and 0 <= y+dy < height and 0 <= x+dx < width
-                    and TERRAIN_TO_CLASS.get(grid[y+dy][x+dx], 0) == 4
-                )
-
                 base = w_near * final_trans["near"][cls] + \
                        (1 - w_near) * final_trans["far"][cls]
-
-                # Adjust settlement cells based on forest adjacency
-                # More forests = slightly higher survival probability
-                if cls == 1 and adj_forests > 0:
-                    forest_bonus = min(adj_forests * 0.02, 0.08)
-                    base[1] += forest_bonus  # boost settlement survival
-                    base[0] -= forest_bonus * 0.6  # reduce empty
-                    base[4] -= forest_bonus * 0.4  # reduce forest
 
                 pred[y, x] = base
 
