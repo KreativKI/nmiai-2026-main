@@ -140,5 +140,19 @@
 
 ### Rules re-read at 2026-03-20T04:00:00Z. FOUND: scoring formula was wrong. Fixed in rules.md.
 
+### API Discovery: simulate returns settlement STATS
+- The /simulate endpoint returns NOT just the grid but also settlement objects with:
+  population, food, wealth, defense, has_port, alive, owner_id
+- We are NOT currently capturing this data from our observations!
+- Low food/population settlements are more likely to die
+- owner_id reveals faction structure (same faction = allies, different = enemies)
+- This could be used to build per-settlement survival predictions
+- FIX: capture settlement stats during observation phases
+
+### Leaderboard: weighted_score = round_score * round_weight
+- Not just best round_score, but score multiplied by round weight
+- Higher-weight rounds matter more (later rounds have 5% compounding weight)
+- Round 5 weight ~1.28, round 10 weight ~1.63
+
 ## Auth Note
 API uses cookie auth: `access_token` cookie. Bearer header returns "Missing token" in curl.
