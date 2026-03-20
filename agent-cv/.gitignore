@@ -1,0 +1,29 @@
+# Model weights (too large for git)
+*.onnx
+*.onnx.data
+*.pt
+*.pth
+
+# Gallery embeddings (regenerate with scripts/build_gallery.py)
+solutions/gallery.npy
+solutions/gallery.npz
+solutions/gallery_labels.npy
+
+# Submission ZIPs
+submissions/*.zip
+
+# Docker validation artifacts
+submission/
+docker_output/
+test_images/
+
+# Training data
+data/
+
+# Backup files
+*.bak
+
+# Python
+__pycache__/
+*.pyc
+.venv/

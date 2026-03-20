@@ -66,6 +66,24 @@ agent-*/submission/
 agent-*/submission.zip
 agent-*/test_images/
 
+# Large model/weight files (keep local, not in git)
+*.onnx
+*.onnx.data
+agent-*/submissions/*.zip
+agent-*/solutions/*.onnx
+agent-*/solutions/*.npy
+agent-*/solutions/*.npz
+agent-*/submission/*.onnx
+agent-*/submission/*.npz
+
 # Node (if dashboard is added)
 node_modules/
 .next/
+
+# Sensitive tokens and state files
+.astar_token
+**/state.json
+shared/tools/nlp_submission_log.json
+shared/tools/.ml_round_state.json
+shared/tools/.aggregate_status.json
+shared/tools/.leaderboard_snapshots/

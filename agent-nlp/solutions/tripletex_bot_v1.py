@@ -611,6 +611,8 @@ async def health():
 
 
 @app.post("/solve")
+@app.post("/solve%20%20")
+@app.post("/solve ")
 async def solve(request: Request):
     try:
         body = await request.json()
