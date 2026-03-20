@@ -637,15 +637,33 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
                 pred[y, x] = base
 
         # Blend with direct observations for this seed
+        # Key: high-entropy cells (settlements, ports) benefit most from observations
+        # Low-entropy cells (forests, plains) are already well-predicted by transition model
         if seed_idx in all_obs:
             oc, ot = all_obs[seed_idx]
             has_obs = ot > 0
             if has_obs.any():
                 ot_3d = ot[..., np.newaxis]
                 empirical = oc / np.maximum(ot_3d, 1)
-                # More samples = trust empirical more (up to 95%)
-                # N=1: 40%, N=3: 60%, N=5: 80%, N=7: 90%, N=8+: 95%
-                obs_w = np.clip(ot_3d / 8.0, 0.4, 0.95)
+
+                # Terrain-aware observation weight:
+                # Settlements/Ports: trust observations heavily (0.5 to 0.95)
+                # Forests/Plains: trust observations less (0.1 to 0.4)
+                obs_w = np.zeros((height, width, 1))
+                for y in range(height):
+                    for x in range(width):
+                        if ot[y, x] == 0:
+                            continue
+                        terrain = grid[y][x]
+                        cls = TERRAIN_TO_CLASS.get(terrain, 0)
+                        n = ot[y, x]
+                        if cls in (1, 2, 3):  # Settlement, Port, Ruin: high value
+                            obs_w[y, x, 0] = min(0.95, 0.5 + n / 15.0)
+                        elif cls == 4:  # Forest: moderate value
+                            obs_w[y, x, 0] = min(0.4, 0.1 + n / 20.0)
+                        else:  # Empty/Plains: low value
+                            obs_w[y, x, 0] = min(0.35, 0.1 + n / 25.0)
+
                 pred = np.where(
                     has_obs[..., np.newaxis],
                     obs_w * empirical + (1 - obs_w) * pred,

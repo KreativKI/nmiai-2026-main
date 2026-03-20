@@ -62,7 +62,22 @@
 - Scoring is on probability distributions, not argmax. Must match distribution shape.
 - High-entropy (uncertain) cells weighted more in scoring.
 
-### Experiment 3: v6 phased observation (round 4)
+### Experiment 3a: v6 phased observation (round 4, first submit)
+**Score after:** 71.77 (rank #49)
+**Seeds:** 0:68.8, 1:62.0, 2:66.2, 3:78.1, 4:83.7
+**Key insight:** Seeds 3-4 (zero observations) scored HIGHEST. Cross-seed transfer works.
+**Delta:** +32 vs round 3
+
+### Experiment 4: v6 round 5 (deeper stacking)
+**Date:** 2026-03-20 06:04 UTC
+**Round:** 5
+**Approach:** v6 phased, 9+32+9=50 queries. Max 17 samples on seed 0.
+**Change:** Increased stacking from 3 to 4 passes. 328 terrain changes (very dynamic).
+**Score before:** 71.77 (round 4)
+**Score after:** pending
+**Notes:** 242 alive settlements, 27 factions. Settlement stats captured.
+
+### Experiment 3 (original entry, kept for context):
 **Date:** 2026-03-20 03:36 UTC
 **Round:** 4
 **Approach:** v6 phased (overview -> analyze -> stack -> secondary -> submit)
