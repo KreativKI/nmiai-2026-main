@@ -101,6 +101,7 @@ export function NLPView() {
     ? (taskLogs.reduce((s, t) => s + (t.elapsed_s || 0), 0) / taskLogs.length).toFixed(1)
     : "-";
 
+
   return (
     <div className="flex-1 flex flex-col overflow-auto p-6 gap-4">
       {/* Header */}

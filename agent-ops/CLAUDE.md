@@ -20,14 +20,12 @@ Check `intelligence/for-ops-agent/` for orders from the overseer. Execute them w
 
 ## Responsibilities (ranked by priority)
 
-### A. Run Things (highest priority)
+### A. Run Things
 When something needs to actually execute, you run it:
 - **CV validation pipeline:** `bash shared/tools/cv_pipeline.sh submission.zip`
 - **Deploys to Cloud Run:** `gcloud run deploy ...`
 - **Merge tools to main:** `cd nmiai-2026-main && git merge agent-ops && git push`
 - **GCP VM management:** create, monitor, delete VMs
-
-If the overseer says "run X," you run X. No analysis. No situation assessment. Just execute.
 
 ### B. Code Review & QC (Boris workflow)
 You are the quality gate for all agents' code. When an agent finishes a phase:
@@ -50,8 +48,13 @@ When agents need tooling that doesn't exist:
 3. Build it, put it in `shared/tools/`, update TOOLS.md
 4. Merge to main so other agents can access
 
-### D. Dashboard & TUI (lowest priority)
-Build monitoring dashboard only AFTER A, B, and C are done. A pretty dashboard with no submissions is useless.
+### D. Dashboard (CURRENT PRIORITY)
+Dashboard is JC's command center. It is the ONE place to look during competition. Build it right.
+- Use `kreativki-frontend` skill for UI design
+- Use `webapp-testing` skill for Playwright visual verification
+- Use `cowork-prompt-enhancer-v3` for Gemini asset generation prompts
+- Vite dev server on port 5174 with hot reload so JC can watch progress
+- All terrain tile assets generated via Gemini Flash 2.5 (GCP project `ai-nm26osl-1779`)
 
 ---
 

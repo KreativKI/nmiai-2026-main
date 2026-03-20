@@ -172,10 +172,16 @@ def submit_once(page, endpoint: str, attempt: int) -> dict:
 
         # Wait for actual result (not just loading state)
         # Page shows "Evaluating..." then "Scoring..." then the real result "X/Y (Z%)"
-        # Keep polling until we see the checks pattern or timeout
+        # The page always shows exactly ~20 results, so count-based detection fails.
+        # Instead: detect change by comparing the FIRST result (newest = top of list).
         max_wait = 180
         start = time.time()
         post_submit_text = pre_submit_text
+        pre_first = re.findall(r"\d+/\d+\s*\(\d+%\)", pre_submit_text)
+        pre_first_val = pre_first[0] if pre_first else None
+        pre_first_time = re.findall(r"\d{2}:\d{2}\s*[AP]M\s*·\s*[\d.]+s", pre_submit_text)
+        pre_first_time_val = pre_first_time[0] if pre_first_time else None
+
         while time.time() - start < max_wait:
             time.sleep(5)
             try:
@@ -183,70 +189,73 @@ def submit_once(page, endpoint: str, attempt: int) -> dict:
             except Exception:
                 continue
 
-            # Check for the actual result pattern: "X/Y (Z%)"
-            if re.search(r"\d+/\d+\s*\(\d+%\)", post_submit_text):
-                # Verify it's a NEW result (not pre-existing on page)
-                pre_results = re.findall(r"\d+/\d+\s*\(\d+%\)", pre_submit_text)
-                post_results = re.findall(r"\d+/\d+\s*\(\d+%\)", post_submit_text)
-                if len(post_results) > len(pre_results):
-                    break
-
-            # Still waiting if we see loading indicators
+            # Still loading? Keep waiting.
             if "Evaluating" in post_submit_text or "Scoring" in post_submit_text:
-                continue  # Keep waiting, result not ready yet
+                continue
+
+            # Check if the first (newest) result changed
+            post_first = re.findall(r"\d+/\d+\s*\(\d+%\)", post_submit_text)
+            post_first_time = re.findall(r"\d{2}:\d{2}\s*[AP]M\s*·\s*[\d.]+s", post_submit_text)
+            if post_first and post_first_time:
+                # New result if the timestamp at the top changed
+                if post_first_time[0] != pre_first_time_val:
+                    break
+                # Or if score changed at the same position
+                if post_first[0] != pre_first_val:
+                    break
 
         elapsed = int(time.time() - start)
         print(f"({elapsed}s)", end=" ", flush=True)
 
-        # Parse the result from the NEW lines only (diff between pre and post)
-        pre_lines = set(pre_submit_text.splitlines())
-        post_lines = post_submit_text.splitlines()
-        new_lines = [l.strip() for l in post_lines if l.strip() not in pre_lines and l.strip()]
+        # Parse result: page always shows ~20 results (fixed list, not growing).
+        # New result appears at TOP (index 0). Compare first result pre vs post.
 
-        new_text = "\n".join(new_lines)
-        result["new_lines"] = new_lines  # For debugging
+        post_results = re.findall(r"(\d+)/(\d+)\s*\((\d+)%\)", post_submit_text)
+        pre_results_flat = re.findall(r"\d+/\d+\s*\(\d+%\)", pre_submit_text)
+        post_results_flat = re.findall(r"\d+/\d+\s*\(\d+%\)", post_submit_text)
 
-        # Actual page format (observed):
-        #   "0/13 (0%)"              -> checks_passed/total_checks
-        #   "03:19 PM · 3.5s"       -> timestamp · duration
-        #   "7 / 180 daily submissions used"  -> daily counter
-        #   "Task (0/13)"           -> task entry in Recent Results
+        # Detect new result: first entry in post differs from first entry in pre
+        has_new = (post_results_flat and pre_results_flat
+                   and post_results_flat[0] != pre_results_flat[0])
+        # Also check timestamp change (handles same score, different task)
+        if not has_new:
+            pre_times = re.findall(r"\d{2}:\d{2}\s*[AP]M\s*·\s*[\d.]+s", pre_submit_text)
+            post_times = re.findall(r"\d{2}:\d{2}\s*[AP]M\s*·\s*[\d.]+s", post_submit_text)
+            has_new = (post_times and pre_times and post_times[0] != pre_times[0])
 
-        # Parse checks: "X/Y (Z%)" pattern from new lines
-        checks_match = re.search(r"(\d+)/(\d+)\s*\((\d+)%\)", new_text)
-
-        # Parse daily usage: "N / 180 daily submissions used"
-        daily_match = re.search(r"(\d+)\s*/\s*(\d+)\s*daily\s*submissions", new_text)
-
-        # Parse task name from Recent Results: line containing "(X/Y)" in new content
-        # The task name appears before the score in the results list
-        task_match = re.search(r"^(.+?)\s*\(\d+/\d+\)\s*$", new_text, re.MULTILINE)
-
-        if checks_match:
-            result["checks_passed"] = int(checks_match.group(1))
-            result["total_checks"] = int(checks_match.group(2))
-            result["percentage"] = int(checks_match.group(3))
+        if has_new and post_results:
+            latest = post_results[0]  # First = newest (top of list)
+            result["checks_passed"] = int(latest[0])
+            result["total_checks"] = int(latest[1])
+            result["percentage"] = int(latest[2])
             result["score"] = result["checks_passed"] / result["total_checks"] if result["total_checks"] > 0 else 0
 
+        # Parse daily usage from full page text
+        daily_match = re.search(r"(\d+)\s*/\s*(\d+)\s*daily\s*submissions", post_submit_text)
         if daily_match:
             result["daily_used"] = int(daily_match.group(1))
             result["daily_limit"] = int(daily_match.group(2))
 
-        if task_match:
-            task_name = task_match.group(1).strip()
-            # Filter out non-task-name strings
-            if task_name and len(task_name) > 2 and task_name.lower() != "task":
-                result["task_type"] = task_name
+        # Parse task name: first "Task (X/Y)" entry is the newest
+        task_entries = re.findall(r"^(.+?)\s*\(\d+/\d+\)\s*$", post_submit_text, re.MULTILINE)
+        pre_task_entries = re.findall(r"^(.+?)\s*\(\d+/\d+\)\s*$", pre_submit_text, re.MULTILINE)
+        if task_entries and pre_task_entries:
+            # First entry is newest; check if it changed
+            first_task = task_entries[0].strip()
+            if first_task and len(first_task) > 2:
+                result["task_type"] = first_task
 
         # Store new lines for debugging when no result parsed
+        pre_lines = set(pre_submit_text.splitlines())
+        new_lines = [l.strip() for l in post_submit_text.splitlines()
+                     if l.strip() not in pre_lines and l.strip()]
         if result["score"] is None and result["task_type"] is None:
-            result["raw_result"] = new_text[:800]
+            result["raw_result"] = "\n".join(new_lines)[:800]
 
-        # Only count as success if we got a parseable result
+        # Success if we parsed a score or task name
         if result["score"] is not None or result["task_type"] is not None:
             result["success"] = True
         elif post_submit_text != pre_submit_text:
-            # Page changed but we couldn't parse the result
             result["success"] = False
             result["error"] = "Page changed but could not parse result (check raw_result)"
         elif elapsed >= max_wait:

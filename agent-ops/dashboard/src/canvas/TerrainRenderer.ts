@@ -1,9 +1,13 @@
-import { GRID_COLORS, terrainColor } from "./terrainColors";
+import { GRID_COLORS } from "./terrainColors";
+import { getTile, TILE_SOURCE_SIZE, initTileCache } from "./terrainTiles";
 import { TERRAIN_NAMES } from "../types/dashboard";
 
 const CELL_SIZE = 16;
 const HALF_CELL = CELL_SIZE / 2;
 export const COORD_MARGIN = 24;
+
+// Ensure tile cache is ready before first render
+initTileCache();
 
 export interface Camera {
   offsetX: number;
@@ -51,8 +55,9 @@ export function renderTerrainGrid(
         ctx.fillStyle = "#2a2a2a";
         ctx.fillRect(px, py, CELL_SIZE, CELL_SIZE);
       } else {
-        ctx.fillStyle = terrainColor(terrain);
-        ctx.fillRect(px, py, CELL_SIZE, CELL_SIZE);
+        // Draw pre-rendered tile sprite, scaled from TILE_SOURCE_SIZE to CELL_SIZE
+        const tile = getTile(terrain);
+        ctx.drawImage(tile, 0, 0, TILE_SOURCE_SIZE, TILE_SOURCE_SIZE, px, py, CELL_SIZE, CELL_SIZE);
         if (isDiffMode) {
           // Changed cell: bright border to highlight
           ctx.strokeStyle = "#ffffff";
@@ -79,9 +84,14 @@ export function renderTerrainGrid(
         const px = x * CELL_SIZE;
         const py = y * CELL_SIZE;
 
-        // Draw ground truth on right half
-        ctx.fillStyle = terrainColor(terrain);
-        ctx.fillRect(px + CELL_SIZE / 2, py, CELL_SIZE / 2, CELL_SIZE);
+        // Draw ground truth on right half using tile sprite
+        const gtTile = getTile(terrain);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(px + CELL_SIZE / 2, py, CELL_SIZE / 2, CELL_SIZE);
+        ctx.clip();
+        ctx.drawImage(gtTile, 0, 0, TILE_SOURCE_SIZE, TILE_SOURCE_SIZE, px, py, CELL_SIZE, CELL_SIZE);
+        ctx.restore();
 
         // Divider line
         ctx.strokeStyle = "rgba(255,255,255,0.3)";

@@ -1,0 +1,203 @@
+{
+  "rounds": [
+    {
+      "round_id": "75e625c3-60cb-4392-af3e-c86a98bde8c2",
+      "round_number": 10,
+      "status": "active",
+      "opens_at": "2026-03-20T21:00:58.134788+00:00",
+      "closes_at": "2026-03-20T23:45:58.134788+00:00",
+      "round_weight": 1.6289,
+      "our_score": null,
+      "seed_scores": null,
+      "our_rank": null,
+      "total_teams": null,
+      "seeds_submitted": 5,
+      "queries_used": 50,
+      "queries_total": 50
+    },
+    {
+      "round_id": "2a341ace-0f57-4309-9b89-e59fe0f09179",
+      "round_number": 9,
+      "status": "completed",
+      "opens_at": "2026-03-20T18:02:44.869339+00:00",
+      "closes_at": "2026-03-20T20:47:44.869339+00:00",
+      "round_weight": 1.5513,
+      "our_score": 82.5702,
+      "seed_scores": [
+        80.9188,
+        82.7619,
+        82.7833,
+        83.3732,
+        83.0137
+      ],
+      "our_rank": 93,
+      "total_teams": 221,
+      "seeds_submitted": 5,
+      "queries_used": 50,
+      "queries_total": 50
+    },
+    {
+      "round_id": "c5cdf100-a876-4fb7-b5d8-757162c97989",
+      "round_number": 8,
+      "status": "completed",
+      "opens_at": "2026-03-20T15:01:15.123579+00:00",
+      "closes_at": "2026-03-20T17:46:15.123579+00:00",
+      "round_weight": 1.4775,
+      "our_score": 61.7661,
+      "seed_scores": [
+        70.6979,
+        56.9401,
+        62.0618,
+        59.762,
+        59.3684
+      ],
+      "our_rank": 126,
+      "total_teams": 214,
+      "seeds_submitted": 5,
+      "queries_used": 50,
+      "queries_total": 50
+    },
+    {
+      "round_id": "36e581f1-73f8-453f-ab98-cbe3052b701b",
+      "round_number": 7,
+      "status": "completed",
+      "opens_at": "2026-03-20T12:03:05.337597+00:00",
+      "closes_at": "2026-03-20T14:48:05.337597+00:00",
+      "round_weight": 1.4071,
+      "our_score": 55.0867,
+      "seed_scores": [
+        64.0118,
+        53.9368,
+        53.4487,
+        50.0118,
+        54.0242
+      ],
+      "our_rank": 112,
+      "total_teams": 199,
+      "seeds_submitted": 5,
+      "queries_used": 50,
+      "queries_total": 50
+    },
+    {
+      "round_id": "ae78003a-4efe-425a-881a-d16a39bca0ad",
+      "round_number": 6,
+      "status": "completed",
+      "opens_at": "2026-03-20T09:08:16.644541+00:00",
+      "closes_at": "2026-03-20T11:53:16.644541+00:00",
+      "round_weight": 1.3401,
+      "our_score": 70.4278,
+      "seed_scores": [
+        75.7247,
+        66.7421,
+        67.2729,
+        71.2704,
+        71.129
+      ],
+      "our_rank": 52,
+      "total_teams": 186,
+      "seeds_submitted": 5,
+      "queries_used": 50,
+      "queries_total": 50
+    },
+    {
+      "round_id": "fd3c92ff-3178-4dc9-8d9b-acf389b3982b",
+      "round_number": 5,
+      "status": "completed",
+      "opens_at": "2026-03-20T06:03:10.400305+00:00",
+      "closes_at": "2026-03-20T08:48:10.400305+00:00",
+      "round_weight": 1.2763,
+      "our_score": 67.5561,
+      "seed_scores": [
+        72.5608,
+        65.5017,
+        67.5221,
+        66.8319,
+        65.3639
+      ],
+      "our_rank": 69,
+      "total_teams": 144,
+      "seeds_submitted": 5,
+      "queries_used": 50,
+      "queries_total": 50
+    },
+    {
+      "round_id": "8e839974-b13b-407b-a5e7-fc749d877195",
+      "round_number": 4,
+      "status": "completed",
+      "opens_at": "2026-03-20T03:01:53.460882+00:00",
+      "closes_at": "2026-03-20T05:46:53.460882+00:00",
+      "round_weight": 1.2155,
+      "our_score": 71.7685,
+      "seed_scores": [
+        68.8337,
+        61.9703,
+        66.2455,
+        78.1224,
+        83.6705
+      ],
+      "our_rank": 49,
+      "total_teams": 86,
+      "seeds_submitted": 5,
+      "queries_used": 49,
+      "queries_total": 50
+    },
+    {
+      "round_id": "f1dac9a9-5cf1-49a9-8f17-d6cb5d5ba5cb",
+      "round_number": 3,
+      "status": "completed",
+      "opens_at": "2026-03-20T00:08:20.948277+00:00",
+      "closes_at": "2026-03-20T02:53:20.948277+00:00",
+      "round_weight": 1.157625,
+      "our_score": 39.7184,
+      "seed_scores": [
+        39.6795,
+        39.5963,
+        39.5988,
+        41.0211,
+        38.6961
+      ],
+      "our_rank": 33,
+      "total_teams": 100,
+      "seeds_submitted": 5,
+      "queries_used": 50,
+      "queries_total": 50
+    },
+    {
+      "round_id": "76909e29-f664-4b2f-b16b-61b7507277e9",
+      "round_number": 2,
+      "status": "completed",
+      "opens_at": "2026-03-19T21:02:20.455071+00:00",
+      "closes_at": "2026-03-19T23:47:20.455071+00:00",
+      "round_weight": 1.1025,
+      "our_score": null,
+      "seed_scores": null,
+      "our_rank": null,
+      "total_teams": null,
+      "seeds_submitted": 0,
+      "queries_used": 0,
+      "queries_total": 50
+    },
+    {
+      "round_id": "71451d74-be9f-471f-aacd-a41f3b68a9cd",
+      "round_number": 1,
+      "status": "completed",
+      "opens_at": "2026-03-19T17:57:19.623584+00:00",
+      "closes_at": "2026-03-19T20:42:19.623584+00:00",
+      "round_weight": 1.05,
+      "our_score": null,
+      "seed_scores": null,
+      "our_rank": null,
+      "total_teams": null,
+      "seeds_submitted": 0,
+      "queries_used": 0,
+      "queries_total": 50
+    }
+  ],
+  "active_round": {
+    "round_id": "75e625c3-60cb-4392-af3e-c86a98bde8c2",
+    "round_number": 10,
+    "closes_at": "2026-03-20T23:45:58.134788+00:00",
+    "budget_remaining": 0
+  },
+  "last_fetched": "2026-03-20T22:34:02.438805+00:00"
+}

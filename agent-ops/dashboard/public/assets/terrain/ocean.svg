@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <rect x="0" y="0" width="32" height="32" fill="#143d6e"/>
+  <rect x="0" y="8" width="32" height="6" fill="#1a4b8c"/>
+  <rect x="0" y="22" width="32" height="6" fill="#1a4b8c"/>
+  <path d="M0 4 Q8 2 16 4 Q24 6 32 4" stroke="#2d6cb5" fill="none" stroke-width="1"/>
+  <path d="M0 12 Q8 10 16 12 Q24 14 32 12" stroke="#2d6cb5" fill="none" stroke-width="1"/>
+  <path d="M0 20 Q8 18 16 20 Q24 22 32 20" stroke="#2d6cb5" fill="none" stroke-width="1"/>
+  <path d="M0 28 Q8 26 16 28 Q24 30 32 28" stroke="#2d6cb5" fill="none" stroke-width="1"/>
+  <rect x="20" y="3" width="2" height="1" fill="#5a9ad6"/>
+  <rect x="0" y="23" width="2" height="1" fill="#5a9ad6"/>
+  <rect x="8" y="7" width="2" height="1" fill="#5a9ad6"/>
+  <rect x="7" y="4" width="2" height="1" fill="#5a9ad6"/>
+  <rect x="23" y="3" width="2" height="1" fill="#5a9ad6"/>
+  <rect x="21" y="23" width="2" height="1" fill="#5a9ad6"/></svg>
