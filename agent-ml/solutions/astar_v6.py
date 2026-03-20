@@ -680,6 +680,11 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
             pred = np.maximum(pred, PROB_FLOOR)
             pred = pred / pred.sum(axis=-1, keepdims=True)
 
+        # Temperature scaling: softens distributions (T>1) for better calibration
+        # Backtest: T=1.08 gives +1.1 avg across 7 rounds
+        TEMPERATURE = 1.08
+        pred = pred ** (1.0 / TEMPERATURE)
+
         # Floor and renormalize
         pred = np.maximum(pred, PROB_FLOOR)
         pred = pred / pred.sum(axis=-1, keepdims=True)
