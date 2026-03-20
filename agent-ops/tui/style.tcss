@@ -1,0 +1,158 @@
+/* Kreativ KI Competition TUI - Dark theme with sky-blue accents */
+
+Screen {
+    background: #0f1923;
+    color: #e2e8f0;
+}
+
+/* Tab styling */
+TabbedContent {
+    background: #0f1923;
+}
+
+TabPane {
+    padding: 1;
+}
+
+Tabs {
+    background: #1a2736;
+    color: #7dd3fc;
+}
+
+Tab {
+    background: #1a2736;
+    color: #7dd3fc;
+}
+
+Tab.-active {
+    background: #0f1923;
+    color: #ffffff;
+    text-style: bold;
+}
+
+Tab:hover {
+    background: #243447;
+}
+
+/* Card containers */
+.card {
+    background: #1a2736;
+    border: solid #2a3f55;
+    padding: 1 2;
+    margin: 0 1 1 0;
+    height: auto;
+    min-height: 8;
+}
+
+.wide-card {
+    width: 100%;
+    margin: 0 0 1 0;
+}
+
+.card-title {
+    color: #7dd3fc;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+/* Layout classes */
+.dashboard-top {
+    height: auto;
+    min-height: 10;
+}
+
+.dashboard-top > .card {
+    width: 1fr;
+}
+
+.agents-grid {
+    height: auto;
+    min-height: 12;
+}
+
+.agents-grid > .card {
+    width: 1fr;
+}
+
+.ml-layout {
+    height: 100%;
+}
+
+.side-panel {
+    width: 35;
+    min-width: 30;
+}
+
+.main-panel {
+    width: 1fr;
+}
+
+.cv-layout {
+    height: 100%;
+}
+
+.nlp-layout {
+    height: 100%;
+}
+
+.submit-layout {
+    height: auto;
+}
+
+.submit-layout > .card {
+    width: 1fr;
+}
+
+.settings-layout {
+    height: auto;
+}
+
+.settings-layout > .card {
+    width: 1fr;
+}
+
+/* Data tables */
+DataTable {
+    background: #1a2736;
+    color: #e2e8f0;
+    height: auto;
+    max-height: 40;
+}
+
+DataTable > .datatable--header {
+    background: #243447;
+    color: #7dd3fc;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: #2a5080;
+    color: #ffffff;
+}
+
+/* Output panel */
+.output-panel {
+    background: #0f1923;
+    border: solid #2a3f55;
+    padding: 1;
+    min-height: 5;
+}
+
+/* Status bar */
+#status-bar {
+    dock: bottom;
+    height: 1;
+    background: #1a2736;
+    color: #7dd3fc;
+    padding: 0 2;
+}
+
+/* Header */
+#app-header {
+    dock: top;
+    height: 1;
+    background: #1a2736;
+    color: #7dd3fc;
+    text-style: bold;
+    padding: 0 2;
+}
