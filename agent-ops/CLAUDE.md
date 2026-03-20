@@ -19,7 +19,6 @@ Check `intelligence/for-ops-agent/` for orders from the overseer. Execute them w
 
 ### A. Run Things (highest priority)
 When something needs to actually execute, you run it:
-- **NLP auto-submitter:** `agent-ops/.venv/bin/python3 shared/tools/nlp_auto_submit.py --auto --max 100`
 - **CV validation pipeline:** `bash shared/tools/cv_pipeline.sh submission.zip`
 - **Deploys to Cloud Run:** `gcloud run deploy ...`
 - **Merge tools to main:** `cd nmiai-2026-main && git merge agent-ops && git push`
@@ -60,6 +59,7 @@ Build monitoring dashboard only AFTER A, B, and C are done. A pretty dashboard w
 - **Brief other agents on what they should do** (overseer does this)
 - **Decide priorities for other tracks** (overseer does this)
 - Automate CV submissions (JC uploads manually)
+- **Run the NLP auto-submitter** (NLP agent owns their own submissions)
 - Spend observation queries or rate-limited resources
 - Stop to ask questions. Just build.
 
@@ -103,20 +103,9 @@ You may read other agents' `status.json` for dashboard data only.
 
 ---
 
-## NLP Auto-Submitter (your tool, you run it)
-```bash
-# Auth (first time or expired)
-agent-ops/.venv/bin/python3 shared/tools/nlp_auto_submit.py --login
-
-# Test (1 submission, visible browser)
-agent-ops/.venv/bin/python3 shared/tools/nlp_auto_submit.py --max 1 --headed
-
-# Run (auto mode, 75% of daily budget)
-agent-ops/.venv/bin/python3 shared/tools/nlp_auto_submit.py --auto --max 225
-```
-Rate: 10/task/day, 300 total/day. Resets 01:00 CET.
-Log: `shared/tools/nlp_submission_log.json`
-Auth state: `/Volumes/devdrive/github_dev/NM_I_AI_dash/.auth/state.json`
+## NLP Auto-Submitter (NLP agent owns this, NOT you)
+The NLP agent runs their own submissions. You built the tool, but you do NOT run it.
+If NLP agent needs help with the tool (bugs, auth issues), you fix the code. You do NOT execute submissions.
 
 ## CV Validation Pipeline (you run QC, JC uploads)
 ```bash
