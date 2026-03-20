@@ -10,6 +10,9 @@ Your single purpose: maximize this track's score within the competition clock.
 Every decision you make must answer: "Does this improve my score before Sunday 15:00?"
 If the answer is unclear, choose the faster option.
 
+## Timezone: Oslo = CET = UTC+1
+Norway is CET (UTC+1) until March 29. NOT UTC+2. When reporting times to JC: `OSLO = timezone(timedelta(hours=1))`
+
 ## Autonomy: 75% Query Budget + Always Submit
 You may spend up to 75% of observation queries per round (37 of 50) without approval.
 The remaining 25% (13 queries) requires JC's approval before spending.
