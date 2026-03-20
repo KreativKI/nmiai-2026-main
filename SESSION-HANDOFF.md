@@ -1,40 +1,61 @@
 # Session Handoff -- NM i AI 2026 Setup
 
-**Date:** 2026-03-16
-**Phase:** Infrastructure setup -- Boris REVIEW + VALIDATE complete
-**Status:** Core infrastructure ready. Pre-competition prep remaining.
+**Date:** 2026-03-16 (completed ~03:00)
+**Status:** READY FOR COMPETITION
+**Health check:** 62/62 passed
+**Smoke tests:** 11/11 passed
 
 ## What's Done
 
-1. **Repo scaffolding** -- setup.sh created and verified
-2. **Python venvs** -- All 3 created and validated (torch 2.10, sklearn 1.8, xgboost 3.2, MPS available)
-3. **Agent system prompts** -- Track-specific CLAUDE.md for CV, ML, NLP (enhanced via cowork methodology)
-4. **Templates** -- 5 baseline templates, all reviewed and bug-fixed
-5. **Git worktrees** -- 3 branches (agent-cv, agent-ml, agent-nlp) with intelligence/ symlinked to main
-6. **GitHub remote** -- git@github.com:KreativKI/nmiai-multiagent.git (private, SSH)
-7. **Permissions** -- .claude/settings.local.json deployed to main + all 3 worktrees (full access)
-8. **Boris REVIEW** -- Code reviewer ran, 8 findings, all addressed
-9. **Boris VALIDATE** -- Import checks pass on all 3 venvs
+### Infrastructure
+- 3 agent workspaces (cv, ml, nlp) with dedicated CLAUDE.md prompts
+- 3 git worktrees (agent-cv, agent-ml, agent-nlp branches)
+- Intelligence/ folder shared via symlinks across worktrees
+- GitHub remote: git@github.com:KreativKI/nmiai-multiagent.git (private)
+- Full-access permissions deployed to main + all worktrees
 
-## Git State
+### Python Environment
+- Python 3.13 venvs (NOT 3.14, sentence-transformers hangs on 3.14)
+- All ML packages: torch, torchvision, sklearn, xgboost, lightgbm, catboost, sentence-transformers, transformers, anthropic, openai, optuna, ultralytics
+- libomp installed (required for XGBoost on Mac)
+- MPS (Apple Silicon GPU) available and verified
 
-| Branch | Commit | Status |
-|--------|--------|--------|
-| main | 1b94f3c | Pushed to origin |
-| agent-cv | 1b94f3c | Fast-forwarded from main |
-| agent-ml | 1b94f3c | Fast-forwarded from main |
-| agent-nlp | 1b94f3c | Fast-forwarded from main |
+### Agent System Prompts (track-specific)
+- CV: transfer learning playbook, augmentation strategies, MPS/CUDA guidance
+- ML: feature engineering checklist, ensemble strategy, model selection guide
+- NLP: LLM-as-classifier approach, Norwegian language awareness, API budget management
+- Matilda (orchestrator): monitoring dashboard, escalation triggers, spec distribution protocol
 
-## What's Left
+### Templates
+- 5 baseline templates (tabular, image classification, object detection, text classification, RAG)
+- RULES-TEMPLATE.md, DECISION-FRAMEWORK.md, COMMUNICATION-PROTOCOL.md
+- status-schema.json
 
-### Should Do Before Competition (March 18 evening)
-- [ ] Pre-download model weights to shared/models/ (ResNet50, EfficientNet-B0, YOLOv8n, all-MiniLM-L6-v2)
-- [ ] Test baseline templates end-to-end with dummy data
-- [ ] Copy useful stats tools from NM_I_AI_dash (compute_stats, welch_ttest)
-- [ ] Verify Claude remote connection works from JC's phone
-- [ ] Decide Matilda setup (Mac mini Claude Code session watching intelligence/ folder)
+### Tools
+- health-check.sh: 62-check pre-flight validation script
+- pre-download-models.py: cache model weights (run before competition)
+- shared/stats.py: compute_stats() and welch_ttest() for experiment comparison
 
-### Nice to Have
-- [ ] Pre-cache HuggingFace models in shared/models/
-- [ ] Write a quick health-check script (verify venvs, imports, intelligence/ symlinks)
-- [ ] Set up Matilda's CLAUDE.md (orchestrator role)
+### Boris Workflow Completed
+- EXPLORE: Read all files, checked NM_I_AI_dash for reusable tools
+- PLAN: Identified all remaining work from SESSION-HANDOFF.md checklist
+- CODE: Implemented all infrastructure
+- REVIEW: Code reviewer found 8 issues, all fixed
+- SIMPLIFY: Dead imports removed, health-check.sh set -e fixed
+- VALIDATE: 62/62 health checks, 11/11 smoke tests
+
+## Thursday Pre-Flight (March 19)
+
+1. `git pull` (JC may have made manual edits)
+2. `bash health-check.sh` (verify nothing broke)
+3. `source agent-cv/.venv/bin/activate && python pre-download-models.py` (cache model weights)
+4. Open 3 terminal windows, start Claude Code sessions in each worktree
+5. Verify Claude remote connection from phone
+
+## Competition Start (March 19, 18:00 CET)
+
+When specs drop:
+1. JC sends spec text to each agent's intelligence/for-{track}-agent/ folder
+2. Each agent reads spec, writes rules.md, begins RECON phase
+3. Matilda distributes SPEC-DIGEST.md to cross-track/
+4. Follow PLAYBOOK.md timeline from here
