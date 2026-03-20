@@ -37,7 +37,7 @@ app = FastAPI(title="Tripletex AI Agent", version="1.0")
 GCP_PROJECT = os.getenv("GCP_PROJECT", "ai-nm26osl-1779")
 GCP_LOCATION = os.getenv("GCP_LOCATION", "europe-west4")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-MAX_AGENT_TURNS = 15
+MAX_AGENT_TURNS = 25
 DEADLINE_SECONDS = 280  # 300s timeout, leave 20s buffer
 
 try:
@@ -290,6 +290,13 @@ You receive accounting task prompts in 7 languages (Norwegian Bokmal, Nynorsk, E
 2. Determine which Tripletex API calls are needed.
 3. Execute them using the tripletex_api tool. Plan before calling to minimize API calls.
 4. When you need reference data (VAT types, currencies, countries, divisions, payment types), make ONE lookup call, then reuse the IDs.
+
+## Function Call JSON Rules (CRITICAL)
+When generating function call arguments:
+- All string values must be properly JSON-escaped (replace newlines with \\n, quotes with \\")
+- Ensure all JSON braces and quotes are balanced
+- Do NOT nest objects in the body string unnecessarily. Keep JSON flat and simple.
+- Output the exact function name "tripletex_api" as defined.
 
 ## Sandbox Rules
 The sandbox is mostly fresh and empty, but some tasks have pre-populated data.
@@ -573,7 +580,7 @@ async def run_agent(
                     config=types.GenerateContentConfig(
                         system_instruction=SYSTEM_PROMPT,
                         tools=[TRIPLETEX_TOOL],
-                        temperature=0.1,
+                        temperature=0.0,
                         max_output_tokens=8192,
                     ),
                 )

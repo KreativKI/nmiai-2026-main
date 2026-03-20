@@ -9,24 +9,28 @@
 
 | Task Type | Score | Max | Notes |
 |-----------|-------|-----|-------|
-| Create customer | 8/8 | 100% | Locked in |
-| Register payment | 2/7 | 29% | Fixed, needs re-test |
+| Create customer (fr) | 8/8 | 100% | Locked in |
+| Unknown task (8/8) | 8/8 | 100% | Locked in |
+| Register payment | 2/7 | 29% | Fixed (wrong paymentType endpoint), needs re-test |
 
 ## Development Workflow (mandatory)
 
 Every code change follows this pipeline. No exceptions.
 
 ```
-1. Code change (follow Boris: explore -> plan -> code)
-2. Build Docker locally (OrbStack)
-3. Test against sandbox API (localhost:8080/solve)
-4. QC subagent reviews results (pass/fail per task type)
-5. Only if QC passes: deploy to Cloud Run
-6. Smoke test Cloud Run endpoint
-7. JC manually submits on competition platform
+1. Boris: explore -> plan -> code -> review -> simplify -> validate
+2. Build Docker locally: docker build -t tripletex-agent:local .
+3. Start local: docker run -d --name tripletex-agent-local -p 8080:8080 ...
+4. Run QC: python3 scripts/qc-verify.py http://localhost:8080
+5. QC must show "VERDICT: PASS" (8/8 tasks verified against sandbox API)
+6. If QC fails: fix, rebuild, re-run QC. Loop until PASS.
+7. Only if QC passes: gcloud run deploy tripletex-agent ...
+8. JC manually submits on competition platform
 ```
 
-**Why:** Competition submissions are limited (5/task type/day, ~150 total/day). Every failed submission is a wasted slot. Local testing with the sandbox API catches failures for free.
+**QC script:** `scripts/qc-verify.py` sends 8 task types to the bot, then queries the Tripletex sandbox API to verify entities were created with correct fields. Field-level checks include isCustomer, email, vatType, departmentNumber, invoice amount, travel expense costs, and payment registration.
+
+**Why:** Competition submissions are limited (5/task type/day, ~150 total/day). Every failed submission is a wasted slot. QC catches failures locally for free.
 
 ## Phase 0: Set Up Local Test Infrastructure (CURRENT)
 
