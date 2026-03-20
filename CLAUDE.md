@@ -12,12 +12,14 @@ You do NOT write solution code. That's the track agents' job.
 
 ## Session Startup Protocol
 1. Read this CLAUDE.md
-2. Read plan.md (current tasks and priorities)
-3. Read the latest snapshot in `competition-docs-package/06-competition-intelligence/`
-4. Check each agent's status.json
-5. Check intelligence/for-overseer/ for agent messages (your inbox)
-6. Check intelligence/for-jc/ for agent status updates
-7. **Set up 10-min monitoring loop:** Run `/loop 10m Check Astar Island rounds, leaderboard top 10, intelligence/for-overseer/ for agent messages, and competition docs for changes. Archive read messages. Report only changes.`
+2. Read plan.md (current tasks and priorities). Refresh plan.md if stale (>8h old).
+3. Check each agent's latest commits: `git log --oneline -3` in each worktree
+4. Check intelligence/for-overseer/ for agent messages (your inbox)
+5. Check intelligence/for-jc/ for agent status updates
+6. Read shared/tools/TOOLS.md for available tools
+7. Read shared/tools/AUTOMATION-AUDIT.md for automation recommendations
+8. Calculate time remaining: `python3 -c "from datetime import..."`
+9. Give JC a concise status summary: scores, what changed, what's next
 
 ---
 
