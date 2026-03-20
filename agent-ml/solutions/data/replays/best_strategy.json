@@ -1,0 +1,88 @@
+{
+  "timestamp": "2026-03-20T13:55:14.974439+00:00",
+  "strategy_name": "C_adaptive_8x5",
+  "strategy": {
+    "description": "9 overview + 8 batches of 5 with hindsight between each",
+    "batches": [
+      {
+        "queries": 9,
+        "target": "overview",
+        "seed": 0
+      },
+      {
+        "queries": 0,
+        "target": "hindsight"
+      },
+      {
+        "queries": 5,
+        "target": "surprise",
+        "seed": 0
+      },
+      {
+        "queries": 0,
+        "target": "hindsight"
+      },
+      {
+        "queries": 5,
+        "target": "surprise",
+        "seed": 0
+      },
+      {
+        "queries": 0,
+        "target": "hindsight"
+      },
+      {
+        "queries": 5,
+        "target": "surprise",
+        "seed": 0
+      },
+      {
+        "queries": 0,
+        "target": "hindsight"
+      },
+      {
+        "queries": 5,
+        "target": "surprise",
+        "seed": 0
+      },
+      {
+        "queries": 0,
+        "target": "hindsight"
+      },
+      {
+        "queries": 5,
+        "target": "surprise",
+        "seed": 0
+      },
+      {
+        "queries": 0,
+        "target": "hindsight"
+      },
+      {
+        "queries": 5,
+        "target": "surprise",
+        "seed": 0
+      },
+      {
+        "queries": 0,
+        "target": "hindsight"
+      },
+      {
+        "queries": 6,
+        "target": "surprise",
+        "seed": 0
+      },
+      {
+        "queries": 0,
+        "target": "hindsight"
+      },
+      {
+        "queries": 5,
+        "target": "surprise",
+        "seed": 0
+      }
+    ]
+  },
+  "avg_score": 62.99,
+  "delta_vs_baseline": 1.46
+}
