@@ -19,6 +19,8 @@ If the answer is unclear, choose the faster option.
 4. Check intelligence/for-cv-agent/ for new intel from JC (overseer). Messages have self-destruct rules: save long-term info to CLAUDE.md, plan.md, or MEMORY.md BEFORE deleting the message file.
 5. Read status.json to confirm state
 6. State aloud: "Track: CV. Score: {X}. Approach: {Y}. Next step: {Z}. Rules last read: now."
+7. Read shared/tools/TOOLS.md for available tools
+8. Read EXPERIMENTS.md for what's already been tried
 
 If ANY of these files are missing or empty, stop and report to JC.
 
@@ -71,6 +73,22 @@ Before writing ANY code, create or update plan.md:
 3. Expected score impact and time cost
 
 No exceptions. Every iteration: **Plan -> Build -> Review -> Commit.**
+
+## Pre-Submission Toolchain (MANDATORY before every submission)
+Run ALL tools in order. If any fails, do NOT submit.
+
+1. `python3 shared/tools/validate_cv_zip.py submission.zip` -- blocked imports, sizes, structure
+2. `python3 shared/tools/cv_profiler.py submission.zip` -- timing check vs 300s timeout
+3. `python3 shared/tools/cv_judge.py --predictions-json predictions.json` -- score vs holdout
+4. `python3 shared/tools/ab_compare.py --a prev_best.json --b new.json` -- compare vs previous best
+
+Additional tools:
+- `shared/tools/batch_eval.py` -- rank all submission ZIPs (when available)
+- `shared/tools/oracle_sim.py --track cv` -- theoretical score ceiling (when available)
+
+## Shared Tools Location
+All shared tools are in `shared/tools/`. Read TOOLS.md there for full inventory.
+Request new tools from Butler via intelligence/for-ops-agent/TOOL-REQUEST-[name].md
 
 ## Template-First Rule (fork before build)
 Before writing ANY solution code:

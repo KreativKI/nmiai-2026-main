@@ -30,13 +30,28 @@ JC sleeping starting ~06:35 CET. All 4 agents have phased standing orders + EXPE
 
 ## Active Tasks
 
-### 1. CV: DINOv2 Crop-and-Classify (HIGHEST PRIORITY)
-- **What:** Detect with YOLO, crop each product, embed with DINOv2 ViT-S, kNN match against 327 reference images
-- **Why:** Classification is the bottleneck. This directly attacks the 30% classification component.
-- **Expected:** +5-15% on classification mAP
-- **Weight budget:** YOLO11m (78MB) + DINOv2 ViT-S FP16 (42MB) + gallery.npy (<1MB) = 121MB of 420MB
-- **Research delivered:** RESEARCH-COMPLETE-ACTION-PLAN.md, RESEARCH-ENSEMBLE-AND-CLASSIFY.md
-- **After DINOv2:** Copy-paste augmentation (250-500 images), retrain with better data
+### 1. CV: Pre-Submission Toolchain + DINOv2 Submit (HIGHEST PRIORITY)
+DINOv2 crop-and-classify submission is built and Docker-validated (submission_dinov2_classify_v1.zip, 143MB).
+Before uploading, run full toolchain. Butler never built the scripts, so overseer builds them now.
+
+**Phase A: Build tools (Boris per tool, one at a time)**
+1. validate_cv_zip.py -- ZIP structure, blocked imports, sizes DONE
+2. cv_profiler.py -- timing vs 300s timeout DONE
+3. cv_judge.py -- prediction quality + verdict (SUBMIT/SKIP/RISKY) IN PROGRESS
+4. ab_compare.py -- compare DINOv2 vs YOLO-only predictions DONE
+
+**Phase B: Run toolchain on submission_dinov2_classify_v1.zip**
+```
+python3 shared/tools/validate_cv_zip.py agent-cv/submissions/submission_dinov2_classify_v1.zip
+python3 shared/tools/cv_profiler.py agent-cv/submissions/submission_dinov2_classify_v1.zip
+python3 shared/tools/cv_judge.py --predictions-json agent-cv/docker_output/predictions.json
+python3 shared/tools/ab_compare.py --a [yolo-only preds] --b agent-cv/docker_output/predictions.json
+```
+
+**Phase C: Housekeeping**
+- Create EXPERIMENTS.md
+- Update agent-cv/CLAUDE.md with toolchain section
+- Commit after each phase
 
 ### 2. ML: Build Better Spatial Model
 - Resubmitted R4 with improved distance-based model
