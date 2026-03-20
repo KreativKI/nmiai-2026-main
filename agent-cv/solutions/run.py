@@ -17,7 +17,7 @@ MODEL_NAME = "best.onnx"
 INPUT_SIZE = 1280          # Must match training/export imgsz
 CONF_THRESHOLD = 0.15      # Low threshold, let mAP calculation handle filtering
 IOU_THRESHOLD = 0.5        # NMS IoU threshold
-NUM_CLASSES = 357           # IDs 0-356 inclusive
+NUM_CLASSES = 356           # IDs 0-355 from training data (model output: 4+356=360 channels)
 
 
 def letterbox(img: np.ndarray, new_shape: int = 1280):
