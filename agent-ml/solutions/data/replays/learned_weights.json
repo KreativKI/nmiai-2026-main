@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-03-20T14:04:16.093535+00:00",
+  "weights": {
+    "Empty": {
+      "avg_value_per_query": 0.0005,
+      "std": 0.0008,
+      "n_samples": 240,
+      "verdict": "MEDIUM"
+    },
+    "Settlement": {
+      "avg_value_per_query": 0.0149,
+      "std": 0.0257,
+      "n_samples": 240,
+      "verdict": "MEDIUM"
+    },
+    "Port": {
+      "avg_value_per_query": 0.0116,
+      "std": 0.0312,
+      "n_samples": 200,
+      "verdict": "MEDIUM"
+    },
+    "Ruin": {
+      "avg_value_per_query": 0,
+      "verdict": "SKIP"
+    },
+    "Forest": {
+      "avg_value_per_query": 0.001,
+      "std": 0.0012,
+      "n_samples": 240,
+      "verdict": "MEDIUM"
+    },
+    "Mountain": {
+      "avg_value_per_query": 0,
+      "verdict": "SKIP"
+    }
+  }
+}
