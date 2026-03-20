@@ -30,6 +30,18 @@ function scoreBarColor(percentage: number): string {
   return "#ef4444";
 }
 
+function budgetBarColor(usagePercent: number): string {
+  if (usagePercent > 80) return "#ef4444";
+  if (usagePercent > 50) return "#f59e0b";
+  return "#22c55e";
+}
+
+function successRateColor(rate: number): string {
+  if (rate >= 75) return "text-green-600";
+  if (rate >= 50) return "text-amber-600";
+  return "text-red-600";
+}
+
 export function NLPSubmissionFeed() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +64,7 @@ export function NLPSubmissionFeed() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 60000);
+    const interval = setInterval(fetchData, 15000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -123,13 +135,7 @@ export function NLPSubmissionFeed() {
             </div>
             <div className="text-center">
               <p
-                className={`text-lg font-bold font-[Fredoka] ${
-                  successRate >= 75
-                    ? "text-green-600"
-                    : successRate >= 50
-                      ? "text-amber-600"
-                      : "text-red-600"
-                }`}
+                className={`text-lg font-bold font-[Fredoka] ${successRateColor(successRate)}`}
               >
                 {successRate}%
               </p>
@@ -168,12 +174,7 @@ export function NLPSubmissionFeed() {
                 className="h-full rounded-full transition-all duration-500"
                 style={{
                   width: `${Math.min(budgetPct, 100)}%`,
-                  backgroundColor:
-                    budgetPct > 80
-                      ? "#ef4444"
-                      : budgetPct > 50
-                        ? "#f59e0b"
-                        : "#22c55e",
+                  backgroundColor: budgetBarColor(budgetPct),
                 }}
               />
             </div>
