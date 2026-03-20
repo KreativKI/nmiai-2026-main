@@ -31,7 +31,7 @@ BLOCKED_MODULES = [
 BLOCKED_CALLS = ["eval(", "exec(", "compile(", "__import__("]
 BLOCKED_SET = set(BLOCKED_MODULES)
 
-WEIGHT_EXTENSIONS = {".pt", ".pth", ".onnx", ".safetensors", ".npy"}
+WEIGHT_EXTENSIONS = {".pt", ".pth", ".onnx", ".safetensors", ".npy", ".npz"}
 ALLOWED_EXTENSIONS = {".py", ".json", ".yaml", ".yml", ".cfg"} | WEIGHT_EXTENSIONS
 
 MAX_ZIP_SIZE_MB = 420
