@@ -13,7 +13,7 @@
 ## Submission
 - Upload ZIP file containing run.py + model weights
 - run.py must be at ZIP root (NOT in a subfolder)
-- Max 10 submissions per day (resets midnight UTC = 01:00 CET). Infrastructure errors don't count (up to 2/day).
+- Max 6 submissions per day (resets midnight UTC = 01:00 CET). Infrastructure errors don't count (up to 2/day).
 - Max 420 MB total weight files
 - Max 3 weight files
 - Max 10 .py files
@@ -56,7 +56,7 @@
 PyTorch 2.6.0+cu124, torchvision 0.21.0+cu124, ultralytics 8.1.0, onnxruntime-gpu 1.20.0, opencv-python-headless 4.9.0.80, numpy 1.26.4, Pillow 10.2.0, pycocotools 2.0.7, timm 0.9.12, safetensors 0.4.2, ensemble-boxes 1.0.9, supervision 0.18.0, albumentations 1.3.1, scipy 1.12.0, scikit-learn 1.4.0
 
 ### BLOCKED imports — IMPORTING ANY OF THESE = INSTANT ACCOUNT BAN
-os, sys, subprocess, socket, ctypes, builtins, importlib, marshal, shelve, shutil, yaml, requests, urllib, http.client, multiprocessing, threading, signal, gc, code, codeop, pty
+os, sys, subprocess, socket, ctypes, builtins, importlib, pickle, marshal, shelve, shutil, yaml, requests, urllib, http.client, multiprocessing, threading, signal, gc, code, codeop, pty
 
 **WARNING (Slack announcement 2026-03-20 00:40 CET):** 30+ teams have already been BANNED for importing `sys` or other blocked modules. The organizers treat blocked imports as a security threat. This is not a soft error: your account gets permanently banned. Double-check EVERY import in run.py and all .py files before submission. Also check transitive imports from libraries.
 
