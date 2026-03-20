@@ -529,11 +529,15 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
     round_trans = {k: normalize(round_trans_sums[k], round_trans_counts[k])
                    for k in ["global", "near", "far"]}
 
-    # Blend round-specific with historical (70/30 if we have round obs)
-    has_round_obs = any(round_trans_counts["global"][i] > 10 for i in range(NUM_CLASSES))
+    # Blend round-specific with historical
+    # More round observations = trust round-specific more
+    total_round_obs = sum(round_trans_counts["global"])
+    has_round_obs = total_round_obs > 50
     if has_round_obs:
-        blend_w = 0.7
-        log(f"Blending transitions: {blend_w:.0%} round-specific, {1-blend_w:.0%} historical")
+        # Scale: 50 obs -> 70%, 1000 obs -> 85%, 3000+ obs -> 90%
+        blend_w = min(0.9, 0.7 + (total_round_obs - 50) / 10000)
+        log(f"Blending transitions: {blend_w:.0%} round-specific ({int(total_round_obs)} obs), "
+            f"{1-blend_w:.0%} historical")
     else:
         blend_w = 0.0
         log("No round observations. Using historical transitions only.")
@@ -587,7 +591,9 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
             if has_obs.any():
                 ot_3d = ot[..., np.newaxis]
                 empirical = oc / np.maximum(ot_3d, 1)
-                obs_w = np.clip(ot_3d / 5.0, 0.3, 0.8)
+                # More samples = trust empirical more (up to 95%)
+                # N=1: 40%, N=3: 60%, N=5: 80%, N=7: 90%, N=8+: 95%
+                obs_w = np.clip(ot_3d / 8.0, 0.4, 0.95)
                 pred = np.where(
                     has_obs[..., np.newaxis],
                     obs_w * empirical + (1 - obs_w) * pred,

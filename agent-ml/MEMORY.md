@@ -84,6 +84,17 @@
 - Ports appearing (10 from empty, 6 from forest)
 - Ruins appearing (8 from empty, 5 from forest)
 
+### Deep Error Analysis (round 3 seed 0)
+- Score 39.68 per API, effective KL ~0.924
+- Settlement cells are #1 error: KL=0.52, entropy=0.72 -> highest weighted contribution
+- In round 3, most settlements became Empty(70%)/Forest(30%) but we predicted Settlement(40%)
+- Port cells equally bad: KL=0.53
+- Plains/Empty cells: KL=0.21 (acceptable, low entropy so low weight)
+- Forest cells: KL=0.31 (medium, moderate entropy)
+- Mountain/Ocean: KL=0.05/0.23 but entropy=0 so they don't affect score
+- KEY INSIGHT: scoring is entropy-weighted so settlement/port cells dominate despite being few (33+4 cells)
+- FIX: higher trust in round-specific observations (empirical weight increased to 95% max in v6)
+
 ### Rules re-read at 2026-03-20T03:04:00Z. No violations found.
 
 ## Auth Note
