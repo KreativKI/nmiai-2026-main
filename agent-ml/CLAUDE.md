@@ -338,22 +338,38 @@ This is the single most important technique. More observation seeds = better tra
 
 ## Score Optimization: Current State
 
-Best score: see EXPERIMENTS.md. Competitor benchmark: 91.49 avg.
+Best score: 82.6 (R9). Competitor benchmark: 91.49 avg. Rank ~100/221.
 
-### Proven Techniques (from backtesting + competitor analysis)
-- **Learned neighborhood model:** 48,000+ cell transitions, hierarchical lookup
-- **Temperature scaling:** pred ** (1/T), best T found via backtest
-- **Spatial smoothing:** Gaussian smooth prediction grid
-- **Collapse thresholding:** Set probs below threshold to zero, redistribute
-- **Adaptive query strategy:** 8 batches of 5 with hindsight between each
+### Architecture (naming convention)
+- **Chef** = the pipeline script (astar_v7.py -> v8 next). Observes, detects regime, predicts, submits.
+- **Brain** = the prediction model (NeighborhoodModelV2 -> V3 next). Transition lookup table.
+- **overnight_runner.py** = the line cook. Runs Chef on GCP, auto-submits every round.
 
-### Every Round Cycle
-1. Detect round open (background monitor or manual check)
-2. Execute query strategy (adaptive stacking, all seed 0 focus)
-3. Build predictions with learned model + calibration
-4. Validate: floors >= 0.01, normalized, all 5 seeds
-5. Submit all 5 seeds
-6. After round: fetch ground truth, retrain model, run autoiteration
+### Proven Techniques
+- **Brain V2:** 72K cell transitions, hierarchical lookup (full -> reduced -> minimal -> global)
+- **Regime detection:** death/stable/growth from settlement survival rate (+30 pts on death rounds)
+- **Regime-specific model:** separate Brain per regime (+3.37 avg, growth +8.8)
+- **Reinforcement weighting:** recency decay + regime boost (+1.1 avg)
+- **Temperature scaling:** pred ** (1/T), T=1.12
+- **Spatial smoothing:** Gaussian sigma=0.3
+- **Collapse thresholding:** probs < 0.016 set to floor
+- **Round-specific calibration:** use current round observations to fix blind spots (Settlement->Forest)
+- **Dirichlet-Categorical observation blending:** ps=12
+
+### Key Discovery: Settlement->Forest (R10)
+R10 revealed 35% of settlements become Forest. Historical model predicts 0%. This is a new
+transition type that only appears in death+regrowth rounds. Round-specific calibration fixes it.
+
+### Every Round Cycle (Chef v8 target)
+1. Detect round open (overnight_runner.py, 5-min interval)
+2. Regime detection (5 queries on known settlements)
+3. Observe all seeds (45 queries for full coverage)
+4. Build predictions: regime-specific Brain + weighted training + observations
+5. Round-specific calibration from observations (override blind spots)
+6. Validate: floors >= 0.01, normalized, all 5 seeds
+7. Submit all 5 seeds
+8. After round: cache ground truth, retrain Brain, log results
+9. RL feedback: identify high-error patterns, widen uncertainty for next round
 
 ---
 

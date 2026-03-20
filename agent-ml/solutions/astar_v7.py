@@ -524,8 +524,7 @@ def phase_submit(session, round_id, detail, round_num, dry_run=False):
                 probs = pred[y, x]
                 mask = probs < 0.016
                 if mask.any() and not mask.all():
-                    probs[mask] = 0.0
-                    probs[:] = np.maximum(probs, PROB_FLOOR)
+                    probs[mask] = PROB_FLOOR
                     pred[y, x] = probs / probs.sum()
 
         # Spatial smoothing
