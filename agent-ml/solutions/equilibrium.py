@@ -65,6 +65,7 @@ def iterate_predictions(model, round_data, seed_idx, n_steps=3, damping=0.5,
     # Iterate: apply transitions to current predicted state
     for step in range(1, n_steps):
         new_pred = np.zeros_like(pred)
+        virtual_grid = _build_virtual_grid(pred, grid, h, w)
 
         for y in range(h):
             for x in range(w):
@@ -73,10 +74,6 @@ def iterate_predictions(model, round_data, seed_idx, n_steps=3, damping=0.5,
                     new_pred[y, x] = pred[y, x]
                     continue
 
-                # Build "virtual grid" from current predictions for neighborhood
-                # Use argmax of current pred as the "most likely terrain"
-                # Then look up transition for that neighborhood config
-                virtual_grid = _build_virtual_grid(pred, grid, h, w)
                 new_pred[y, x] = model.predict_cell(virtual_grid, y, x, h, w)
 
         # Damp: blend new prediction with previous to prevent oscillation

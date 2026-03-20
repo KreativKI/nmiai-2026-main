@@ -90,3 +90,22 @@ Adaptive stacking + hindsight re-targeting should improve this.
 - All 41 remaining queries -> adaptive stacking on seed 0
 - Expected: seed 0 gets ~50 queries (13+ samples/cell) instead of 32+9 split
 
+## EQ-001: Equilibrium iteration grid search
+**Date:** 2026-03-20 17:11 UTC
+**Tool:** equilibrium.py --search (fixed O(n^4) -> O(n^2) perf bug, ran on GCP VM)
+**Config:** Grid search: steps=[2,3,4,5,8] x damping=[0.3,0.5,0.7,0.8,0.9], T=1.12, V2 model
+
+### Results
+| Steps | d=0.3 | d=0.5 | d=0.7 | d=0.8 | d=0.9 |
+|-------|-------|-------|-------|-------|-------|
+| 2 | 57.3 | 61.0 | 63.1 | 63.6 | 64.0 |
+| 3 | 50.8 | 56.1 | 60.9 | 62.6 | 63.7 |
+| 4 | 47.9 | 52.2 | 58.3 | 61.2 | 63.3 |
+| 5 | 46.9 | 49.6 | 55.8 | 59.6 | 62.7 |
+| 8 | 46.5 | 46.9 | 50.5 | 55.0 | 60.7 |
+
+**Best:** steps=2, damping=0.9, avg=64.0
+**Baseline (single-step):** avg=64.5
+**Delta:** -0.5
+**Verdict:** Equilibrium iteration hurts at all parameters. The argmax-based virtual grid loses probability distribution information. More steps = worse. High damping (0.9) = nearly no iteration = closest to baseline. **Approach abandoned.**
+
