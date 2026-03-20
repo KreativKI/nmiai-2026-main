@@ -48,7 +48,7 @@ Tier 2 (Friday) and Tier 3 (Saturday) have higher multipliers. Each perfect Tier
 Once a task type scores perfectly, reduce API calls and eliminate 4xx errors to earn the efficiency bonus (up to 2x multiplier).
 
 ### E. Submit frequently to cover all task types
-Rate limit allows 5/task/day. Each submission gets a random task type. Submit often to collect scores across all 30 types.
+Rate limit: 10/task/day (verified), 300 total/day, 3 concurrent. Each submission gets a random task type. Auto-submitter approved: `shared/tools/nlp_auto_submit.py` (75% budget auto, JC handles 25% manually).
 
 ---
 
@@ -242,9 +242,9 @@ Rules:
 - With efficiency bonus, a single perfect Tier 3 task can score up to 6.0
 
 ### Ongoing: Submit Frequently
-- Rate limit: 5/task/day (verified), 2/task/day (unverified). Resets midnight UTC = 01:00 CET.
+- Rate limit: 10/task/day (verified), 300 total/day, 3 concurrent. Resets 01:00 CET.
+- Auto-submitter: `python3 /Volumes/devdrive/github_dev/nmiai-worktree-ops/shared/tools/nlp_auto_submit.py --max 225`
 - Each submission gets a random task type, weighted toward less-attempted ones
-- Submit frequently to cover all 30 task types over time
 - Bad runs never lower your score, so submitting is always safe
 
 ### Feature Freeze: T+63h (Sunday 09:00)
