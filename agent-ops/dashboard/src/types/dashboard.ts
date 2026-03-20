@@ -1,4 +1,4 @@
-export type DashboardTab = "overview" | "ml" | "cv" | "nlp";
+export type DashboardTab = "overview" | "ml-explorer" | "ml" | "cv" | "nlp";
 
 /** Terrain types from Astar Island simulator */
 export const TERRAIN_NAMES: Record<number, string> = {

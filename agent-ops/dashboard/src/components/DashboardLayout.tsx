@@ -2,13 +2,15 @@ import { useState, useEffect, useCallback } from "react";
 import type { DashboardTab } from "../types/dashboard";
 import { useUIStore } from "../stores/uiStore";
 import { OverviewView } from "./OverviewView";
+import { MLExplorer } from "./MLExplorer";
 import { MLView } from "./MLView";
 import { CVView } from "./CVView";
 import { NLPView } from "./NLPView";
 
 const TABS: { id: DashboardTab; label: string }[] = [
   { id: "overview", label: "Overview" },
-  { id: "ml", label: "Astar Island" },
+  { id: "ml-explorer", label: "ML Explorer" },
+  { id: "ml", label: "ML Summary" },
   { id: "cv", label: "NorgesGruppen" },
   { id: "nlp", label: "Tripletex" },
 ];
@@ -84,6 +86,7 @@ export function DashboardLayout() {
       {/* Tab content — refreshKey forces re-mount to reload data */}
       <div key={refreshKey} className="flex-1 flex flex-col overflow-hidden">
         {activeTab === "overview" && <OverviewView />}
+        {activeTab === "ml-explorer" && <MLExplorer />}
         {activeTab === "ml" && <MLView />}
         {activeTab === "cv" && <CVView />}
         {activeTab === "nlp" && <NLPView />}

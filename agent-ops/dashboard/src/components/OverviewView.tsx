@@ -1,6 +1,12 @@
-import { useState, useEffect } from "react";
-import { MetricCard } from "./MetricCard";
+import { useState, useEffect, useCallback } from "react";
+import { useUIStore } from "../stores/uiStore";
+import { AgentStatusStrip } from "./AgentStatusStrip";
+import { NLPSubmissionFeed } from "./NLPSubmissionFeed";
 import { LeaderboardView } from "./LeaderboardView";
+import { MetricCard } from "./MetricCard";
+import { TerrainGrid } from "./TerrainGrid";
+
+// --- Types ---
 
 interface DeadlineInfo {
   label: string;
@@ -8,13 +14,60 @@ interface DeadlineInfo {
   passed: boolean;
 }
 
+interface MLRound {
+  round_number: number;
+  status: string;
+  our_score: number | null;
+  our_rank: number | null;
+  queries_used: number;
+  queries_total: number;
+}
+
+interface MLRoundsData {
+  rounds: MLRound[];
+  active_round: {
+    round_number: number;
+    closes_at: string;
+    budget_remaining: number;
+  } | null;
+}
+
+interface NLPSubmission {
+  timestamp: string;
+  success: boolean;
+  daily_used: number | null;
+  daily_limit: number | null;
+}
+
+interface LeaderboardSnapshot {
+  timestamp: string;
+  rows: Record<string, string | number>[];
+}
+
+interface VizSeed {
+  grid: number[][];
+}
+
+interface VizRound {
+  round_number: number;
+  width: number;
+  height: number;
+  seeds: VizSeed[];
+}
+
+interface VizData {
+  [key: string]: VizRound | unknown;
+}
+
+// --- Competition Clock ---
+
 function getDeadlines(): DeadlineInfo[] {
   const now = new Date();
   const deadlines = [
-    { label: "CUT-LOSS baseline", time: "2026-03-21T11:00:00Z" },  // Sat 12:00 CET
-    { label: "FEATURE FREEZE", time: "2026-03-22T08:00:00Z" },     // Sun 09:00 CET
-    { label: "Repo public", time: "2026-03-22T13:45:00Z" },        // Sun 14:45 CET
-    { label: "COMPETITION ENDS", time: "2026-03-22T14:00:00Z" },   // Sun 15:00 CET
+    { label: "CUT-LOSS baseline", time: "2026-03-21T11:00:00Z" },
+    { label: "FEATURE FREEZE", time: "2026-03-22T08:00:00Z" },
+    { label: "Repo public", time: "2026-03-22T13:45:00Z" },
+    { label: "COMPETITION ENDS", time: "2026-03-22T14:00:00Z" },
   ];
 
   return deadlines.map((d) => {
@@ -42,21 +95,164 @@ function timeUntilDeadline(): string {
   return `${hours}h ${minutes}m`;
 }
 
+// --- Countdown helpers ---
+
+function formatCountdown(diffMs: number): string {
+  if (diffMs <= 0) return "NOW";
+  const h = Math.floor(diffMs / 3600000);
+  const m = Math.floor((diffMs % 3600000) / 60000);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function getNextMidnightUTC(): Date {
+  const now = new Date();
+  const next = new Date(now);
+  next.setUTCHours(24, 0, 0, 0);
+  return next;
+}
+
+// --- Data fetchers ---
+
+async function fetchJSON<T>(url: string): Promise<T | null> {
+  try {
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) return null;
+    return (await resp.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+// --- Component ---
+
 export function OverviewView() {
+  const setActiveTab = useUIStore((s) => s.setActiveTab);
+
+  // Competition clock
   const [timeLeft, setTimeLeft] = useState(timeUntilDeadline());
   const [deadlines, setDeadlines] = useState(getDeadlines());
 
+  // Per-track countdowns
+  const [mlCloses, setMlCloses] = useState<string | null>(null);
+  const [nlpResets, setNlpResets] = useState("");
+  const [cvResets, setCvResets] = useState("");
+
+  // Track data
+  const [mlData, setMlData] = useState<MLRoundsData | null>(null);
+  const [nlpSubs, setNlpSubs] = useState<NLPSubmission[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardSnapshot[]>([]);
+
+  // Mini terrain preview
+  const [terrainGrid, setTerrainGrid] = useState<number[][] | null>(null);
+  const [terrainLabel, setTerrainLabel] = useState("");
+
+  // --- Fetch all data ---
+  const fetchAll = useCallback(async () => {
+    const [ml, nlp, lb, viz] = await Promise.all([
+      fetchJSON<MLRoundsData>("/data/ml_rounds.json"),
+      fetchJSON<NLPSubmission[]>("/data/nlp_submissions.json"),
+      fetchJSON<LeaderboardSnapshot[]>("/data/leaderboard.json"),
+      fetchJSON<VizData>("/data/viz_data.json"),
+    ]);
+    if (ml) setMlData(ml);
+    if (nlp) setNlpSubs(nlp);
+    if (lb) setLeaderboard(lb);
+
+    // Extract the latest round's seed 0 grid for the mini preview
+    if (viz) {
+      const roundKeys = Object.keys(viz)
+        .filter((k) => k.startsWith("round"))
+        .sort((a, b) => {
+          const numA = parseInt(a.replace("round", ""), 10);
+          const numB = parseInt(b.replace("round", ""), 10);
+          return numB - numA;
+        });
+      const latestKey = roundKeys[0];
+      if (latestKey) {
+        const round = viz[latestKey] as VizRound | undefined;
+        if (round?.seeds?.[0]?.grid) {
+          setTerrainGrid(round.seeds[0].grid);
+          setTerrainLabel(`Round ${round.round_number} - Seed 0`);
+        }
+      }
+    }
+  }, []);
+
   useEffect(() => {
-    const interval = setInterval(() => {
+    void fetchAll();
+    const interval = setInterval(() => void fetchAll(), 120000); // 2 min
+    return () => clearInterval(interval);
+  }, [fetchAll]);
+
+  // --- Update countdowns every 30s ---
+  useEffect(() => {
+    function updateCountdowns() {
       setTimeLeft(timeUntilDeadline());
       setDeadlines(getDeadlines());
-    }, 30000);
+
+      // ML: countdown to active round closes_at
+      if (mlData?.active_round?.closes_at) {
+        const closesAt = new Date(mlData.active_round.closes_at);
+        const diff = closesAt.getTime() - Date.now();
+        setMlCloses(formatCountdown(diff));
+      } else {
+        setMlCloses(null);
+      }
+
+      // NLP + CV: countdown to midnight UTC (01:00 CET)
+      const resetDiff = getNextMidnightUTC().getTime() - Date.now();
+      const resetStr = formatCountdown(resetDiff);
+      setNlpResets(resetStr);
+      setCvResets(resetStr);
+    }
+
+    updateCountdowns();
+    const interval = setInterval(updateCountdowns, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [mlData]);
+
+  // --- Derive track scorecard data ---
+
+  // ML card: latest scored round
+  const scoredRounds = mlData?.rounds.filter((r) => r.our_score != null) ?? [];
+  const latestScoredML = scoredRounds.length > 0 ? scoredRounds[0] : null;
+  const mlScore = latestScoredML?.our_score ?? null;
+  const mlRank = latestScoredML?.our_rank ?? null;
+  const mlRoundsCount = scoredRounds.length;
+  const mlBudget = mlData?.active_round?.budget_remaining ?? 0;
+
+  // Leaderboard: find our team
+  const latestLB = leaderboard.length > 0 ? leaderboard[leaderboard.length - 1] : null;
+  const ourRow = latestLB?.rows.find((r) => {
+    const team = String(r["team"] ?? r["lag"] ?? "").toLowerCase();
+    return team.includes("kreativ");
+  });
+
+  // NLP card
+  const nlpScore = ourRow ? Number(ourRow["tripletex"] ?? 0) : 0;
+  const nlpTodaySubs = nlpSubs.filter((s) => {
+    const d = new Date(s.timestamp);
+    const now = new Date();
+    // "Today" in UTC (rate limits reset at midnight UTC)
+    return d.getUTCFullYear() === now.getUTCFullYear() &&
+           d.getUTCMonth() === now.getUTCMonth() &&
+           d.getUTCDate() === now.getUTCDate();
+  });
+  const nlpDailyUsed = nlpTodaySubs.length;
+  // Try to get daily budget from latest sub with the field
+  const latestWithBudget = [...nlpSubs].reverse().find(
+    (s) => s.daily_used != null && s.daily_limit != null
+  );
+  const nlpDailyLimit = latestWithBudget?.daily_limit ?? 180;
+
+  // CV card
+  const cvScore = ourRow ? Number(ourRow["norgesgruppen"] ?? 0) : 0;
 
   return (
     <div className="flex-1 flex flex-col overflow-auto p-6 gap-6">
-      {/* Competition clock */}
+
+      {/* 1. Competition Clock */}
       <div className="rounded-2xl bg-sky-800/90 backdrop-blur-sm border border-sky-600/50 shadow-xl p-6 text-center">
         <p className="text-sky-300 text-sm font-semibold uppercase tracking-wider">
           Time Remaining
@@ -67,9 +263,45 @@ export function OverviewView() {
         <p className="text-sky-400 text-xs mt-2">
           Deadline: Sunday 15:00 CET (March 22, 2026)
         </p>
+
+        {/* Key deadlines inline */}
+        <div className="flex justify-center gap-6 mt-3 flex-wrap">
+          {deadlines.map((d) => (
+            <span
+              key={d.label}
+              className={`text-[11px] ${d.passed ? "text-sky-600 line-through" : "text-sky-300"}`}
+            >
+              {d.label}: {d.time}
+            </span>
+          ))}
+        </div>
       </div>
 
-      {/* Track overview cards */}
+      {/* 2. Agent Status Strip */}
+      <AgentStatusStrip />
+
+      {/* 3. Per-Track Reset Countdowns */}
+      <div className="grid grid-cols-3 gap-4">
+        <CountdownPill
+          label="ML Round Closes"
+          value={mlCloses ?? "No active round"}
+          color={mlCloses === "NOW" ? "text-red-500" : "text-sky-800"}
+        />
+        <CountdownPill
+          label="NLP Rate Limit Resets"
+          value={nlpResets}
+          subtitle="01:00 CET"
+          color={nlpResets === "NOW" ? "text-green-500" : "text-sky-800"}
+        />
+        <CountdownPill
+          label="CV Submissions Reset"
+          value={cvResets}
+          subtitle="01:00 CET"
+          color={cvResets === "NOW" ? "text-green-500" : "text-sky-800"}
+        />
+      </div>
+
+      {/* 4. Track Scorecards */}
       <div className="grid grid-cols-3 gap-4">
         {/* ML Track */}
         <div className="rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 shadow-lg p-5">
@@ -79,49 +311,12 @@ export function OverviewView() {
               Astar Island (ML)
             </h3>
           </div>
-          <p className="text-xs text-sky-500">
-            Terrain prediction, 40x40 grid, 5 seeds
-          </p>
-          <div className="mt-3 space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-sky-600">Scoring</span>
-              <span className="text-sky-800 font-semibold">KL Divergence</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-sky-600">Queries/round</span>
-              <span className="text-sky-800 font-semibold">50</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-sky-600">Weight</span>
-              <span className="text-sky-800 font-semibold">33.33%</span>
-            </div>
-          </div>
-        </div>
-
-        {/* CV Track */}
-        <div className="rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 shadow-lg p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-3 h-3 rounded-full bg-blue-400" />
-            <h3 className="text-sm font-bold text-sky-800 font-[Fredoka]">
-              NorgesGruppen (CV)
-            </h3>
-          </div>
-          <p className="text-xs text-sky-500">
-            Object detection, 357 categories, shelf images
-          </p>
-          <div className="mt-3 space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-sky-600">Scoring</span>
-              <span className="text-sky-800 font-semibold">70% det + 30% cls mAP</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-sky-600">Submissions/day</span>
-              <span className="text-sky-800 font-semibold">10</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-sky-600">Weight</span>
-              <span className="text-sky-800 font-semibold">33.33%</span>
-            </div>
+          <div className="space-y-1.5">
+            <ScoreRow label="Score" value={mlScore != null ? mlScore.toFixed(1) : "--"} bold />
+            <ScoreRow label="Rank" value={mlRank != null ? `#${mlRank}` : "--"} />
+            <ScoreRow label="Rounds scored" value={String(mlRoundsCount)} />
+            <ScoreRow label="Budget left" value={`${mlBudget} queries`} />
+            <ScoreRow label="Weight" value="33.33%" />
           </div>
         </div>
 
@@ -133,55 +328,152 @@ export function OverviewView() {
               Tripletex (NLP)
             </h3>
           </div>
-          <p className="text-xs text-sky-500">
-            AI accounting agent, 30 task types, 7 languages
-          </p>
-          <div className="mt-3 space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-sky-600">Scoring</span>
-              <span className="text-sky-800 font-semibold">Field accuracy + tiers</span>
+          <div className="space-y-1.5">
+            <ScoreRow label="Score" value={nlpScore > 0 ? nlpScore.toFixed(1) : "--"} bold />
+            <ScoreRow label="Subs today" value={`${nlpDailyUsed}`} />
+            <div>
+              <div className="flex justify-between text-xs mb-0.5">
+                <span className="text-sky-600">Daily budget</span>
+                <span className="text-sky-800 font-semibold">
+                  {nlpDailyUsed} / {nlpDailyLimit}
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-sky-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${Math.min((nlpDailyUsed / Math.max(nlpDailyLimit, 1)) * 100, 100)}%`,
+                    backgroundColor:
+                      nlpDailyUsed / Math.max(nlpDailyLimit, 1) > 0.8
+                        ? "#ef4444"
+                        : nlpDailyUsed / Math.max(nlpDailyLimit, 1) > 0.5
+                          ? "#f59e0b"
+                          : "#22c55e",
+                  }}
+                />
+              </div>
             </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-sky-600">Rate limit</span>
-              <span className="text-sky-800 font-semibold">5/task/day</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-sky-600">Weight</span>
-              <span className="text-sky-800 font-semibold">33.33%</span>
-            </div>
+            <ScoreRow label="Weight" value="33.33%" />
+          </div>
+        </div>
+
+        {/* CV Track */}
+        <div className="rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 shadow-lg p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-3 h-3 rounded-full bg-blue-400" />
+            <h3 className="text-sm font-bold text-sky-800 font-[Fredoka]">
+              NorgesGruppen (CV)
+            </h3>
+          </div>
+          <div className="space-y-1.5">
+            <ScoreRow label="Score" value={cvScore > 0 ? cvScore.toFixed(1) : "--"} bold />
+            <ScoreRow label="Subs/day" value="10 max" />
+            <ScoreRow label="Model" value="YOLO11m" />
+            <ScoreRow label="Weight" value="33.33%" />
           </div>
         </div>
       </div>
 
-      {/* Key deadlines */}
-      <div className="rounded-2xl bg-white/50 backdrop-blur-sm border border-white/30 p-4">
-        <h3 className="text-sm font-bold text-sky-700 font-[Fredoka] mb-3">
-          Key Deadlines
-        </h3>
-        <div className="space-y-2">
-          {deadlines.map((d) => (
-            <div
-              key={d.label}
-              className={`flex items-center justify-between text-xs ${
-                d.passed ? "opacity-40 line-through" : ""
-              }`}
-            >
-              <span className="text-sky-700 font-semibold">{d.label}</span>
-              <span className="text-sky-500">{d.time}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Leaderboard */}
-      <LeaderboardView />
-
-      {/* Metric cards row */}
+      {/* Total Score Summary */}
       <div className="flex gap-3">
-        <MetricCard label="Total Tracks" value="3" subtitle="33.33% each" />
-        <MetricCard label="Prize Pool" value="1M NOK" subtitle="400K / 300K / 200K + 100K U23" />
-        <MetricCard label="Competition" value="NM i AI" subtitle="March 19-22, 2026" />
+        <MetricCard
+          label="Our Total"
+          value={ourRow ? Number(ourRow["total"] ?? 0).toFixed(1) : "--"}
+          subtitle={ourRow ? `Rank #${ourRow["rank"] ?? ourRow["#"] ?? "?"}` : "Not on leaderboard"}
+          color="text-sky-900"
+        />
+        <MetricCard
+          label="ML Score"
+          value={mlScore != null ? mlScore.toFixed(1) : "--"}
+          subtitle={mlRank != null ? `Rank #${mlRank}` : "No rank yet"}
+          color="text-green-700"
+        />
+        <MetricCard
+          label="NLP Score"
+          value={nlpScore > 0 ? nlpScore.toFixed(1) : "--"}
+          subtitle={`${nlpDailyUsed} subs today`}
+          color="text-amber-700"
+        />
+        <MetricCard
+          label="CV Score"
+          value={cvScore > 0 ? cvScore.toFixed(1) : "--"}
+          subtitle="YOLO11m"
+          color="text-blue-700"
+        />
       </div>
+
+      {/* 5. Mini ML Terrain Preview */}
+      {terrainGrid && (
+        <div
+          className="rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 shadow-lg p-4 cursor-pointer hover:bg-white/70 transition-colors"
+          onClick={() => setActiveTab("ml-explorer")}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-bold text-sky-800 font-[Fredoka]">
+              ML Terrain Preview
+            </h3>
+            <span className="text-[10px] text-sky-400 uppercase tracking-wide">
+              Click to open ML Explorer
+            </span>
+          </div>
+          <div className="w-[200px] h-[200px] mx-auto">
+            <TerrainGrid grid={terrainGrid} label={terrainLabel} />
+          </div>
+        </div>
+      )}
+
+      {/* 6. NLP Submission Feed */}
+      <NLPSubmissionFeed />
+
+      {/* 7. Leaderboard */}
+      <LeaderboardView />
+    </div>
+  );
+}
+
+// --- Sub-components ---
+
+function CountdownPill({
+  label,
+  value,
+  subtitle,
+  color,
+}: {
+  label: string;
+  value: string;
+  subtitle?: string;
+  color: string;
+}) {
+  return (
+    <div className="rounded-xl bg-white/60 backdrop-blur-sm border border-white/40 shadow-md px-4 py-3 text-center">
+      <p className="text-[10px] text-sky-500 uppercase tracking-wide font-semibold">
+        {label}
+      </p>
+      <p className={`text-lg font-bold font-[Fredoka] mt-0.5 ${color}`}>
+        {value}
+      </p>
+      {subtitle && (
+        <p className="text-[10px] text-sky-400 mt-0.5">{subtitle}</p>
+      )}
+    </div>
+  );
+}
+
+function ScoreRow({
+  label,
+  value,
+  bold,
+}: {
+  label: string;
+  value: string;
+  bold?: boolean;
+}) {
+  return (
+    <div className="flex justify-between text-xs">
+      <span className="text-sky-600">{label}</span>
+      <span className={`text-sky-800 ${bold ? "font-bold text-sm" : "font-semibold"}`}>
+        {value}
+      </span>
     </div>
   );
 }
