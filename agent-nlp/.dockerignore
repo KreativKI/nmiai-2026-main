@@ -1,0 +1,11 @@
+.venv/
+.git/
+__pycache__/
+*.pyc
+.DS_Store
+data/
+models/
+*.md
+status.json
+spec-raw.md
+tests/
