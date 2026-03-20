@@ -33,35 +33,36 @@ Never create new work in the main repo. Always merge main -> agent-cv first to s
 - **Classification IS the bottleneck** (DINOv2 + reference images is the path)
 - Score = 0.7 * detection_mAP + 0.3 * classification_mAP
 
-## Priority Actions (in order)
+## Next Actions (execute in order)
 
-### Phase 1: Submit current best [READY]
-- submission.zip has: YOLO11m + DINOv2 + enhanced gallery (355 cats) + SAHI
-- ZIP validator PASS. Docker validated.
-- JC uploads when ready.
+### Action 1: Delete cv-train-2 VM [NOW, saves money]
+- RF-DETR was not competitive (0.572). VM is idle, burning credits.
+- `gcloud compute instances delete cv-train-2 --zone=europe-west3-a --project=ai-nm26osl-1779`
 
-### Phase 2: Build 3-source final gallery (Gemini + studio + shelf)
-- `scripts/build_final_gallery.py` exists (3-source blend)
-- 68 Gemini synthetic photos already generated
-- Need to run the builder to create gallery with all 3 sources blended
-- Expected: better embeddings for the 34 previously uncovered categories
-- Requires: running on GCP (or local Mac for gallery build only, no training)
-
-### Phase 3: Improve classification confidence scoring
+### Action 2: Improve classification scoring [code-only, local]
 - Current: `combined_score = sqrt(det_score * max(cls_sim, 0.01))`
-- Test alternatives: weighted average, softmax temperature, top-K voting
-- Code-only change, no retraining
+- Test A: top-K weighted voting (use top 3 gallery matches, not just best)
+- Test B: softmax temperature on DINOv2 similarities before picking class
+- Test C: use YOLO class as tiebreaker when DINOv2 confidence is low
+- Measure: count of unique correct-looking category assignments on test images
+- Docker validate each variant. Rebuild ZIP for best.
 
-### Phase 4: Copy-paste augmentation + retrain (GCP)
-- Script exists, research shows +6.9 mAP
+### Action 3: Build 3-source final gallery on cv-train-1 [GCP]
+- `scripts/build_final_gallery.py` exists (studio 60% + shelf 20% + Gemini 20%)
+- 68 Gemini synthetic photos already on local disk
+- Upload Gemini photos to cv-train-1, run builder, download gallery.npy
+- Expected: better embeddings for 34 categories that only had shelf crops
+- Rebuild ZIP + Docker validate
+
+### Action 4: Copy-paste augmentation + retrain YOLO11m [GCP, cv-train-1]
+- Research shows +6.9 mAP in low-data scenarios
 - Generate 250-500 synthetic images with COCO annotations
-- Retrain YOLO11m on combined real+synthetic dataset
-- Requires GCP VM
+- Retrain YOLO11m on combined dataset (248 real + 500 synthetic)
+- Export new best.onnx, rebuild full pipeline ZIP
 
-### Phase 5: Train YOLO11l (bigger backbone, GCP)
-- 25.3M params vs 20.1M (YOLO11m)
-- May improve both detection and classification from YOLO head
-- Requires GCP VM
+### Action 5: Train YOLO11l bigger backbone [GCP, cv-train-1]
+- 25.3M params vs 20.1M. Same pipeline as YOLO11m.
+- Only if time remains and Action 4 didn't fill the schedule
 
 ## GCP VMs (DELETE WHEN DONE)
 | VM | Zone | Status | Action Needed |

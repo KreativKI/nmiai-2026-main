@@ -185,8 +185,8 @@ def preprocess_crop_for_dino(crop_bgr, size=518):
     return np.transpose(crop_norm, (2, 0, 1))[np.newaxis, ...].astype(np.float32)
 
 
-def classify_crops(dino_session, dino_input_name, crops_bgr, gallery, gallery_labels):
-    """Classify cropped detections using DINOv2 + kNN against gallery."""
+def classify_crops(dino_session, dino_input_name, crops_bgr, gallery, gallery_labels, top_k=5):
+    """Classify cropped detections using DINOv2 + weighted kNN against gallery."""
     if len(crops_bgr) == 0:
         return np.array([]), np.array([])
 
@@ -198,12 +198,26 @@ def classify_crops(dino_session, dino_input_name, crops_bgr, gallery, gallery_la
         embeddings.append(emb)
 
     embeddings = np.array(embeddings)
-    similarities = embeddings @ gallery.T
-    best_idx = np.argmax(similarities, axis=1)
-    best_scores = np.max(similarities, axis=1)
-    best_labels = gallery_labels[best_idx]
+    similarities = embeddings @ gallery.T  # (N, G)
 
-    return best_labels, best_scores
+    # Top-K weighted voting: sum similarity weights per class across top-K matches
+    top_k_idx = np.argsort(similarities, axis=1)[:, -top_k:]  # (N, K)
+    best_labels = []
+    best_scores = []
+    for i in range(len(embeddings)):
+        k_indices = top_k_idx[i]
+        k_sims = similarities[i, k_indices]
+        k_labels = gallery_labels[k_indices]
+        # Accumulate similarity weight per class
+        class_votes = {}
+        for label, sim in zip(k_labels, k_sims):
+            label = int(label)
+            class_votes[label] = class_votes.get(label, 0.0) + float(sim)
+        winner = max(class_votes, key=class_votes.get)
+        best_labels.append(winner)
+        best_scores.append(class_votes[winner] / top_k)  # Normalized confidence
+
+    return np.array(best_labels, dtype=np.int32), np.array(best_scores, dtype=np.float32)
 
 
 def main():
@@ -270,20 +284,21 @@ def main():
         for i, (box, det_score) in enumerate(zip(boxes, det_scores)):
             x1, y1, x2, y2 = box
 
-            if len(dino_labels) > i:
+            # Use DINOv2 for category, keep detection score for ranking.
+            # Detection mAP (70%) ignores category, so preserving det_score
+            # keeps detection ranking intact. DINOv2 category improves
+            # classification mAP (30%).
+            if len(dino_labels) > i and dino_scores[i] > 0.3:
                 cat_id = int(dino_labels[i])
-                cls_sim = float(dino_scores[i])
-                combined_score = float(np.sqrt(det_score * max(cls_sim, 0.01)))
             else:
                 cat_id = int(yolo_labels[i])
-                combined_score = float(det_score)
 
             predictions.append({
                 "image_id": image_id,
                 "category_id": cat_id,
                 "bbox": [round(float(x1), 2), round(float(y1), 2),
                          round(float(x2 - x1), 2), round(float(y2 - y1), 2)],
-                "score": round(combined_score, 4),
+                "score": round(float(det_score), 4),
             })
 
     parent = output_path.parent
