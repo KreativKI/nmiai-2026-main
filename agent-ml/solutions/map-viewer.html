@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Astar Island Map Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+    background: #0a0e17;
+    color: #e0e6f0;
+    min-height: 100vh;
+  }
+  header {
+    background: linear-gradient(135deg, #111827, #1e293b);
+    border-bottom: 1px solid #334155;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 { font-size: 18px; font-weight: 600; color: #f1f5f9; }
+  .badge {
+    background: #1d4ed8; color: #dbeafe;
+    padding: 2px 8px; border-radius: 4px; font-size: 11px;
+  }
+  .controls {
+    background: #111827; border-bottom: 1px solid #1e293b;
+    padding: 12px 24px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+  }
+  .controls label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+  select, button {
+    background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
+    border-radius: 6px; padding: 6px 12px; font-size: 13px; font-family: inherit; cursor: pointer;
+  }
+  select:hover, button:hover { border-color: #475569; background: #273548; }
+  button.active { background: #1d4ed8; border-color: #3b82f6; color: #fff; }
+  .main { display: flex; gap: 0; height: calc(100vh - 110px); }
+  .map-panel { flex: 1; padding: 20px; display: flex; flex-direction: column; align-items: center; overflow: auto; }
+  canvas { image-rendering: pixelated; border: 1px solid #334155; border-radius: 4px; cursor: crosshair; }
+  .sidebar {
+    width: 320px; background: #111827; border-left: 1px solid #1e293b;
+    padding: 16px; overflow-y: auto;
+  }
+  .sidebar h2 { font-size: 13px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 16px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .legend-swatch { width: 16px; height: 16px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
+  .cell-info { background: #1e293b; border-radius: 8px; padding: 12px; margin-top: 8px; }
+  .prob-bar-container { margin: 4px 0; display: flex; align-items: center; gap: 8px; }
+  .prob-label { font-size: 11px; color: #94a3b8; width: 70px; flex-shrink: 0; }
+  .prob-bar { flex: 1; height: 14px; background: #0f172a; border-radius: 3px; overflow: hidden; }
+  .prob-bar-fill { height: 100%; border-radius: 3px; transition: width 0.2s; }
+  .prob-value { font-size: 11px; color: #cbd5e1; width: 40px; text-align: right; flex-shrink: 0; }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .stat-card { background: #1e293b; border-radius: 6px; padding: 8px 10px; }
+  .stat-card .stat-label { font-size: 10px; color: #64748b; text-transform: uppercase; }
+  .stat-card .stat-value { font-size: 16px; font-weight: 600; margin-top: 2px; }
+  .view-toggle { display: flex; gap: 4px; }
+  .view-toggle button { font-size: 11px; padding: 4px 10px; }
+  .compare-card { text-align: center; }
+  .compare-card .label { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Astar Island</h1>
+  <span class="badge">NM i AI 2026</span>
+  <span class="badge" id="round-badge">Loading...</span>
+</header>
+
+<div class="controls">
+  <div>
+    <label>View</label><br>
+    <div class="view-toggle">
+      <button id="btn-single" class="active" onclick="setView('single')">Single Map</button>
+      <button id="btn-compare" onclick="setView('compare')">Compare Seeds</button>
+      <button id="btn-gt" onclick="setView('gt')">Ground Truth</button>
+    </div>
+  </div>
+  <div>
+    <label>Round</label><br>
+    <select id="sel-round" onchange="renderCurrent()"></select>
+  </div>
+  <div>
+    <label>Seed</label><br>
+    <select id="sel-seed" onchange="renderCurrent()">
+      <option value="0">Seed 0</option><option value="1">Seed 1</option>
+      <option value="2">Seed 2</option><option value="3">Seed 3</option>
+      <option value="4">Seed 4</option>
+    </select>
+  </div>
+  <div>
+    <label>Layer</label><br>
+    <select id="sel-layer" onchange="renderCurrent()">
+      <option value="terrain">Terrain (argmax)</option>
+      <option value="entropy">Uncertainty (entropy)</option>
+      <option value="settlement">Settlement probability</option>
+      <option value="change">Change from initial</option>
+    </select>
+  </div>
+  <div>
+    <label>Cell size</label><br>
+    <select id="sel-size" onchange="renderCurrent()">
+      <option value="12">Small</option><option value="16" selected>Medium</option><option value="20">Large</option>
+    </select>
+  </div>
+</div>
+
+<div class="main" id="main-area">
+  <div class="map-panel" id="map-panel"></div>
+  <div class="sidebar">
+    <h2>Legend</h2>
+    <div class="legend" id="legend"></div>
+    <h2>Cell Inspector</h2>
+    <div class="cell-info" id="cell-info"><p style="font-size:12px;color:#64748b">Hover over a cell</p></div>
+    <h2>Map Statistics</h2>
+    <div class="stats-grid" id="stats"></div>
+  </div>
+</div>
+
+<script>
+const TERRAIN = {
+  0: { name: 'Empty',      color: '#64748b', light: '#94a3b8' },
+  1: { name: 'Settlement',  color: '#f59e0b', light: '#fbbf24' },
+  2: { name: 'Port',        color: '#3b82f6', light: '#60a5fa' },
+  3: { name: 'Ruin',        color: '#ef4444', light: '#f87171' },
+  4: { name: 'Forest',      color: '#22c55e', light: '#4ade80' },
+  5: { name: 'Mountain',    color: '#a78bfa', light: '#c4b5fd' },
+};
+const CLASS_MAP = { 0:0, 1:1, 2:2, 3:3, 4:4, 5:5, 10:0, 11:0 };
+const STATIC = new Set([5, 10]);
+let DATA = null;
+let currentView = 'single';
+
+function el(tag, attrs, children) {
+  const e = document.createElement(tag);
+  if (attrs) Object.entries(attrs).forEach(([k,v]) => {
+    if (k === 'style' && typeof v === 'object') Object.assign(e.style, v);
+    else if (k === 'text') e.textContent = v;
+    else e.setAttribute(k, v);
+  });
+  if (children) children.forEach(c => { if (c) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+  return e;
+}
+
+function clearEl(id) { const e = document.getElementById(id); while (e.firstChild) e.removeChild(e.firstChild); return e; }
+
+async function loadData() {
+  try {
+    const resp = await fetch('data/viz_data.json');
+    DATA = await resp.json();
+    initUI();
+  } catch(e) {
+    document.getElementById('round-badge').textContent = 'Error loading data';
+  }
+}
+
+function initUI() {
+  const sel = document.getElementById('sel-round');
+  sel.appendChild(el('option', { value: 'r3', text: 'Round 3 (Active)' }));
+  DATA.ground_truth.forEach(r => {
+    sel.appendChild(el('option', { value: 'gt'+r.round_number, text: 'Round '+r.round_number+' (Completed)' }));
+  });
+  document.getElementById('round-badge').textContent = 'Round 3 | ' + DATA.round3.width + 'x' + DATA.round3.height;
+
+  const legend = document.getElementById('legend');
+  Object.entries(TERRAIN).forEach(([cls, info]) => {
+    const swatch = el('div', { class: 'legend-swatch', style: { background: info.color } });
+    const label = el('span', { text: info.name });
+    legend.appendChild(el('div', { class: 'legend-item' }, [swatch, label]));
+  });
+  renderCurrent();
+}
+
+function setView(v) {
+  currentView = v;
+  document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + (v === 'gt' ? 'gt' : v)).classList.add('active');
+  renderCurrent();
+}
+
+function getGridData(seedOverride) {
+  const roundVal = document.getElementById('sel-round').value;
+  const seedIdx = seedOverride !== undefined ? seedOverride : parseInt(document.getElementById('sel-seed').value);
+  if (roundVal === 'r3') {
+    const seed = DATA.round3.seeds[seedIdx];
+    return { grid: seed.grid, gt: null, initial: seed.grid, width: DATA.round3.width, height: DATA.round3.height, settlements: seed.settlements };
+  } else {
+    const rnum = parseInt(roundVal.replace('gt', ''));
+    const round = DATA.ground_truth.find(r => r.round_number === rnum);
+    if (!round || seedIdx >= round.seeds.length) return null;
+    const seed = round.seeds[seedIdx];
+    return { grid: seed.initial_grid, gt: seed.ground_truth, initial: seed.initial_grid, width: 40, height: 40, settlements: [] };
+  }
+}
+
+function classFrom(t) { return CLASS_MAP[t] !== undefined ? CLASS_MAP[t] : 0; }
+function entropy(probs) { let h = 0; for (const p of probs) if (p > 0) h -= p * Math.log2(p); return h; }
+
+function lerpColor(a, b, t) {
+  const ar=parseInt(a.slice(1,3),16), ag=parseInt(a.slice(3,5),16), ab=parseInt(a.slice(5,7),16);
+  const br=parseInt(b.slice(1,3),16), bg=parseInt(b.slice(3,5),16), bb=parseInt(b.slice(5,7),16);
+  const r=Math.round(ar+(br-ar)*t), g=Math.round(ag+(bg-ag)*t), bl=Math.round(ab+(bb-ab)*t);
+  return '#'+r.toString(16).padStart(2,'0')+g.toString(16).padStart(2,'0')+bl.toString(16).padStart(2,'0');
+}
+
+function heatColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  if (t < 0.25) return lerpColor('#0f172a', '#1e40af', t*4);
+  if (t < 0.5) return lerpColor('#1e40af', '#eab308', (t-0.25)*4);
+  if (t < 0.75) return lerpColor('#eab308', '#f97316', (t-0.5)*4);
+  return lerpColor('#f97316', '#ef4444', (t-0.75)*4);
+}
+
+function renderGrid(canvas, data, cellSize, layer) {
+  if (!data) return;
+  const { grid, gt, initial, width, height, settlements } = data;
+  canvas.width = width * cellSize;
+  canvas.height = height * cellSize;
+  const ctx = canvas.getContext('2d');
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const terrain = grid[y][x];
+      const cls = classFrom(terrain);
+      let color;
+      if (layer === 'terrain') {
+        if (gt) {
+          const probs = gt[y][x];
+          const maxIdx = probs.indexOf(Math.max(...probs));
+          color = TERRAIN[maxIdx].color;
+          if (Math.max(...probs) < 0.5) color = lerpColor(color, '#1e293b', 0.4);
+        } else { color = TERRAIN[cls].color; }
+      } else if (layer === 'entropy') {
+        if (gt) { color = heatColor(entropy(gt[y][x]) / Math.log2(6)); }
+        else { color = STATIC.has(terrain) ? '#1e293b' : heatColor(0.5); }
+      } else if (layer === 'settlement') {
+        if (gt) { color = heatColor(gt[y][x][1]); }
+        else { color = cls === 1 ? '#f59e0b' : (cls === 2 ? '#3b82f6' : '#1e293b'); }
+      } else if (layer === 'change') {
+        if (gt) {
+          const ic = classFrom(initial[y][x]);
+          const gc = gt[y][x].indexOf(Math.max(...gt[y][x]));
+          color = ic === gc ? '#1e293b' : TERRAIN[gc].color;
+        } else { color = '#1e293b'; }
+      }
+      ctx.fillStyle = color;
+      ctx.fillRect(x*cellSize, y*cellSize, cellSize, cellSize);
+      if (cellSize >= 14) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.strokeRect(x*cellSize, y*cellSize, cellSize, cellSize);
+      }
+    }
+  }
+  if (settlements && settlements.length > 0) {
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+    for (const s of settlements) {
+      if (s.alive !== false) {
+        ctx.beginPath();
+        ctx.arc(s.x*cellSize+cellSize/2, s.y*cellSize+cellSize/2, cellSize/3, 0, Math.PI*2);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+function setupHover(canvas, data, cellSize) {
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX - rect.left) / cellSize);
+    const y = Math.floor((e.clientY - rect.top) / cellSize);
+    if (x < 0 || x >= data.width || y < 0 || y >= data.height) return;
+    updateCellInfo(data, x, y);
+  });
+}
+
+function updateCellInfo(data, x, y) {
+  const info = clearEl('cell-info');
+  const terrain = data.grid[y][x];
+  const cls = classFrom(terrain);
+  const tinfo = TERRAIN[cls];
+
+  const coords = el('div', { style: { fontSize: '11px', color: '#64748b', marginBottom: '8px' }, text: 'Cell ('+x+', '+y+') | Raw: '+terrain });
+  const label = el('div', { style: { fontSize: '14px', fontWeight: '600', color: tinfo.color, marginBottom: '10px' }, text: tinfo.name });
+  info.appendChild(coords);
+  info.appendChild(label);
+
+  if (data.gt) {
+    const probs = data.gt[y][x];
+    const e = entropy(probs);
+    info.appendChild(el('div', { style: { fontSize: '11px', color: '#64748b', marginBottom: '8px' }, text: 'Entropy: '+e.toFixed(3)+' / '+Math.log2(6).toFixed(3) }));
+    for (let c = 0; c < 6; c++) {
+      const p = probs[c];
+      const row = el('div', { class: 'prob-bar-container' });
+      row.appendChild(el('span', { class: 'prob-label', text: TERRAIN[c].name }));
+      const bar = el('div', { class: 'prob-bar' });
+      const fill = el('div', { class: 'prob-bar-fill', style: { width: (p*100)+'%', background: TERRAIN[c].color } });
+      bar.appendChild(fill);
+      row.appendChild(bar);
+      row.appendChild(el('span', { class: 'prob-value', text: (p*100).toFixed(1)+'%' }));
+      info.appendChild(row);
+    }
+  } else {
+    info.appendChild(el('div', { style: { fontSize: '12px', color: '#94a3b8' }, text: 'Initial terrain (active round)' }));
+    let adj = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dy && !dx) continue;
+      const ny = y+dy, nx = x+dx;
+      if (ny >= 0 && ny < data.height && nx >= 0 && nx < data.width) {
+        const nc = classFrom(data.grid[ny][nx]);
+        if (nc === 1 || nc === 2) adj++;
+      }
+    }
+    if (adj > 0) info.appendChild(el('div', { style: { fontSize: '11px', color: '#fbbf24', marginTop: '6px' }, text: adj+' adjacent settlement/port' }));
+    if (STATIC.has(terrain)) info.appendChild(el('div', { style: { fontSize: '11px', color: '#64748b', marginTop: '4px' }, text: 'Static (never changes)' }));
+  }
+}
+
+function updateStats(data) {
+  const stats = clearEl('stats');
+  const counts = [0,0,0,0,0,0];
+  for (let y = 0; y < data.height; y++) for (let x = 0; x < data.width; x++) {
+    if (data.gt) { const p = data.gt[y][x]; counts[p.indexOf(Math.max(...p))]++; }
+    else counts[classFrom(data.grid[y][x])]++;
+  }
+  Object.entries(TERRAIN).forEach(([cls, info]) => {
+    const card = el('div', { class: 'stat-card' });
+    card.appendChild(el('div', { class: 'stat-label', style: { color: info.color }, text: info.name }));
+    card.appendChild(el('div', { class: 'stat-value', style: { color: info.light }, text: String(counts[cls] || 0) }));
+    stats.appendChild(card);
+  });
+}
+
+function renderCurrent() {
+  const cellSize = parseInt(document.getElementById('sel-size').value);
+  const layer = document.getElementById('sel-layer').value;
+  const panel = clearEl('map-panel');
+
+  if (currentView === 'single') {
+    const canvas = el('canvas');
+    panel.appendChild(canvas);
+    const data = getGridData();
+    if (!data) return;
+    renderGrid(canvas, data, cellSize, layer);
+    setupHover(canvas, data, cellSize);
+    updateStats(data);
+  } else if (currentView === 'compare') {
+    const container = el('div', { style: { display:'flex', flexWrap:'wrap', gap:'12px', justifyContent:'center', padding:'16px' } });
+    for (let s = 0; s < 5; s++) {
+      const card = el('div', { class: 'compare-card' });
+      card.appendChild(el('div', { class: 'label', text: 'Seed '+s }));
+      const canvas = el('canvas');
+      card.appendChild(canvas);
+      container.appendChild(card);
+      const data = getGridData(s);
+      if (data) renderGrid(canvas, data, 10, layer);
+    }
+    panel.appendChild(container);
+  } else if (currentView === 'gt') {
+    const container = el('div', { style: { display:'flex', flexWrap:'wrap', gap:'20px', justifyContent:'center', padding:'16px' } });
+    const seedIdx = parseInt(document.getElementById('sel-seed').value);
+    for (const gt of DATA.ground_truth) {
+      if (seedIdx >= gt.seeds.length) continue;
+      const seed = gt.seeds[seedIdx];
+      // Initial
+      const c1 = el('div', { class: 'compare-card' });
+      c1.appendChild(el('div', { class: 'label', text: 'R'+gt.round_number+' Initial' }));
+      const cv1 = el('canvas'); c1.appendChild(cv1);
+      renderGrid(cv1, { grid: seed.initial_grid, gt: null, initial: seed.initial_grid, width:40, height:40, settlements:[] }, 12, 'terrain');
+      // Ground truth
+      const c2 = el('div', { class: 'compare-card' });
+      c2.appendChild(el('div', { class: 'label', text: 'R'+gt.round_number+' After 50yr' }));
+      const cv2 = el('canvas'); c2.appendChild(cv2);
+      renderGrid(cv2, { grid: seed.initial_grid, gt: seed.ground_truth, initial: seed.initial_grid, width:40, height:40, settlements:[] }, 12, layer);
+      container.appendChild(c1);
+      container.appendChild(c2);
+    }
+    panel.appendChild(container);
+  }
+}
+
+loadData();
+</script>
+</body>
+</html>
