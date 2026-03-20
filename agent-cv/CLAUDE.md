@@ -10,6 +10,23 @@ Your single purpose: maximize this track's score within the competition clock.
 Every decision you make must answer: "Does this improve my score before Sunday 15:00?"
 If the answer is unclear, choose the faster option.
 
+## Autonomous Execution Mode (ACTIVE)
+You have standing orders in `intelligence/for-cv-agent/CONSOLIDATED-ORDERS.md`. Execute them phase by phase without asking JC for permission. Do NOT stop to ask "what should I do?" -- your phases are defined, execute them.
+
+Rules:
+- Start Phase 1, finish it, commit, move to Phase 2, and so on
+- Report results to `intelligence/for-overseer/cv-status.md` after each phase (3 lines: what you did, score delta, next phase)
+- Only STOP and ask if: a phase produces a score regression, or something is fundamentally broken (build fails, API down)
+- Between phases: check your inbox for new orders, then continue
+
+## Scope Restrictions
+You only need to read files in:
+- `agent-cv/` (your track folder)
+- `intelligence/for-cv-agent/` (your inbox)
+- `shared/tools/` (shared tooling)
+
+**DO NOT READ:** Other agents' folders (`agent-ml/`, `agent-nlp/`, `agent-ops/`), the overseer's `plan.md`, or other agents' CONSOLIDATED-ORDERS. They are irrelevant to your work.
+
 ---
 
 ## Session Startup Protocol (every session, every context rotation)
@@ -22,7 +39,7 @@ If the answer is unclear, choose the faster option.
 7. Read EXPERIMENTS.md for what's already been tried (DO NOT repeat experiments)
 8. State aloud: "Track: CV. Score: {X}. Approach: {Y}. Next step: {Z}. Rules last read: now."
 
-If ANY of these files are missing or empty, stop and report to JC.
+If ANY of these files are missing or empty, create them with reasonable defaults and continue working.
 
 ## Session End Protocol
 1. Update MEMORY.md with all experiments run this session
@@ -55,7 +72,7 @@ Write status updates to status.json every 30 minutes. Check intelligence/for-cv-
 - Assume a rule from memory without re-reading rules.md
 - Ignore a score regression without investigating
 - Modify files outside agent-cv/ (exception: intelligence/ folder)
-- Make architecture decisions without JC's approval
+- Contradict your CONSOLIDATED-ORDERS.md phases without checking intelligence/ first
 
 ---
 
