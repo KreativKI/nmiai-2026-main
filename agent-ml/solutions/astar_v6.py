@@ -346,26 +346,107 @@ def phase_analyze(detail, round_num):
 
 
 # ──────────────────────────────────────────────
-# PHASE 3: Stack queries on dynamic zones
+# PHASE 3: Adaptive stacking with hindsight
 # ──────────────────────────────────────────────
-def phase_stack(session, round_id, detail, round_num, max_queries=25):
-    """Stack 2-3 queries on each high-uncertainty zone for multi-sample estimates."""
-    height, width = detail["map_height"], detail["map_width"]
+def compute_surprise(obs_counts, obs_total, grid, hist_trans, height, width):
+    """Compute per-cell surprise: how much observations disagree with model prior.
 
-    # Load stacking targets from phase 2
+    Returns a surprise map (H x W) where high values = model was most wrong.
+    These cells benefit most from additional observations.
+    """
+    surprise = np.zeros((height, width))
+    for y in range(height):
+        for x in range(width):
+            if obs_total[y, x] == 0:
+                continue
+            terrain = grid[y][x]
+            if terrain in STATIC_TERRAIN:
+                continue
+
+            cls = TERRAIN_TO_CLASS.get(terrain, 0)
+            prior = hist_trans["global"][cls]
+
+            # Empirical distribution from observations
+            empirical = obs_counts[y, x] / obs_total[y, x]
+
+            # KL-like surprise: sum of |empirical - prior| weighted by prior entropy
+            diff = np.abs(empirical - prior)
+            surprise[y, x] = diff.sum()
+
+            # Extra weight for settlement/port cells (high-scoring)
+            if cls in (1, 2, 3):
+                surprise[y, x] *= 3.0
+    return surprise
+
+
+def select_viewports_by_surprise(surprise, height, width, n_viewports=8,
+                                  obs_total=None, min_samples_threshold=3):
+    """Select viewports that cover the highest-surprise areas.
+
+    Prioritizes areas with: high surprise AND low sample count.
+    """
+    # Combine surprise with "need more samples" signal
+    need = surprise.copy()
+    if obs_total is not None:
+        # Cells with few samples that are also surprising need more queries
+        low_sample_bonus = np.maximum(0, min_samples_threshold - obs_total)
+        need += low_sample_bonus * 0.5
+
+    viewports = []
+    used = np.zeros((height, width), dtype=bool)
+    for _ in range(n_viewports):
+        best_score = -1
+        best_vp = None
+        for vy in range(0, max(1, height - 14), 3):
+            for vx in range(0, max(1, width - 14), 3):
+                region = need[vy:vy+15, vx:vx+15]
+                region_used = used[vy:vy+15, vx:vx+15]
+                score = region[~region_used].sum() if (~region_used).any() else 0
+                if score > best_score:
+                    best_score = score
+                    best_vp = (vx, vy, 15, 15)
+        if best_vp and best_score > 0:
+            viewports.append(best_vp)
+            vx, vy, _, _ = best_vp
+            used[vy:vy+15, vx:vx+15] = True
+
+    return viewports
+
+
+def phase_stack(session, round_id, detail, round_num, max_queries=25):
+    """Adaptive stacking: observe in batches, run hindsight after each, re-target.
+
+    Instead of blindly repeating the same viewports, this:
+    1. Does first pass over initial targets (from phase_analyze heat map)
+    2. Computes per-cell surprise (observation vs model prior)
+    3. Re-selects viewports for next pass based on surprise
+    4. Repeats until budget exhausted
+    """
+    height, width = detail["map_height"], detail["map_width"]
+    grid = detail["initial_states"][0]["grid"]
+
+    # Load stacking targets from phase 2 (initial heat-based targets)
     targets_path = DATA_DIR / f"stack_targets_r{round_num}.json"
     if not targets_path.exists():
         log("Phase 3: No stacking targets. Run phase 'analyze' first.")
         return None, None
 
     with open(targets_path) as f:
-        targets = json.load(f)
+        initial_targets = json.load(f)
 
-    # Load existing observations
+    # Load existing observations and historical transitions
     obs_counts, obs_total = load_observations(round_num, "seed0_overview")
     if obs_counts is None:
         obs_counts = np.zeros((height, width, NUM_CLASSES))
         obs_total = np.zeros((height, width))
+
+    # Load historical transitions for surprise calculation
+    trans_path = DATA_DIR / f"transition_round_{round_num}_obs.npy"
+    if trans_path.exists():
+        round_trans = np.load(trans_path)
+        hist_trans = {"global": round_trans}
+    else:
+        hist_trans = {"global": np.full((NUM_CLASSES, NUM_CLASSES), 1/NUM_CLASSES)}
 
     budget = get_budget(session)
     available = budget["queries_max"] - budget["queries_used"]
@@ -375,42 +456,77 @@ def phase_stack(session, round_id, detail, round_num, max_queries=25):
         log("Phase 3: No queries available.")
         return obs_counts, obs_total
 
-    # Distribute queries: 4 passes over top targets for ~5 samples/cell
-    query_plan = []
-    passes = 4
-    for p in range(passes):
-        for vp in targets:
-            if len(query_plan) >= n_queries:
-                break
-            query_plan.append((0, vp))  # All on seed 0
-        if len(query_plan) >= n_queries:
+    # Adaptive batching: ~8 queries per batch, then hindsight
+    batch_size = min(8, len(initial_targets))
+    total_done = 0
+    batch_num = 0
+    current_targets = initial_targets
+
+    log(f"Phase 3: Adaptive stacking — {n_queries} queries, "
+        f"batches of {batch_size}, hindsight between batches")
+
+    while total_done < n_queries:
+        batch_num += 1
+        batch_budget = min(batch_size, n_queries - total_done)
+
+        # Select viewports for this batch
+        batch_vps = current_targets[:batch_budget]
+
+        log(f"\n  --- Batch {batch_num} ({batch_budget} queries) ---")
+
+        for i, (vx, vy, vw, vh) in enumerate(batch_vps):
+            try:
+                obs = query_viewport(session, round_id, 0, vx, vy, vw, vh)
+                for dy, row in enumerate(obs["grid"]):
+                    for dx, terrain in enumerate(row):
+                        ya = obs["viewport"]["y"] + dy
+                        xa = obs["viewport"]["x"] + dx
+                        cls = TERRAIN_TO_CLASS.get(terrain, 0)
+                        obs_counts[ya, xa, cls] += 1
+                        obs_total[ya, xa] += 1
+                total_done += 1
+                log(f"  [{total_done}/{n_queries}] ({vx},{vy}) — "
+                    f"budget {obs['queries_used']}/50")
+            except requests.HTTPError as e:
+                if e.response and e.response.status_code == 429:
+                    log(f"  Budget exhausted at query {total_done}")
+                    total_done = n_queries  # exit loop
+                    break
+                log(f"  Failed: {e}")
+                continue
+
+        if total_done >= n_queries:
             break
 
-    log(f"Phase 3: Stacking {len(query_plan)} queries on seed 0 "
-        f"({len(targets)} zones, {passes} passes)")
+        # HINDSIGHT: compute surprise after this batch
+        surprise = compute_surprise(obs_counts, obs_total, grid, hist_trans,
+                                     height, width)
+        total_surprise = surprise.sum()
+        max_surprise = surprise.max()
+        high_surprise_cells = int((surprise > 0.5).sum())
 
-    for i, (seed_idx, (vx, vy, vw, vh)) in enumerate(query_plan):
-        try:
-            obs = query_viewport(session, round_id, seed_idx, vx, vy, vw, vh)
-            for dy, row in enumerate(obs["grid"]):
-                for dx, terrain in enumerate(row):
-                    ya = obs["viewport"]["y"] + dy
-                    xa = obs["viewport"]["x"] + dx
-                    cls = TERRAIN_TO_CLASS.get(terrain, 0)
-                    obs_counts[ya, xa, cls] += 1
-                    obs_total[ya, xa] += 1
-            log(f"  [{i+1}/{len(query_plan)}] seed {seed_idx} ({vx},{vy}) — "
-                f"budget {obs['queries_used']}/50")
-        except requests.HTTPError as e:
-            if e.response and e.response.status_code == 429:
-                log(f"  Budget exhausted at query {i+1}")
-                break
-            log(f"  Failed: {e}")
-            continue
+        log(f"  Hindsight: total_surprise={total_surprise:.1f}, "
+            f"max={max_surprise:.2f}, high_surprise_cells={high_surprise_cells}")
+
+        # Re-select viewports based on surprise for next batch
+        current_targets = select_viewports_by_surprise(
+            surprise, height, width, n_viewports=batch_size,
+            obs_total=obs_total, min_samples_threshold=4
+        )
+
+        if current_targets:
+            top_heat = surprise[current_targets[0][1]:current_targets[0][1]+15,
+                                current_targets[0][0]:current_targets[0][0]+15].sum()
+            log(f"  Re-targeted: top viewport ({current_targets[0][0]},{current_targets[0][1]}) "
+                f"surprise={top_heat:.1f}")
+        else:
+            log("  No more high-surprise areas. Stopping early.")
+            break
 
     multi = int((obs_total > 1).sum())
     max_samples = int(obs_total.max())
-    log(f"\n  After stacking: {multi} cells with 2+ samples, max {max_samples} samples")
+    log(f"\n  After adaptive stacking: {multi} cells with 2+ samples, "
+        f"max {max_samples} samples, {batch_num} batches")
 
     save_observations(obs_counts, obs_total, round_num, "seed0_stacked")
     return obs_counts, obs_total
