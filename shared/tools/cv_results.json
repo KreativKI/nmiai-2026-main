@@ -1,0 +1,22 @@
+[
+  {
+    "timestamp": "2026-03-20T20:32:05.087653+00:00",
+    "source": "/tmp/cv_ab_test/preds/preds_a_holdout.json",
+    "detection_mAP": 0.148306,
+    "classification_mAP": 0.275021,
+    "combined_score": 0.18632,
+    "holdout_images": 50,
+    "prediction_count": 691,
+    "verdict": "SUBMIT"
+  },
+  {
+    "timestamp": "2026-03-20T20:32:10.202062+00:00",
+    "source": "/tmp/cv_ab_test/preds/preds_b_holdout.json",
+    "detection_mAP": 0.136035,
+    "classification_mAP": 0.269245,
+    "combined_score": 0.175998,
+    "holdout_images": 50,
+    "prediction_count": 982,
+    "verdict": "SKIP"
+  }
+]

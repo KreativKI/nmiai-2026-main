@@ -1,3 +1,3 @@
-**What:** Fixed NLP auto-submitter parser bug, launched full batch (--max 100). Bug: page shows fixed 20 results, new result replaces oldest, so count-based detection always saw 0 diff. Fix: detect by comparing first (newest) entry instead.
-**Unblocks:** NLP submissions now running autonomously, ~30-75s per submission, scores parsing correctly.
-**Next:** Monitor batch completion, commit parser fix, report final tally.
+**What:** Ran Boris code-review on NLP tripletex_bot_v4.py. Found 4 bugs that directly cost competition points. Wrote findings to intelligence/for-nlp-agent/CODE-REVIEW-v4-bugs.md.
+**Unblocks:** NLP agent can fix these before next submission batch. Most impactful: exec_create_invoice always creates duplicate customers.
+**Next:** JC wants NLP submission results incorporated into dashboard.
