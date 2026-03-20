@@ -66,7 +66,7 @@ Tasks:
 - Update status.json
 - Commit: "Phase 5: Sleep report"
 
-### Phase 6: QC Judge Tools (CRITICAL, blocking submissions) — Status: active
+### Phase 6: QC Judge Tools (CRITICAL, blocking submissions) — Status: done
 
 **Why:** Wasted 2 of 3 CV submissions yesterday because we couldn't validate locally. JC blocked all submissions until QC judges exist.
 
@@ -91,7 +91,7 @@ Validate + score ML predictions before submission.
 
 Boris for each: Explore → Plan → Code → Review → Simplify → Validate → Commit
 
-### Phase 7: CV Submission Profiler (CRITICAL, last submission at stake) — Status: active
+### Phase 7: CV Submission Profiler (CRITICAL, last submission at stake) — Status: done
 
 **Why:** DINOv2 submission runs 2 ONNX models per image. Competition timeout is 300s on L4 GPU. Must verify it stays under before using last submission slot.
 
@@ -104,3 +104,37 @@ Boris for each: Explore → Plan → Code → Review → Simplify → Validate �
 - Print GO/NO-GO verdict against 300s timeout with safety margin
 
 Boris: Explore → Plan → Code → Review → Simplify → Validate → Commit
+
+### Phase 8: A/B Compare Tool — Status: active
+
+**Why:** Compare DINOv2 vs YOLO-only predictions side by side. Shows exactly which images improved/regressed. Adapted from grocery bot ab_compare.py pattern (Welch's t-test, per-item breakdown).
+
+#### shared/tools/ab_compare.py
+- Input: two predictions.json files (or ZIPs) + ground truth
+- Run cv_judge scoring on both
+- Per-image comparison: which images improved, regressed, unchanged
+- Per-category breakdown: which product classes each version handles better
+- Statistical test (Welch's t-test on per-image AP)
+- Verdict: A_BETTER / B_BETTER / NO_SIGNIFICANT_DIFFERENCE
+- Notify CV agent + update agent configs via intelligence/
+
+### Phase 9: Batch Eval Tool — Status: pending
+
+**Why:** Run cv_judge across all 5 CV ZIPs at once. Ranked table shows which is actually best. Saves JC from running cv_judge 5 times manually.
+
+#### shared/tools/batch_eval.py
+- Input: directory of submission ZIPs (or explicit list)
+- Run cv_judge on each, collect all scores
+- Print ranked table: detection mAP, classification mAP, combined, verdict
+- Highlight the best submission
+- Notify CV agent + update agent configs via intelligence/
+
+### Phase 10: Oracle/Ceiling Estimator — Status: pending
+
+**Why:** Know our theoretical ceiling per track. If CV max is 0.75, don't chase 0.90. Focus effort where headroom exists.
+
+#### shared/tools/oracle_sim.py
+- CV: perfect classification on detected boxes = detection mAP (our ceiling is bounded by detection quality)
+- ML: uniform prior score vs our predictions (how much better than guessing?)
+- Per-track ceiling estimate with current best score as comparison
+- Notify all agents + update agent configs via intelligence/
