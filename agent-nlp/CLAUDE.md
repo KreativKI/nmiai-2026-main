@@ -69,7 +69,7 @@ Tier 2 (2x) and Tier 3 (3x) tasks are worth more. Fix those before polishing Tie
 Once a task type scores 100% correctness, reduce API calls for efficiency bonus (up to 2x).
 
 ### E. Submit to cover all task types (YOU own submissions)
-Rate limit: 10/task/day (verified), 300 total/day, 3 concurrent. Each submission gets a random task type.
+Rate limit: 10/task/day (verified), 180 total/day (platform enforces 180, docs said 300), 3 concurrent. Each submission gets a random task type.
 
 **You are the ONLY one who submits.** Not the Butler, not the overseer, not JC. You decide when your bot is ready and you trigger submissions. This is semi-automatic: you control the auto-submitter tool at `shared/tools/nlp_auto_submit.py`.
 
@@ -271,7 +271,7 @@ Rules:
 - With efficiency bonus, a single perfect Tier 3 task can score up to 6.0
 
 ### Ongoing: Submit Frequently
-- Rate limit: 10/task/day (verified), 300 total/day, 3 concurrent. Resets 01:00 CET.
+- Rate limit: 10/task/day (verified), 180 total/day (platform enforces 180, docs said 300), 3 concurrent. Resets 01:00 CET.
 - Auto-submitter: `python3 shared/tools/nlp_auto_submit.py` (YOU run this, nobody else)
 - Small runs (up to 10): your call. Bulk runs (>10): JC approval.
 - Bad runs never lower your score, so submitting is always safe
