@@ -1,0 +1,655 @@
+{
+  "round_number": 6,
+  "round_weight": 1.3401,
+  "timestamp": "2026-03-20T13:12:14.637987+00:00",
+  "seeds": [
+    {
+      "seed_index": 0,
+      "score_no_obs": 49.24,
+      "score_with_obs": 62.01,
+      "observation_boost": 12.77,
+      "total_queries_on_seed": 8800,
+      "cells_queried": 1600,
+      "helpful_queries": 1153,
+      "wasted_queries": 447,
+      "top_helpful": [
+        {
+          "y": 9,
+          "x": 37,
+          "terrain": "Forest",
+          "samples": 5,
+          "info_gain": 1.2794,
+          "error_before": 1.0604,
+          "error_after": 0.198
+        },
+        {
+          "y": 12,
+          "x": 35,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 1.2489,
+          "error_before": 1.1181,
+          "error_after": 0.1978
+        },
+        {
+          "y": 10,
+          "x": 36,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 1.1348,
+          "error_before": 1.1808,
+          "error_after": 0.3381
+        },
+        {
+          "y": 12,
+          "x": 38,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 0.9659,
+          "error_before": 0.973,
+          "error_after": 0.3002
+        },
+        {
+          "y": 13,
+          "x": 38,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 0.8835,
+          "error_before": 1.0395,
+          "error_after": 0.3725
+        },
+        {
+          "y": 14,
+          "x": 38,
+          "terrain": "Forest",
+          "samples": 5,
+          "info_gain": 0.8547,
+          "error_before": 0.8167,
+          "error_after": 0.1972
+        },
+        {
+          "y": 11,
+          "x": 35,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 0.8379,
+          "error_before": 0.8735,
+          "error_after": 0.2751
+        },
+        {
+          "y": 14,
+          "x": 35,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 0.7593,
+          "error_before": 0.7317,
+          "error_after": 0.1184
+        },
+        {
+          "y": 10,
+          "x": 38,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 0.7472,
+          "error_before": 0.7942,
+          "error_after": 0.2174
+        },
+        {
+          "y": 1,
+          "x": 16,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.7427,
+          "error_before": 0.8042,
+          "error_after": 0.2296
+        },
+        {
+          "y": 38,
+          "x": 32,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 0.7202,
+          "error_before": 0.7411,
+          "error_after": 0.2107
+        },
+        {
+          "y": 13,
+          "x": 36,
+          "terrain": "Forest",
+          "samples": 5,
+          "info_gain": 0.7075,
+          "error_before": 0.887,
+          "error_after": 0.2353
+        },
+        {
+          "y": 9,
+          "x": 36,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 0.6974,
+          "error_before": 0.8495,
+          "error_after": 0.3397
+        },
+        {
+          "y": 38,
+          "x": 34,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 0.6937,
+          "error_before": 0.7582,
+          "error_after": 0.2062
+        },
+        {
+          "y": 38,
+          "x": 7,
+          "terrain": "Forest",
+          "samples": 5,
+          "info_gain": 0.6865,
+          "error_before": 0.5663,
+          "error_after": 0.0607
+        },
+        {
+          "y": 19,
+          "x": 1,
+          "terrain": "Forest",
+          "samples": 5,
+          "info_gain": 0.6621,
+          "error_before": 0.5891,
+          "error_after": 0.0724
+        },
+        {
+          "y": 38,
+          "x": 8,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 0.6186,
+          "error_before": 0.7888,
+          "error_after": 0.2941
+        },
+        {
+          "y": 1,
+          "x": 15,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.6085,
+          "error_before": 0.6279,
+          "error_after": 0.1389
+        },
+        {
+          "y": 38,
+          "x": 30,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 0.5995,
+          "error_before": 0.726,
+          "error_after": 0.2419
+        },
+        {
+          "y": 11,
+          "x": 36,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": 0.5958,
+          "error_before": 0.8154,
+          "error_after": 0.221
+        }
+      ],
+      "top_wasted": [
+        {
+          "y": 31,
+          "x": 30,
+          "terrain": "Settlement",
+          "samples": 5,
+          "info_gain": -0.7432,
+          "error_before": 0.3389,
+          "error_after": 0.9918
+        },
+        {
+          "y": 2,
+          "x": 17,
+          "terrain": "Settlement",
+          "samples": 1,
+          "info_gain": -0.4619,
+          "error_before": 0.4854,
+          "error_after": 0.9259
+        },
+        {
+          "y": 30,
+          "x": 5,
+          "terrain": "Settlement",
+          "samples": 5,
+          "info_gain": -0.3133,
+          "error_before": 0.3503,
+          "error_after": 0.619
+        },
+        {
+          "y": 13,
+          "x": 31,
+          "terrain": "Forest",
+          "samples": 9,
+          "info_gain": -0.1939,
+          "error_before": 0.1715,
+          "error_after": 0.3514
+        },
+        {
+          "y": 36,
+          "x": 30,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": -0.1858,
+          "error_before": 0.4933,
+          "error_after": 0.6726
+        },
+        {
+          "y": 4,
+          "x": 17,
+          "terrain": "Forest",
+          "samples": 5,
+          "info_gain": -0.1616,
+          "error_before": 0.5243,
+          "error_after": 0.6694
+        },
+        {
+          "y": 6,
+          "x": 17,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": -0.1566,
+          "error_before": 0.2523,
+          "error_after": 0.449
+        },
+        {
+          "y": 33,
+          "x": 35,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": -0.1549,
+          "error_before": 0.3428,
+          "error_after": 0.4816
+        },
+        {
+          "y": 3,
+          "x": 15,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": -0.1413,
+          "error_before": 0.5501,
+          "error_after": 0.7021
+        },
+        {
+          "y": 35,
+          "x": 22,
+          "terrain": "Empty",
+          "samples": 5,
+          "info_gain": -0.1405,
+          "error_before": 0.2932,
+          "error_after": 0.4289
+        }
+      ],
+      "missed_opportunities": [],
+      "optimal_overlap_pct": 12.5,
+      "terrain_summary": {
+        "Empty": {
+          "cells": 1019,
+          "queried": 1019,
+          "query_pct": 100.0,
+          "total_info_gain": 63.3495,
+          "avg_error_before": 0.2306,
+          "avg_error_after": 0.159,
+          "entropy_share": 885.6056
+        },
+        "Settlement": {
+          "cells": 38,
+          "queried": 38,
+          "query_pct": 100.0,
+          "total_info_gain": 5.2078,
+          "avg_error_before": 0.3627,
+          "avg_error_after": 0.2413,
+          "entropy_share": 42.9212
+        },
+        "Port": {
+          "cells": 1,
+          "queried": 1,
+          "query_pct": 100.0,
+          "total_info_gain": 0.0378,
+          "avg_error_before": 0.1871,
+          "avg_error_after": 0.1594,
+          "entropy_share": 1.3642
+        },
+        "Forest": {
+          "cells": 336,
+          "queried": 336,
+          "query_pct": 100.0,
+          "total_info_gain": 28.4975,
+          "avg_error_before": 0.2349,
+          "avg_error_after": 0.1493,
+          "entropy_share": 333.2242
+        }
+      }
+    },
+    {
+      "seed_index": 1,
+      "score_no_obs": 46.99,
+      "score_with_obs": 47.24,
+      "observation_boost": 0.26,
+      "total_queries_on_seed": 1600,
+      "cells_queried": 1600,
+      "helpful_queries": 668,
+      "wasted_queries": 932,
+      "top_helpful": [
+        {
+          "y": 1,
+          "x": 6,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.9089,
+          "error_before": 1.0866,
+          "error_after": 0.4549
+        },
+        {
+          "y": 1,
+          "x": 5,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.865,
+          "error_before": 1.0389,
+          "error_after": 0.4334
+        },
+        {
+          "y": 38,
+          "x": 9,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.8496,
+          "error_before": 0.9001,
+          "error_after": 0.1829
+        },
+        {
+          "y": 1,
+          "x": 8,
+          "terrain": "Forest",
+          "samples": 1,
+          "info_gain": 0.8254,
+          "error_before": 0.875,
+          "error_after": 0.3076
+        },
+        {
+          "y": 1,
+          "x": 4,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.8025,
+          "error_before": 0.9729,
+          "error_after": 0.3677
+        },
+        {
+          "y": 19,
+          "x": 38,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.7741,
+          "error_before": 0.7617,
+          "error_after": 0.1587
+        },
+        {
+          "y": 2,
+          "x": 9,
+          "terrain": "Forest",
+          "samples": 1,
+          "info_gain": 0.7396,
+          "error_before": 0.8424,
+          "error_after": 0.3482
+        },
+        {
+          "y": 31,
+          "x": 1,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.7159,
+          "error_before": 0.7254,
+          "error_after": 0.1366
+        },
+        {
+          "y": 4,
+          "x": 7,
+          "terrain": "Forest",
+          "samples": 1,
+          "info_gain": 0.6923,
+          "error_before": 0.8289,
+          "error_after": 0.3639
+        },
+        {
+          "y": 1,
+          "x": 17,
+          "terrain": "Forest",
+          "samples": 1,
+          "info_gain": 0.6119,
+          "error_before": 0.5543,
+          "error_after": 0.0893
+        },
+        {
+          "y": 37,
+          "x": 7,
+          "terrain": "Forest",
+          "samples": 1,
+          "info_gain": 0.5991,
+          "error_before": 0.542,
+          "error_after": 0.1062
+        },
+        {
+          "y": 6,
+          "x": 5,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.5246,
+          "error_before": 0.6529,
+          "error_after": 0.2341
+        },
+        {
+          "y": 4,
+          "x": 4,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.4827,
+          "error_before": 1.0327,
+          "error_after": 0.5495
+        },
+        {
+          "y": 14,
+          "x": 1,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.4811,
+          "error_before": 0.5034,
+          "error_after": 0.0999
+        },
+        {
+          "y": 2,
+          "x": 6,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.4288,
+          "error_before": 0.993,
+          "error_after": 0.5726
+        },
+        {
+          "y": 10,
+          "x": 38,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.4243,
+          "error_before": 0.4356,
+          "error_after": 0.0748
+        },
+        {
+          "y": 30,
+          "x": 13,
+          "terrain": "Settlement",
+          "samples": 1,
+          "info_gain": 0.4115,
+          "error_before": 0.5576,
+          "error_after": 0.1308
+        },
+        {
+          "y": 8,
+          "x": 38,
+          "terrain": "Forest",
+          "samples": 1,
+          "info_gain": 0.4045,
+          "error_before": 0.4188,
+          "error_after": 0.0708
+        },
+        {
+          "y": 38,
+          "x": 26,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.396,
+          "error_before": 0.4288,
+          "error_after": 0.0822
+        },
+        {
+          "y": 3,
+          "x": 6,
+          "terrain": "Empty",
+          "samples": 1,
+          "info_gain": 0.379,
+          "error_before": 0.9468,
+          "error_after": 0.5611
+        }
+      ],
+      "top_wasted": [
+        {
+          "y": 3,
+          "x": 7,
+          "terrain": "Port",
+          "samples": 1,
+          "info_gain": -0.9931,
+          "error_before": 0.282,
+          "error_after": 0.9741
+        },
+        {
+          "y": 14,
+          "x": 20,
+          "terrain": "Settlement",
+          "samples": 1,
+          "info_gain": -0.8731,
+          "error_before": 0.325,
+          "error_after": 1.0716
+        },
+        {
+          "y": 5,
+          "x": 22,
+          "terrain": "Settlement",
+          "samples": 1,
+          "info_gain": -0.8466,
+          "error_before": 0.3433,
+          "error_after": 1.0771
+        },
+        {
+          "y": 14,
+          "x": 34,
+          "terrain": "Settlement",
+          "samples": 1,
+          "info_gain": -0.8096,
+          "error_before": 0.3244,
+          "error_after": 1.0069
+        },
+        {
+          "y": 14,
+          "x": 2,
+          "terrain": "Settlement",
+          "samples": 1,
+          "info_gain": -0.6321,
+          "error_before": 0.4228,
+          "error_after": 0.9991
+        },
+        {
+          "y": 14,
+          "x": 5,
+          "terrain": "Settlement",
+          "samples": 1,
+          "info_gain": -0.6156,
+          "error_before": 0.333,
+          "error_after": 0.8676
+        },
+        {
+          "y": 34,
+          "x": 18,
+          "terrain": "Settlement",
+          "samples": 1,
+          "info_gain": -0.5801,
+          "error_before": 0.3271,
+          "error_after": 0.8201
+        },
+        {
+          "y": 19,
+          "x": 8,
+          "terrain": "Settlement",
+          "samples": 1,
+          "info_gain": -0.568,
+          "error_before": 0.3541,
+          "error_after": 0.8575
+        },
+        {
+          "y": 28,
+          "x": 14,
+          "terrain": "Settlement",
+          "samples": 1,
+          "info_gain": -0.444,
+          "error_before": 0.4441,
+          "error_after": 0.8501
+        },
+        {
+          "y": 33,
+          "x": 26,
+          "terrain": "Settlement",
+          "samples": 1,
+          "info_gain": -0.4307,
+          "error_before": 0.2698,
+          "error_after": 0.6225
+        }
+      ],
+      "missed_opportunities": [],
+      "optimal_overlap_pct": 12.5,
+      "terrain_summary": {
+        "Empty": {
+          "cells": 945,
+          "queried": 945,
+          "query_pct": 100.0,
+          "total_info_gain": 6.8872,
+          "avg_error_before": 0.2444,
+          "avg_error_after": 0.2361,
+          "entropy_share": 834.4901
+        },
+        "Settlement": {
+          "cells": 46,
+          "queried": 46,
+          "query_pct": 100.0,
+          "total_info_gain": -6.8221,
+          "avg_error_before": 0.3558,
+          "avg_error_after": 0.4867,
+          "entropy_share": 52.1336
+        },
+        "Port": {
+          "cells": 1,
+          "queried": 1,
+          "query_pct": 100.0,
+          "total_info_gain": -0.9931,
+          "avg_error_before": 0.282,
+          "avg_error_after": 0.9741,
+          "entropy_share": 1.4349
+        },
+        "Forest": {
+          "cells": 366,
+          "queried": 366,
+          "query_pct": 100.0,
+          "total_info_gain": 3.2005,
+          "avg_error_before": 0.2536,
+          "avg_error_after": 0.2449,
+          "entropy_share": 369.6438
+        }
+      }
+    }
+  ]
+}

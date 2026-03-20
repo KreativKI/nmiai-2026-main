@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-03-20T13:12:14.646986+00:00",
+  "rounds_analyzed": 3,
+  "rules": [
+    {
+      "type": "query_priority",
+      "terrain": "Empty",
+      "avg_info_gain": 11.3713,
+      "avg_error_without_obs": 0.1276,
+      "avg_query_coverage_pct": 100.0,
+      "recommendation": "Query Empty cells: avg info gain 11.371"
+    },
+    {
+      "type": "query_priority",
+      "terrain": "Forest",
+      "avg_info_gain": 5.6698,
+      "avg_error_without_obs": 0.1434,
+      "avg_query_coverage_pct": 100.0,
+      "recommendation": "Query Forest cells: avg info gain 5.670"
+    },
+    {
+      "type": "seed_priority",
+      "seed": 0,
+      "avg_observation_boost": 6.52,
+      "recommendation": "Seed 0: avg boost from observations = +6.5 points"
+    },
+    {
+      "type": "seed_priority",
+      "seed": 1,
+      "avg_observation_boost": -1.54,
+      "recommendation": "Seed 1: avg boost from observations = -1.5 points"
+    },
+    {
+      "type": "seed_priority",
+      "seed": 2,
+      "avg_observation_boost": -3.86,
+      "recommendation": "Seed 2: avg boost from observations = -3.9 points"
+    },
+    {
+      "type": "targeting_accuracy",
+      "avg_optimal_overlap_pct": 12.5,
+      "recommendation": "Our queries hit 12% of the highest-error cells. Room for improvement: focus more on high-error areas."
+    }
+  ]
+}
