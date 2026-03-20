@@ -177,6 +177,7 @@ def profile_submission(zip_path: Path, images_dir: Path, sample_size: int,
             img_result["resolution"] = f"{orig_w}x{orig_h}"
 
             # Stage 1: YOLO preprocessing + inference
+            num_detections = 0
             if yolo_name:
                 yolo_info = sessions[yolo_name]
                 yolo_shape = yolo_info["input_shape"]
@@ -289,7 +290,7 @@ def profile_submission(zip_path: Path, images_dir: Path, sample_size: int,
     for img in result["per_image"]:
         total = sum(img["timings"].get(k, 0) for k in [
             "read", "yolo_preprocess", "yolo_inference", "yolo_decode_nms",
-            "dino_estimated_total", "knn_one"
+            "dino_preprocess_one", "dino_estimated_total", "knn_one"
         ])
         per_image_totals.append(total)
 
