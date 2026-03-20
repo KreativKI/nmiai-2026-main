@@ -18,7 +18,7 @@ import onnxruntime as ort
 # --- Configuration ---
 YOLO_MODEL = "best.onnx"
 DINO_MODEL = "dinov2_vits.onnx"
-GALLERY_FILE = "gallery.npz"
+GALLERY_FILE = "gallery_enhanced.npz"
 YOLO_INPUT_SIZE = 1280
 DINO_INPUT_SIZE = 518
 CONF_THRESHOLD = 0.05

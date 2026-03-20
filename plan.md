@@ -30,14 +30,52 @@ JC sleeping starting ~06:35 CET. All 4 agents have phased standing orders + EXPE
 
 ## Active Tasks
 
-### 1. CV: Pre-Submission Toolchain + DINOv2 Submit (HIGHEST PRIORITY)
-DINOv2 crop-and-classify submission is built and Docker-validated (submission_dinov2_classify_v1.zip, 143MB).
-Before uploading, run full toolchain. Butler never built the scripts, so overseer builds them now.
+### 1. CV: Enhanced Gallery + Improved DINOv2 Submission (HIGHEST PRIORITY)
 
-**Phase A: Build tools (Boris per tool, one at a time)**
-1. validate_cv_zip.py -- ZIP structure, blocked imports, sizes DONE
-2. cv_profiler.py -- timing vs 300s timeout DONE
-3. cv_judge.py -- prediction quality + verdict (SUBMIT/SKIP/RISKY) IN PROGRESS
+**Problem:** Current DINOv2 gallery covers only 321 of 356 categories.
+35 categories (5.5% of annotations) have NO gallery representation.
+Also, gallery uses only studio product photos, but inference sees shelf crops.
+
+**Solution: Enhanced gallery from ALL available data + synthetic augmentation**
+
+**Phase A: Pre-submission toolchain** DONE
+All 4 tools built, reviewed, validated. submission_dinov2_classify_v1.zip passes all checks.
+
+**Phase B: Enhanced gallery from shelf crops** (Boris workflow)
+1. EXPLORE: Verify COCO annotations map cleanly to shelf image crops
+2. PLAN: Write build_enhanced_gallery.py that:
+   - Crops all 22,731 annotated products from 248 shelf images
+   - Embeds each crop with DINOv2 ViT-S (same model as inference)
+   - For 35 uncovered categories: shelf crops become their gallery entries
+   - For 321 covered categories: blend shelf crops with existing studio embeddings
+   - Exclude "unknown_product" (cat 355, 422 annotations, would poison matching)
+   - Save as gallery_enhanced.npz
+3. CODE: Implement on local Mac (embedding only, no GPU training)
+4. REVIEW: code-reviewer
+5. VALIDATE: Rebuild submission ZIP, run full toolchain, compare via ab_compare
+6. COMMIT with score delta
+
+**Phase C: Gemini synthetic product images** (gallery augmentation)
+1. For each of 35 uncovered products: feed Gemini the shelf crop as reference image
+   - Prompt: "Generate a clean product photo of this grocery item on white background, different angle"
+   - Also try: "Generate this product as seen on a store shelf, different lighting"
+2. Small batch first (5 products), embed, compare cosine similarity to shelf crops
+3. If quality good: generate for all 35 uncovered + low-representation products
+4. Add to gallery, re-run toolchain, compare
+5. Run on GCP (Gemini API via Vertex AI, project ai-nm26osl-1779)
+
+**Phase D: Gemini shelf backgrounds for copy-paste augmentation** (YOLO retraining)
+1. Generate varied shelf backgrounds using Gemini (empty shelves, different stores)
+2. Copy-paste: cut product reference images, paste onto generated backgrounds
+3. Auto-generate COCO annotations (we know exact paste positions)
+4. Retrain YOLO on combined dataset (248 real + 500 synthetic) on GCP VM
+5. Expected: +3-7 mAP from copy-paste augmentation (CVPR 2021 paper)
+
+**Phase E: Final submission build**
+1. Use best gallery and best YOLO model
+2. Rebuild submission ZIP
+3. Full toolchain: validate -> profile -> judge -> compare
+4. Submit when JC approves
 4. ab_compare.py -- compare DINOv2 vs YOLO-only predictions DONE
 
 **Phase B: Run toolchain on submission_dinov2_classify_v1.zip**
