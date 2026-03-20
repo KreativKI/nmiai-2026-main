@@ -24,8 +24,14 @@ export function DashboardLayout() {
           onClick={() => setActiveTab("overview")}
           className="flex items-center gap-3 hover:opacity-80 transition-opacity"
         >
+          <img
+            src="/logos/KREATIV-KI-3.svg"
+            alt="Kreativ KI"
+            className="h-7"
+          />
+          <span className="text-sky-300">|</span>
           <h1 className="text-xl font-bold text-sky-800 font-[Fredoka] tracking-tight">
-            NM i AI 2026 - Ops
+            NM i AI 2026
           </h1>
         </button>
 

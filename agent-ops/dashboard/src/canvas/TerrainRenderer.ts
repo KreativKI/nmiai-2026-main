@@ -22,6 +22,7 @@ export function renderTerrainGrid(
   canvasWidth: number,
   canvasHeight: number,
   groundTruth?: number[][] | null,
+  isDiffMode?: boolean,
 ): void {
   const height = grid.length;
   const width = grid[0]?.length ?? 0;
@@ -45,8 +46,20 @@ export function renderTerrainGrid(
       const px = x * CELL_SIZE;
       const py = y * CELL_SIZE;
 
-      ctx.fillStyle = terrainColor(terrain);
-      ctx.fillRect(px, py, CELL_SIZE, CELL_SIZE);
+      if (isDiffMode && terrain === -1) {
+        // Unchanged cell in diff mode: dark muted
+        ctx.fillStyle = "#2a2a2a";
+        ctx.fillRect(px, py, CELL_SIZE, CELL_SIZE);
+      } else {
+        ctx.fillStyle = terrainColor(terrain);
+        ctx.fillRect(px, py, CELL_SIZE, CELL_SIZE);
+        if (isDiffMode) {
+          // Changed cell: bright border to highlight
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(px + 0.5, py + 0.5, CELL_SIZE - 1, CELL_SIZE - 1);
+        }
+      }
 
       // Subtle grid lines
       ctx.strokeStyle = GRID_COLORS.gridLine;
@@ -139,11 +152,13 @@ export function fitScale(
 }
 
 /** Get terrain info string for a cell */
-export function cellInfo(grid: number[][], x: number, y: number): string {
+export function cellInfo(grid: number[][], x: number, y: number, isDiffMode?: boolean): string {
   const row = grid[y];
   if (!row) return "Out of bounds";
   const terrain = row[x];
   if (terrain === undefined) return "Out of bounds";
+  if (isDiffMode && terrain === -1) return `(${x}, ${y}) Unchanged`;
   const name = TERRAIN_NAMES[terrain] ?? `Unknown(${terrain})`;
+  if (isDiffMode) return `(${x}, ${y}) Changed to ${name}`;
   return `(${x}, ${y}) ${name}`;
 }

@@ -115,9 +115,23 @@ A competition dashboard forked from `/Volumes/devdrive/github_dev/NM_I_AI_dash/`
 - [x] Submission investigation: no APIs exist, manual only
 
 ### In Progress (Priority B)
-- [ ] B1: Leaderboard tracker
-- [ ] B2: CV detection visualizer
-- [ ] B3: Cross-track score overview
+- [x] B1: Leaderboard tracker
+- [x] B2: CV detection visualizer
+- [x] B3: Cross-track score overview
+
+### In Progress (Iteration 2: Branding + ML map fix)
+- [ ] C1: Copy logos to dashboard, add to header and all tabs
+- [ ] C2: ML map comparison view: initial terrain vs ground truth (argmax)
+- [ ] C3: ML diff highlight showing which 1200/1600 cells changed
+- [ ] C4: Ground truth is 40x40x6 probability distribution. Show as heatmap or argmax.
+- [ ] C5: QC with webapp-testing Playwright visual check
+
+#### ML Ground Truth Data Format
+- `ground_truth` is a list of round objects, each with `seeds` array
+- Each seed has `initial_grid` (int[][]) and `ground_truth` (float[][][], 6-class probabilities)
+- 1200/1600 cells change between initial and ground truth argmax
+- Cell [0][0] = [1.0, 0, 0, 0, 0, 0] means 100% Empty
+- Cell [5][5] = [0.405, 0.365, 0, 0.05, 0.18, 0] means mixed probabilities
 
 ## What JC Will See
 A local React dashboard at localhost:5174 with 4 tabs. Open it in browser, see competition status at a glance. No deployment needed during competition — runs locally.

@@ -13,9 +13,10 @@ interface TerrainGridProps {
   grid: number[][];
   groundTruth?: number[][] | null;
   label?: string;
+  isDiffMode?: boolean;
 }
 
-export function TerrainGrid({ grid, groundTruth, label }: TerrainGridProps) {
+export function TerrainGrid({ grid, groundTruth, label, isDiffMode }: TerrainGridProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<Camera>({ offsetX: 0, offsetY: 0, scale: 1 });
@@ -57,8 +58,9 @@ export function TerrainGrid({ grid, groundTruth, label }: TerrainGridProps) {
       cssW,
       cssH,
       showGT ? groundTruth : null,
+      isDiffMode,
     );
-  }, [grid, groundTruth, showGT]);
+  }, [grid, groundTruth, showGT, isDiffMode]);
 
   // Resize observer
   useEffect(() => {
@@ -125,8 +127,15 @@ export function TerrainGrid({ grid, groundTruth, label }: TerrainGridProps) {
         const row = grid[gy];
         const terrain = row?.[gx];
         if (terrain !== undefined) {
-          const name = TERRAIN_NAMES[terrain] ?? `Unknown(${terrain})`;
-          setTooltip(`(${gx}, ${gy}) ${name}`);
+          if (isDiffMode && terrain === -1) {
+            setTooltip(`(${gx}, ${gy}) Unchanged`);
+          } else if (isDiffMode) {
+            const name = TERRAIN_NAMES[terrain] ?? `Unknown(${terrain})`;
+            setTooltip(`(${gx}, ${gy}) Changed to ${name}`);
+          } else {
+            const name = TERRAIN_NAMES[terrain] ?? `Unknown(${terrain})`;
+            setTooltip(`(${gx}, ${gy}) ${name}`);
+          }
           setTimeout(() => setTooltip(null), 2000);
         }
       }
