@@ -307,19 +307,33 @@ TERRAIN_CHARS = {
 | Leaderboard history | leaderboard.json | file watch |
 
 ## Build Sequence (Boris for each)
-1. **Skeleton**: app.py + style.tcss + tab scaffolds. Verify it launches.
-2. **Data layer**: data.py with all fetchers + file watchers.
-3. **Dashboard tab**: 3 track cards + mini leaderboard + deadline countdown.
-4. **Agents tab**: 4 agent panels with status + plan parsing + intelligence feed.
-5. **Leaderboard tab**: full DataTable with filtering.
-6. **ML Explorer tab**: terrain grid + round history panel.
-7. **NLP tab**: 30-task colored grid + recent results.
-8. **CV tab**: submission table + profiler + training status.
-9. **Submit tab**: cross-track submission controls.
-10. **Tools tab**: tool launcher with output panel.
-11. **Logs tab**: combined log with filters.
-12. **Settings tab**: config display.
-13. **Polish**: responsive sizing, status bar, keyboard shortcuts, kreativki colors.
+1. **Skeleton**: app.py + style.tcss + tab scaffolds. Verify it launches. DONE
+2. **Data layer**: data.py with all fetchers + mtime-based caching. DONE
+3. **Dashboard tab**: 3 track cards + mini leaderboard + deadline countdown. DONE
+4. **Agents tab**: 4 agent panels with status + plan parsing + intelligence feed. DONE
+5. **Leaderboard tab**: full DataTable with filtering. DONE
+6. **ML Explorer tab**: terrain grid + round history panel. DONE (basic)
+7. **NLP tab**: 30-task colored grid + recent results. DONE
+8. **CV tab**: submission table + profiler + training status. DONE
+9. **Submit tab**: cross-track submission controls. DONE
+10. **Tools tab**: tool launcher with output panel. DONE
+11. **Logs tab**: combined log with filters. DONE
+12. **Settings tab**: config display. DONE
+13. **Polish**: responsive sizing, status bar, keyboard shortcuts, kreativki colors. IN PROGRESS
+
+## Phase 13b: Map Improvement (current focus)
+The terrain map needs to be drastically better. Steps:
+1. Rich-colored terrain with background colors per cell type (2-char wide for aspect ratio). DONE
+2. Row/col labels, legend, terrain counts. DONE
+3. Seed switching (1-5 keys on ML tab), round switching. DONE
+4. Performance: mtime-based cache for large viz_data.json (avoids re-parsing ~5MB every 30s). DONE
+5. Only refresh active tab (not all 10 tabs every 30s). DONE
+6. Playwright visual verification after each change (screenshot to confirm rendering).
+7. Consider using Gemini Flash 2.5 via GCP ADC to generate richer map visualization assets.
+
+## Verification Method
+Use Playwright (webapp-testing skill) to screenshot the TUI after changes.
+Use textual's built-in run_test + save_screenshot for headless verification.
 
 ## Design Principles
 - Information density over decoration (27" screen = lots of space, use it)

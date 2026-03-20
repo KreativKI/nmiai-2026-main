@@ -2,6 +2,7 @@
 
 Reads JSON files, agent statuses, and intelligence messages.
 All paths are relative to the repository root.
+Caches large files and only reloads on mtime change.
 """
 
 from __future__ import annotations
@@ -23,8 +24,33 @@ FEATURE_FREEZE = datetime(2026, 3, 22, 8, 0, 0, tzinfo=timezone.utc)  # 09:00 CE
 CUT_LOSS = datetime(2026, 3, 21, 11, 0, 0, tzinfo=timezone.utc)  # Saturday 12:00 CET
 
 
+# --- File cache (mtime-based) ---
+_cache: dict[str, tuple[float, object]] = {}
+
+
+def _read_json_cached(path: Path) -> dict | list | None:
+    """Read JSON with mtime-based caching. Avoids re-reading large files."""
+    key = str(path)
+    try:
+        mtime = path.stat().st_mtime
+    except FileNotFoundError:
+        _cache.pop(key, None)
+        return None
+
+    cached = _cache.get(key)
+    if cached and cached[0] == mtime:
+        return cached[1]
+
+    try:
+        data = json.loads(path.read_text())
+        _cache[key] = (mtime, data)
+        return data
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 def _read_json(path: Path) -> dict | list | None:
-    """Read a JSON file, return None on error."""
+    """Read a small JSON file (no cache)."""
     try:
         return json.loads(path.read_text())
     except (FileNotFoundError, json.JSONDecodeError):
@@ -54,11 +80,10 @@ def format_countdown(seconds: int) -> str:
 
 
 def load_leaderboard() -> list[dict]:
-    """Load leaderboard data."""
-    data = _read_json(DASHBOARD_DATA / "leaderboard.json")
+    """Load leaderboard data (cached)."""
+    data = _read_json_cached(DASHBOARD_DATA / "leaderboard.json")
     if not data:
         return []
-    # Can be a list of snapshots; use the latest
     if isinstance(data, list) and data:
         latest = data[-1] if isinstance(data[-1], dict) and "rows" in data[-1] else data[0]
         return latest.get("rows", [])
@@ -76,7 +101,7 @@ def find_our_team(leaderboard: list[dict]) -> dict | None:
 
 
 def load_agent_status(agent: str) -> dict:
-    """Load an agent's status.json."""
+    """Load an agent's status.json (small, no cache needed)."""
     path = REPO_ROOT / agent / "status.json"
     data = _read_json(path)
     return data if isinstance(data, dict) else {}
@@ -89,37 +114,37 @@ def load_all_agent_statuses() -> dict[str, dict]:
 
 
 def load_viz_data() -> dict | None:
-    """Load ML terrain visualization data."""
-    return _read_json(DASHBOARD_DATA / "viz_data.json")
+    """Load ML terrain visualization data (LARGE file, always cached)."""
+    return _read_json_cached(DASHBOARD_DATA / "viz_data.json")
 
 
 def load_cv_results() -> list[dict]:
     """Load CV judge results."""
-    data = _read_json(SHARED_TOOLS / "cv_results.json")
+    data = _read_json_cached(SHARED_TOOLS / "cv_results.json")
     return data if isinstance(data, list) else []
 
 
 def load_ml_results() -> list[dict]:
     """Load ML judge results."""
-    data = _read_json(SHARED_TOOLS / "ml_results.json")
+    data = _read_json_cached(SHARED_TOOLS / "ml_results.json")
     return data if isinstance(data, list) else []
 
 
 def load_nlp_submissions() -> list[dict]:
     """Load NLP submission log."""
-    data = _read_json(SHARED_TOOLS / "nlp_submission_log.json")
+    data = _read_json_cached(SHARED_TOOLS / "nlp_submission_log.json")
     return data if isinstance(data, list) else []
 
 
 def load_nlp_task_log() -> list[dict]:
     """Load NLP task execution log from dashboard."""
-    data = _read_json(DASHBOARD_DATA / "nlp_task_log.json")
+    data = _read_json_cached(DASHBOARD_DATA / "nlp_task_log.json")
     return data if isinstance(data, list) else []
 
 
 def load_cv_training_log() -> list[dict]:
     """Load CV training log."""
-    data = _read_json(DASHBOARD_DATA / "cv_training_log.json")
+    data = _read_json_cached(DASHBOARD_DATA / "cv_training_log.json")
     return data if isinstance(data, list) else []
 
 
@@ -131,7 +156,7 @@ def load_intelligence_messages() -> list[dict]:
     for folder in sorted(INTELLIGENCE.iterdir()):
         if not folder.is_dir():
             continue
-        target = folder.name  # e.g. "for-cv-agent"
+        target = folder.name
         for f in sorted(folder.glob("*.md")):
             messages.append({
                 "target": target,
