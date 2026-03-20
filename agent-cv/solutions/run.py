@@ -22,8 +22,9 @@ GALLERY_FILE = "gallery.npy"
 GALLERY_LABELS_FILE = "gallery_labels.json"
 YOLO_INPUT_SIZE = 1280
 DINO_INPUT_SIZE = 518
-CONF_THRESHOLD = 0.05
+CONF_THRESHOLD = 0.25      # Filter noise (was 0.05, caused 1159 dets/img timeout)
 IOU_THRESHOLD = 0.5
+MAX_DETECTIONS = 200       # Cap per image to stay under 300s timeout with DINOv2
 SAHI_MIN_DIM = 2000        # Only slice images larger than this
 SAHI_OVERLAP = 0.2         # Tile overlap ratio
 SAHI_TILE_SIZE = 1280      # Tile size in original image pixels
@@ -171,7 +172,16 @@ def detect_with_sahi(img, yolo_sess, yolo_input_name, orig_h, orig_w):
     merged_scores = np.concatenate(all_scores)
     merged_labels = np.concatenate(all_labels)
 
-    return nms_per_class(merged_boxes, merged_scores, merged_labels, IOU_THRESHOLD)
+    boxes, scores, labels = nms_per_class(merged_boxes, merged_scores, merged_labels, IOU_THRESHOLD)
+
+    # Cap detections to stay under 300s timeout (each needs DINOv2 inference)
+    if len(scores) > MAX_DETECTIONS:
+        top_idx = np.argsort(scores)[-MAX_DETECTIONS:]
+        boxes = boxes[top_idx]
+        scores = scores[top_idx]
+        labels = labels[top_idx]
+
+    return boxes, scores, labels
 
 
 def preprocess_crop_for_dino(crop_bgr, size=518):

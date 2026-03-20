@@ -54,11 +54,16 @@ Never create new work in the main repo. Always merge main -> agent-cv first to s
 - Expected: better embeddings for 34 categories that only had shelf crops
 - Rebuild ZIP + Docker validate
 
-### Action 4: Copy-paste augmentation + retrain YOLO11m [GCP, cv-train-1]
-- Research shows +6.9 mAP in low-data scenarios
-- Generate 250-500 synthetic images with COCO annotations
-- Retrain YOLO11m on combined dataset (248 real + 500 synthetic)
+### Action 4: Copy-paste augmentation + retrain YOLO11m [GCP, NOT YET DONE]
+**Status: RESEARCHED BUT NEVER EXECUTED. This is the next big move after submission.**
+- Research (commit 0764063): copy-paste augmentation gives +6.9 mAP in low-data scenarios
+- What it does: cut product instances from 248 training images, paste onto shelf backgrounds
+  using cv2.seamlessClone, auto-generate COCO annotations
+- Generate 250-500 synthetic TRAINING images (these are NOT gallery images)
+- Retrain YOLO11m on combined dataset (248 real + 500 synthetic) on GCP
 - Export new best.onnx, rebuild full pipeline ZIP
+- Script may exist at agent-cv/scripts/ or needs to be written
+- This is different from the Gemini product photos (those are for DINOv2 gallery)
 
 ### Action 5: Train YOLO11l bigger backbone [GCP, cv-train-1]
 - 25.3M params vs 20.1M. Same pipeline as YOLO11m.
