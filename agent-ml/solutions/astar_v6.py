@@ -601,7 +601,12 @@ def phase_secondary(session, round_id, detail, round_num, max_queries=16):
 # PHASE 5: Build predictions & submit
 # ──────────────────────────────────────────────
 def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False):
-    """Build final predictions and submit all 5 seeds."""
+    """Build final predictions and submit all 5 seeds.
+
+    Uses learned neighborhood model (48,000+ cell lookup table) instead of
+    hand-crafted transition matrices. Falls back to heuristic if learned
+    model fails to load.
+    """
     height, width = detail["map_height"], detail["map_width"]
     seeds_count = detail["seeds_count"]
 
@@ -613,9 +618,7 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
         oc, ot = load_observations(round_num, label)
         if oc is not None:
             if seed_idx in all_obs:
-                # Merge: stacked has more data than overview
                 prev_oc, prev_ot = all_obs[seed_idx]
-                # Use whichever has more data per cell
                 mask = ot > prev_ot
                 prev_oc[mask] = oc[mask]
                 prev_ot[mask] = ot[mask]
@@ -624,152 +627,58 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
 
     log(f"Loaded observations for seeds: {list(all_obs.keys())}")
 
-    # Build round-specific transitions from all observed data
-    round_trans_sums = {k: np.zeros((NUM_CLASSES, NUM_CLASSES))
-                        for k in ["global", "near", "far"]}
-    round_trans_counts = {k: np.zeros(NUM_CLASSES)
-                          for k in ["global", "near", "far"]}
+    # Train learned neighborhood model on all completed rounds
+    from learned_model import NeighborhoodModel
+    learned = NeighborhoodModel()
+    rounds = session.get(f"{BASE}/astar-island/rounds").json()
+    completed = [r for r in rounds if r["status"] == "completed"]
+    learned_ok = False
 
-    for seed_idx, (oc, ot) in all_obs.items():
-        grid = detail["initial_states"][seed_idx]["grid"]
-        for y in range(height):
-            for x in range(width):
-                if ot[y, x] == 0:
-                    continue
-                cls = TERRAIN_TO_CLASS.get(grid[y][x], 0)
-                empirical = oc[y, x] / ot[y, x]
+    if completed:
+        for r in completed:
+            rd_id = r["id"]
+            rd_detail = session.get(f"{BASE}/astar-island/rounds/{rd_id}").json()
+            rd_data = {
+                "round_number": r["round_number"],
+                "map_height": rd_detail["map_height"],
+                "map_width": rd_detail["map_width"],
+                "initial_states": rd_detail["initial_states"],
+                "seeds": {},
+            }
+            for si in range(rd_detail.get("seeds_count", 5)):
+                resp = session.get(f"{BASE}/astar-island/analysis/{rd_id}/{si}")
+                if resp.status_code == 200:
+                    rd_data["seeds"][str(si)] = resp.json()
+            if rd_data["seeds"]:
+                learned.add_training_data(rd_data)
+        learned.finalize()
+        learned.stats()
+        learned_ok = learned.total_cells > 0
 
-                round_trans_sums["global"][cls] += empirical
-                round_trans_counts["global"][cls] += 1
-
-                has_adj = any(
-                    0 <= y+dy < height and 0 <= x+dx < width
-                    and TERRAIN_TO_CLASS.get(grid[y+dy][x+dx], 0) in (1, 2)
-                    for dy in (-1, 0, 1) for dx in (-1, 0, 1)
-                    if (dy, dx) != (0, 0)
-                )
-                key = "near" if has_adj else "far"
-                round_trans_sums[key][cls] += empirical
-                round_trans_counts[key][cls] += 1
-
-    def normalize(s, c):
-        mat = np.full((NUM_CLASSES, NUM_CLASSES), PROB_FLOOR)
-        for i in range(NUM_CLASSES):
-            if c[i] > 0:
-                mat[i] = s[i] / c[i]
-        mat = np.maximum(mat, PROB_FLOOR)
-        return mat / mat.sum(axis=1, keepdims=True)
-
-    round_trans = {k: normalize(round_trans_sums[k], round_trans_counts[k])
-                   for k in ["global", "near", "far"]}
-
-    # Blend round-specific with historical
-    # More round observations = trust round-specific more
-    total_round_obs = sum(round_trans_counts["global"])
-    has_round_obs = total_round_obs > 50
-    if has_round_obs:
-        # Scale: 50 obs -> 70%, 1000 obs -> 85%, 3000+ obs -> 90%
-        blend_w = min(0.9, 0.7 + (total_round_obs - 50) / 10000)
-        log(f"Blending transitions: {blend_w:.0%} round-specific ({int(total_round_obs)} obs), "
-            f"{1-blend_w:.0%} historical")
-    else:
-        blend_w = 0.0
-        log("No round observations. Using historical transitions only.")
-
-    final_trans = {}
-    for k in ["global", "near", "far"]:
-        final_trans[k] = blend_w * round_trans[k] + (1 - blend_w) * hist_trans[k]
-        final_trans[k] = np.maximum(final_trans[k], PROB_FLOOR)
-        final_trans[k] = final_trans[k] / final_trans[k].sum(axis=1, keepdims=True)
-
-    # Log key transitions
-    log("Final transitions (global):")
-    for i, name in enumerate(CLASS_NAMES):
-        top = sorted(range(NUM_CLASSES), key=lambda j: final_trans["global"][i][j],
-                      reverse=True)[:3]
-        s = ", ".join(f"{CLASS_NAMES[j]}:{final_trans['global'][i][j]:.3f}" for j in top)
-        log(f"  {name} -> {s}")
+    if not learned_ok:
+        log("WARNING: Learned model failed, falling back to heuristic transitions")
 
     # Build and submit predictions
     log(f"\nBuilding predictions for {seeds_count} seeds...")
     for seed_idx in range(seeds_count):
         grid = detail["initial_states"][seed_idx]["grid"]
-        pred = np.full((height, width, NUM_CLASSES), PROB_FLOOR)
 
-        # Precompute settlement positions for distance calculation
-        settlement_positions = []
-        for y in range(height):
-            for x in range(width):
-                if TERRAIN_TO_CLASS.get(grid[y][x], 0) in (1, 2):
-                    settlement_positions.append((y, x))
-
-        # Precompute distance-to-nearest-settlement for every cell
-        dist_map = np.full((height, width), 99)
-        for sy, sx in settlement_positions:
+        if learned_ok:
+            # Use learned neighborhood model
+            pred = learned.predict_grid_with_obs(
+                detail, seed_idx,
+                obs_counts=all_obs[seed_idx][0] if seed_idx in all_obs else None,
+                obs_total=all_obs[seed_idx][1] if seed_idx in all_obs else None,
+            )
+        else:
+            # Fallback: heuristic model (old code path)
+            pred = np.full((height, width, NUM_CLASSES), PROB_FLOOR)
             for y in range(height):
                 for x in range(width):
-                    d = abs(y - sy) + abs(x - sx)
-                    dist_map[y, x] = min(dist_map[y, x], d)
-
-        for y in range(height):
-            for x in range(width):
-                terrain = grid[y][x]
-                cls = TERRAIN_TO_CLASS.get(terrain, 0)
-
-                if terrain in STATIC_TERRAIN:
-                    pred[y, x] = final_trans["global"][cls]
-                    continue
-
-                # Distance-weighted blending between near and far transitions
-                # Lowered from 0.8/0.6/0.3: backtest BT-001 test 9 showed +0.8 avg
-                dist = dist_map[y, x]
-                if dist <= 1:
-                    w_near = 0.6
-                elif dist <= 3:
-                    w_near = 0.4
-                elif dist <= 5:
-                    w_near = 0.2
-                else:
-                    w_near = 0.0
-
-                base = w_near * final_trans["near"][cls] + \
-                       (1 - w_near) * final_trans["far"][cls]
-
-                pred[y, x] = base
-
-        # Blend with direct observations for this seed
-        # Key: high-entropy cells (settlements, ports) benefit most from observations
-        # Low-entropy cells (forests, plains) are already well-predicted by transition model
-        if seed_idx in all_obs:
-            oc, ot = all_obs[seed_idx]
-            has_obs = ot > 0
-            if has_obs.any():
-                ot_3d = ot[..., np.newaxis]
-                empirical = oc / np.maximum(ot_3d, 1)
-
-                # Terrain-aware observation weight:
-                # Settlements/Ports: trust observations heavily (0.5 to 0.95)
-                # Forests/Plains: trust observations less (0.1 to 0.4)
-                obs_w = np.zeros((height, width, 1))
-                for y in range(height):
-                    for x in range(width):
-                        if ot[y, x] == 0:
-                            continue
-                        terrain = grid[y][x]
-                        cls = TERRAIN_TO_CLASS.get(terrain, 0)
-                        n = ot[y, x]
-                        if cls in (1, 2, 3):  # Settlement, Port, Ruin: high value
-                            obs_w[y, x, 0] = min(0.95, 0.5 + n / 15.0)
-                        elif cls == 4:  # Forest: moderate value
-                            obs_w[y, x, 0] = min(0.4, 0.1 + n / 20.0)
-                        else:  # Empty/Plains: low value
-                            obs_w[y, x, 0] = min(0.35, 0.1 + n / 25.0)
-
-                pred = np.where(
-                    has_obs[..., np.newaxis],
-                    obs_w * empirical + (1 - obs_w) * pred,
-                    pred
-                )
+                    cls = TERRAIN_TO_CLASS.get(grid[y][x], 0)
+                    pred[y, x] = hist_trans["global"][cls]
+            pred = np.maximum(pred, PROB_FLOOR)
+            pred = pred / pred.sum(axis=-1, keepdims=True)
 
         # Floor and renormalize
         pred = np.maximum(pred, PROB_FLOOR)
