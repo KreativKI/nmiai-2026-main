@@ -51,10 +51,11 @@ Predict terrain probability distributions on a 40x40 grid after 50 years of stoc
 **Boris:** Full workflow per phase
 1. `astar_v6.py --phase overview` (9 queries, seed 0 full map)
 2. `astar_v6.py --phase analyze` (identify dynamics, 0 queries)
-3. `astar_v6.py --phase stack` (22 queries on dynamic zones)
-4. `astar_v6.py --phase secondary` (19 queries on seeds 1-2)
+3. `astar_v6.py --phase stack --max-stack 32` (32 queries, 4 passes for ~5 samples/cell)
+4. `astar_v6.py --phase secondary --max-secondary 9` (9 queries, seed 1 full coverage)
 5. Dry-run validation
 6. `astar_v6.py --phase submit`
+**Total: 9+32+9=50 queries. Max stacking depth on settlements.**
 **Commit after this phase**
 
 ### Phase D: Repeat for rounds 6, 7, 8...
@@ -88,7 +89,11 @@ Reducing settlement/port KL from 0.52 to 0.20 would be huge.
 This changes strategy: we need ONE excellent round, not many mediocre ones.
 Investing time in model quality pays more than just submitting every round.
 
-## Open Questions
-- Does stacking (multi-sample) actually improve score vs single-coverage?
-- Can we infer hidden parameters from cross-seed patterns?
-- Can we use settlement adjacency (food from forests) to predict survival?
+## Answered Questions
+- **Stacking vs coverage?** Stacking wins massively. N=1: score ~2 for settlements. N=7: score ~58.
+- **Cross-seed transfer quality?** Nearly optimal (0.7 point gap vs perfect).
+- **Forest adjacency?** Small effect (26% to 33% survival). Round params dominate.
+
+## Remaining Questions
+- Can settlement stats (food, pop) from observations predict per-cell survival?
+- What's the theoretical max score with 50 queries?

@@ -375,9 +375,9 @@ def phase_stack(session, round_id, detail, round_num, max_queries=25):
         log("Phase 3: No queries available.")
         return obs_counts, obs_total
 
-    # Distribute queries: 3 passes over top targets
+    # Distribute queries: 4 passes over top targets for ~5 samples/cell
     query_plan = []
-    passes = 3
+    passes = 4
     for p in range(passes):
         for vp in targets:
             if len(query_plan) >= n_queries:
@@ -701,10 +701,10 @@ def main():
                         choices=["overview", "analyze", "stack", "secondary",
                                  "submit", "all", "post-round"])
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--max-stack", type=int, default=24,
-                        help="Max queries for stacking phase (default: 24 for 3 passes over 8 zones)")
-    parser.add_argument("--max-secondary", type=int, default=17,
-                        help="Max queries for secondary seeds (default: 17 = 9+8)")
+    parser.add_argument("--max-stack", type=int, default=32,
+                        help="Max queries for stacking phase (default: 32 for 4 passes over 8 zones)")
+    parser.add_argument("--max-secondary", type=int, default=9,
+                        help="Max queries for secondary seeds (default: 9 = seed 1 full coverage)")
     args = parser.parse_args()
 
     session = get_session(args.token)
