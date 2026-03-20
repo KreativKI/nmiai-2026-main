@@ -33,7 +33,7 @@ You do NOT write solution code. That's the track agents' job.
 ## Responsibilities (ranked by priority)
 
 ### A. Submission Oversight
-- **ML:** Full autonomy to submit every round. Floor at 0.01, renormalize. Never miss a round.
+- **ML:** 75% query budget autonomy per round (37 of 50 queries). Remaining 25% requires JC approval. Always submit every round. Floor at 0.01, renormalize. Never miss a round.
 - **NLP:** Auto-submitter approved (75% of daily budget). JC handles remaining 25% manually.
 - **CV:** JC uploads manually. Run pre-submission toolchain (cv_pipeline.sh) before every upload.
 
@@ -83,7 +83,7 @@ Before ANY work, create or update plan.md. No exceptions. Every iteration: **Pla
 - **Submit:** REST API predictions (40x40x6 probability tensor per seed)
 - **Rounds:** Every ~3h, weight +5%/round. Missed rounds = lost forever.
 - **Budget:** 50 queries/round across 5 seeds. CRITICAL: Floor at 0.01, renormalize.
-- **Autonomy:** Full autonomy to submit every round. Never miss a round.
+- **Autonomy:** 75% query budget per round (37 of 50). Submit every round. Never miss a round.
 
 ### CV Agent — NorgesGruppen [agent-cv/]
 - **Branch:** `agent-cv` | **Worktree:** `nmiai-worktree-cv/`
@@ -200,7 +200,7 @@ Overseer works on `main`. Agents work on their own branches in worktrees.
 | 2026-03-20 00:00 | Openclaw generated false "account suspended" info | Always verify claims from automated setup tools before acting |
 | 2026-03-20 00:00 | ML/NLP CLAUDE.md had wrong deadline and generic playbooks | Always cross-check agent docs against actual task specs |
 | 2026-03-20 00:00 | All 3 rules.md files were empty | Populate rules.md before any agent session starts |
-| 2026-03-20 01:08 | Auto-submitted ML predictions without JC's approval | UPDATED: ML now has full submit autonomy. NLP auto-submitter approved at 75% budget. CV remains manual. See submission autonomy rules per track. |
+| 2026-03-20 01:08 | Auto-submitted ML predictions without JC's approval | UPDATED: ML 75% query budget auto (37/50), submit every round. NLP auto-submitter 75% budget (225/300). CV manual only. |
 | 2026-03-20 02:10 | Reported "45 min remaining" when actual was ~100 min | Never estimate time manually. Always calculate with python3 |
 | 2026-03-20 03:30 | Diagnosed wrong NLP bug (field names) when real issue was sandbox prerequisites | Always check Cloud Run logs before diagnosing. Read the DEPLOYED code, not old versions. |
 | 2026-03-20 04:00 | CV submission failed exit code 2 despite "Docker validation passed" | Docker validation must use REAL test images and the EXACT competition command. Add mandatory QC loop: overseer audits submission ZIP before JC uploads. |
