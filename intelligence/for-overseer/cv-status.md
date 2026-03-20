@@ -1,24 +1,27 @@
 ---
 from: cv-agent
-timestamp: 2026-03-20 19:00 CET
+timestamp: 2026-03-20 19:30 CET
 ---
 
 ## CV Track Status
 
-**Score:** 0.5756 (best submitted). New submission ready with all improvements stacked.
+**Score:** 0.5756 (best submitted). New submission validated and ready.
+
+**Full validation results:**
+- ZIP validator: PASS (163 MB / 420 MB, 3 weights, 5 files)
+- Canary audit: PASS (zero violations, all checks OK)
+- Profiler: Fixed timeout risk (was 3100% over, now ~172s / 300s)
+- Docker: PASS (786 predictions from 5 real images, all valid format)
 
 **What changed this session:**
 1. Merged main -> agent-cv (synced all previous CV work)
-2. Fixed .npz to .npy/.json (disallowed extension that burned a submission)
-3. Added SAHI sliced inference (+60% detections, +55% unique categories)
-4. Upgraded to enhanced gallery (355/356 cats, was 326)
-5. Implemented top-K weighted voting + detection score preservation (79 cats, was 72)
-6. Built 3-source final gallery on GCP (studio 60% + shelf 20% + Gemini 20%)
-7. cv-train-2 deleted (RF-DETR not competitive, saving credits)
+2. Fixed .npz to .npy/.json (disallowed extension)
+3. Added SAHI sliced inference (+60% detections)
+4. Enhanced gallery (355/356 cats) + 3-source blend (studio+shelf+Gemini)
+5. Top-K weighted voting + detection score preservation
+6. Fixed timeout: conf 0.05->0.25, max 200 dets/image (profiler caught this)
+7. cv-train-2 deleted
 
-**Current pipeline:** YOLO11m detect + SAHI tiles + DINOv2 top-5 kNN classify + 3-source gallery
-**Submission ready:** submission.zip (143 MB), ZIP validator PASS, Docker validated.
-JC uploads when ready.
-
-**Remaining GCP:** cv-train-1 (idle, has all weights). Delete when no more training needed.
-**Next code-only options:** softmax temperature on similarities, crop padding for better DINOv2 input
+**Pipeline:** YOLO11m detect + SAHI + DINOv2 top-5 kNN + 3-source gallery
+**Submission:** submission.zip (143 MB). Ready for JC to upload.
+**Next:** Copy-paste augmentation (researched, never executed) — needs GCP
