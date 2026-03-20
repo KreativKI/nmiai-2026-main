@@ -58,13 +58,27 @@ Cut product reference images from NM_NGD_product_images.zip and paste onto real 
 5. Combine with real 248 images for training
 6. Retrain YOLO11m on combined dataset
 
-**Expected impact:** +2-5% mAP. Google's Copy-Paste augmentation paper (CVPR 2021) showed +1-3% on COCO. With our reference images, it should be even better since we have clean product photos.
+**Expected impact:** +3-7 mAP. Google's Copy-Paste paper (CVPR 2021) showed **+6.9 box AP in low-data regimes** (10% of COCO = ~12K images, we have 248). Our setup is even better: clean product cutouts + real backgrounds.
 
 **Key details:**
-- albumentations 1.3.1 has CopyPaste transform but it works differently (copies between training images). We need custom code.
+- Use `cv2.seamlessClone` (Poisson blending) for realistic edges. Mode: `NORMAL_CLONE` or `MIXED_CLONE`.
 - Product reference images likely have clean/white backgrounds. Use simple color thresholding to create masks.
 - Vary the number of pasted products per image (5-15) to match real shelf density.
 - Some products should overlap slightly (realistic shelf placement).
+- Generate **250-500 images** (sweet spot: 1-2x real data). Diminishing returns after 500.
+- **Bridged transfer:** Pre-train on synthetic data first, THEN fine-tune on real 248 images. This beats mixing them together.
+- Slight color jitter on pasted products to match shelf lighting.
+
+**Bonus: Gemini Annotation QC**
+After copy-paste pipeline is built, use Gemini 2.5 Flash vision to QC our 22,700 training annotations:
+```python
+client = genai.Client(vertexai=True, project='ai-nm26osl-1779', location='global')
+response = client.models.generate_content(
+    model='gemini-2.5-flash',
+    contents=[image_bytes, 'List all grocery products visible with bounding boxes'],
+)
+```
+Compare Gemini detections against COCO annotations. Find missed products or wrong labels. Even fixing 5-10% annotation errors could yield +1-3 mAP.
 
 **Commit: "Synthetic data: copy-paste augmentation pipeline"**
 
