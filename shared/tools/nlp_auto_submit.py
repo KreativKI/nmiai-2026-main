@@ -5,20 +5,20 @@ NM i AI 2026 — NLP Auto-Submitter (shared/tools/nlp_auto_submit.py)
 Automates Tripletex submissions via Playwright. Fills endpoint URL,
 clicks Submit, waits for result, logs score, repeats.
 
-JC-approved. Auto-submits 75% of daily budget (112 of 150), then stops.
+JC-approved. Auto-submits 75% of daily budget (135 of 180), then stops.
 
 Usage:
     # First time: interactive login (opens browser for Google OAuth)
     python3 shared/tools/nlp_auto_submit.py --login
 
-    # Test with 1 submission
-    python3 shared/tools/nlp_auto_submit.py --max 1
-
-    # Run auto-submit (default: 112 submissions)
+    # Interactive mode (default): asks before each submission
     python3 shared/tools/nlp_auto_submit.py
 
+    # Full auto mode (no confirmation, caps at 135)
+    python3 shared/tools/nlp_auto_submit.py --auto
+
     # Debug mode (visible browser)
-    python3 shared/tools/nlp_auto_submit.py --max 1 --headed
+    python3 shared/tools/nlp_auto_submit.py --max 3 --headed
 
 Dependencies: playwright (pip install playwright && playwright install chromium)
 """
@@ -37,10 +37,10 @@ except ImportError:
     print("ERROR: playwright required. Install: pip install playwright && playwright install chromium")
     raise SystemExit(1)
 
-# Competition limits
-DAILY_BUDGET = 150
-AUTO_LIMIT = 112
-PER_TASK_LIMIT = 5
+# Competition limits (page shows "N / 180 daily submissions used")
+DAILY_BUDGET = 180
+AUTO_LIMIT = 135    # 75% of 180
+PER_TASK_LIMIT = 5  # 5 per task type per day (verified team)
 DEFAULT_DELAY = 5
 
 # URLs
@@ -170,8 +170,9 @@ def submit_once(page, endpoint: str, attempt: int) -> dict:
         # This can take 30-120 seconds depending on task complexity
         print("waiting...", end=" ", flush=True)
 
-        # Wait for page content to change (indicates result arrived)
-        # Poll every 5 seconds for up to 180 seconds
+        # Wait for actual result (not just loading state)
+        # Page shows "Evaluating..." then "Scoring..." then the real result "X/Y (Z%)"
+        # Keep polling until we see the checks pattern or timeout
         max_wait = 180
         start = time.time()
         post_submit_text = pre_submit_text
@@ -182,51 +183,64 @@ def submit_once(page, endpoint: str, attempt: int) -> dict:
             except Exception:
                 continue
 
-            # Check if something changed
-            if post_submit_text != pre_submit_text:
-                # New content appeared, check if it's a result
-                new_content = post_submit_text.replace(pre_submit_text, "").strip()
-                if len(new_content) > 10:
+            # Check for the actual result pattern: "X/Y (Z%)"
+            if re.search(r"\d+/\d+\s*\(\d+%\)", post_submit_text):
+                # Verify it's a NEW result (not pre-existing on page)
+                pre_results = re.findall(r"\d+/\d+\s*\(\d+%\)", pre_submit_text)
+                post_results = re.findall(r"\d+/\d+\s*\(\d+%\)", post_submit_text)
+                if len(post_results) > len(pre_results):
                     break
 
-            # Also check for toast notifications or result badges
-            toasts = page.locator("[role='alert'], .toast, [class*='notification'], [class*='result']")
-            if toasts.count() > 0:
-                toast_text = toasts.first.inner_text()
-                if toast_text and len(toast_text) > 5:
-                    post_submit_text = toast_text + "\n" + post_submit_text
-                    break
+            # Still waiting if we see loading indicators
+            if "Evaluating" in post_submit_text or "Scoring" in post_submit_text:
+                continue  # Keep waiting, result not ready yet
 
         elapsed = int(time.time() - start)
         print(f"({elapsed}s)", end=" ", flush=True)
 
-        # Parse the result from the changed page content
-        # Look for patterns in the full page text
-        text = post_submit_text
+        # Parse the result from the NEW lines only (diff between pre and post)
+        pre_lines = set(pre_submit_text.splitlines())
+        post_lines = post_submit_text.splitlines()
+        new_lines = [l.strip() for l in post_lines if l.strip() not in pre_lines and l.strip()]
 
-        # Tripletex scoring patterns
-        checks_match = re.search(r"(\d+)\s*/\s*(\d+)\s*(?:checks?\s*passed|correct|fields?)", text, re.IGNORECASE)
-        score_match = re.search(r"(?:score|result|points?)[\s:=]+(\d+(?:\.\d+)?)\s*(?:%|/|\s|$)", text, re.IGNORECASE)
-        # Task types look like: create_employee, register_customer, etc.
-        task_match = re.search(r"(?:task[\s_:]type|task|type)[\s:]+([a-z][a-z_]+[a-z])", text, re.IGNORECASE)
+        new_text = "\n".join(new_lines)
+        result["new_lines"] = new_lines  # For debugging
 
-        # Also look for "Submissions: N" counter change
-        sub_count_match = re.search(r"Submissions\s*(\d+)", text)
+        # Actual page format (observed):
+        #   "0/13 (0%)"              -> checks_passed/total_checks
+        #   "03:19 PM · 3.5s"       -> timestamp · duration
+        #   "7 / 180 daily submissions used"  -> daily counter
+        #   "Task (0/13)"           -> task entry in Recent Results
+
+        # Parse checks: "X/Y (Z%)" pattern from new lines
+        checks_match = re.search(r"(\d+)/(\d+)\s*\((\d+)%\)", new_text)
+
+        # Parse daily usage: "N / 180 daily submissions used"
+        daily_match = re.search(r"(\d+)\s*/\s*(\d+)\s*daily\s*submissions", new_text)
+
+        # Parse task name from Recent Results: line containing "(X/Y)" in new content
+        # The task name appears before the score in the results list
+        task_match = re.search(r"^(.+?)\s*\(\d+/\d+\)\s*$", new_text, re.MULTILINE)
 
         if checks_match:
             result["checks_passed"] = int(checks_match.group(1))
             result["total_checks"] = int(checks_match.group(2))
+            result["percentage"] = int(checks_match.group(3))
             result["score"] = result["checks_passed"] / result["total_checks"] if result["total_checks"] > 0 else 0
 
-        if score_match and result["score"] is None:
-            result["score"] = float(score_match.group(1))
+        if daily_match:
+            result["daily_used"] = int(daily_match.group(1))
+            result["daily_limit"] = int(daily_match.group(2))
 
         if task_match:
-            result["task_type"] = task_match.group(1)
+            task_name = task_match.group(1).strip()
+            # Filter out non-task-name strings
+            if task_name and len(task_name) > 2 and task_name.lower() != "task":
+                result["task_type"] = task_name
 
-        # Store page diff for debugging when no result parsed
+        # Store new lines for debugging when no result parsed
         if result["score"] is None and result["task_type"] is None:
-            result["raw_result"] = text[-800:]
+            result["raw_result"] = new_text[:800]
 
         # Only count as success if we got a parseable result
         if result["score"] is not None or result["task_type"] is not None:
@@ -314,6 +328,8 @@ def main():
                         help=f"Seconds between submissions (default: {DEFAULT_DELAY})")
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT,
                         help="NLP endpoint URL")
+    parser.add_argument("--auto", action="store_true",
+                        help="Full auto mode (no confirmation between submissions)")
     parser.add_argument("--headed", action="store_true",
                         help="Run browser in headed mode (visible)")
     parser.add_argument("--login", action="store_true",
@@ -338,7 +354,8 @@ def main():
     log = load_log(log_path)
     today_counts = count_today_submissions(log)
 
-    print(f"NLP Auto-Submitter")
+    mode = "AUTO" if args.auto else "INTERACTIVE (y/n/q before each)"
+    print(f"NLP Submitter [{mode}]")
     print(f"  Endpoint: {args.endpoint}")
     print(f"  Max: {args.max}, Delay: {args.delay}s")
     if sum(today_counts.values()) > 0:
@@ -365,9 +382,25 @@ def main():
 
         submitted = 0
         for i in range(args.max):
-            if sum(today_counts.values()) + submitted >= DAILY_BUDGET:
+            total_today = sum(today_counts.values()) + submitted
+            if total_today >= DAILY_BUDGET:
                 print(f"\nDaily budget reached ({DAILY_BUDGET}). Stopping.")
                 break
+
+            # Interactive mode: ask before each submission (unless --auto)
+            if not args.auto:
+                remaining = DAILY_BUDGET - total_today
+                try:
+                    answer = input(f"[Ready] Submit #{submitted + 1}? ({remaining} remaining) (y/n/q): ").strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    print("\nStopped.")
+                    break
+                if answer == "q":
+                    print("Stopped by user.")
+                    break
+                if answer != "y":
+                    print("Skipped.")
+                    continue
 
             print(f"[{submitted + 1}/{args.max}] ", end="", flush=True)
 
@@ -376,9 +409,11 @@ def main():
             save_log(log_path, log)
 
             if result["success"]:
-                score_str = f"score={result['score']:.2f}" if result.get("score") is not None else "score=?"
+                checks = f"{result['checks_passed']}/{result['total_checks']}" if result.get("total_checks") else "?"
+                pct = f"{result['percentage']}%" if result.get("percentage") is not None else ""
                 task_str = result.get("task_type", "?")
-                print(f"OK ({task_str}, {score_str})")
+                daily = f"[{result['daily_used']}/{result['daily_limit']}]" if result.get("daily_used") else ""
+                print(f"OK  {checks} ({pct}) task={task_str} {daily}")
                 if result.get("task_type"):
                     today_counts[result["task_type"]] += 1
             else:
@@ -388,12 +423,12 @@ def main():
                     print("Auth lost mid-run. Stopping.")
                     break
                 if "timeout" in str(error).lower():
-                    print("  Pausing 30s before retry...")
+                    print("  Pausing 30s...")
                     time.sleep(30)
 
             submitted += 1
 
-            if i < args.max - 1:
+            if args.auto and i < args.max - 1:
                 time.sleep(args.delay)
 
         browser.close()

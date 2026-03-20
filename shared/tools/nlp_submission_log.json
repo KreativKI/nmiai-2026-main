@@ -9,5 +9,55 @@
     "checks_passed": null,
     "total_checks": null,
     "error": null
+  },
+  {
+    "timestamp": "2026-03-20T14:16:07.226657+00:00",
+    "attempt": 1,
+    "endpoint": "https://tripletex-agent-795548831221.europe-west4.run.app/solve",
+    "success": true,
+    "task_type": "and",
+    "score": 5.8,
+    "checks_passed": null,
+    "total_checks": null,
+    "error": null
+  },
+  {
+    "timestamp": "2026-03-20T14:22:08.420924+00:00",
+    "attempt": 1,
+    "endpoint": "https://tripletex-agent-795548831221.europe-west4.run.app/solve",
+    "success": false,
+    "task_type": null,
+    "score": null,
+    "checks_passed": null,
+    "total_checks": null,
+    "error": "NameError: name 'text' is not defined",
+    "new_lines": [
+      "8 / 180 daily submissions used",
+      "Evaluating (1)",
+      "Running...",
+      "03:22 PM",
+      "Submission queued!"
+    ],
+    "daily_used": 8,
+    "daily_limit": 180
+  },
+  {
+    "timestamp": "2026-03-20T14:22:44.956217+00:00",
+    "attempt": 1,
+    "endpoint": "https://tripletex-agent-795548831221.europe-west4.run.app/solve",
+    "success": false,
+    "task_type": null,
+    "score": null,
+    "checks_passed": null,
+    "total_checks": null,
+    "error": "Page changed but could not parse result (check raw_result)",
+    "new_lines": [
+      "9 / 180 daily submissions used",
+      "Evaluating (2)",
+      "Scoring..."
+    ],
+    "daily_used": 9,
+    "daily_limit": 180,
+    "raw_result": "9 / 180 daily submissions used\nEvaluating (2)\nScoring..."
   }
 ]
