@@ -147,6 +147,24 @@ Re-read rules.md BEFORE:
 
 After re-reading, write in MEMORY.md: "Rules re-read at {timestamp}. No violations found." or "Rules re-read at {timestamp}. Found: {issue}. Fixing: {action}."
 
+## Automatic Improvement Loop (MANDATORY after every round)
+After queries are complete and round data is available, this loop runs automatically:
+```
+1. CACHE: Fetch ground truth from all completed rounds (backtest.py --cache)
+2. RETRAIN: Rebuild learned model with new data (learned_model.py --export)
+3. BACKTEST: Score new model vs previous (learned_model.py --backtest)
+4. HINDSIGHT: Analyze query effectiveness (hindsight.py --cached-only)
+5. RESUBMIT: If model improved AND round still open -> resubmit (with JC approval)
+6. LOG: Record results in EXPERIMENTS.md
+```
+This loop should run on GCP (e2-medium VM, no GPU needed) for:
+- Reliability (survives Mac sleep)
+- Lower API latency (europe-west1)
+- Can run unattended between rounds
+
+**GCP setup:** Deploy solutions/ to VM, set up cron to run loop every 30 min.
+**Rule:** NEVER auto-submit. VM runs --dry-run, alerts JC for approval.
+
 ## Anti-Drift Rules
 - Never assume a rule from memory. Always read rules.md.
 - Never build a feature without checking if it violates a constraint.
