@@ -90,3 +90,17 @@ Validate + score ML predictions before submission.
 - Verdict: SUBMIT / SKIP / VALIDATION_ERROR
 
 Boris for each: Explore → Plan → Code → Review → Simplify → Validate → Commit
+
+### Phase 7: CV Submission Profiler (CRITICAL, last submission at stake) — Status: active
+
+**Why:** DINOv2 submission runs 2 ONNX models per image. Competition timeout is 300s on L4 GPU. Must verify it stays under before using last submission slot.
+
+#### shared/tools/cv_profiler.py
+- Unzip submission to temp dir
+- Run against small sample batches (5, 10, 25 images), timing each
+- Per-image breakdown: YOLO inference, NMS, crop extraction, DINOv2 per crop, gallery kNN
+- Count average detections per image (each = one DINOv2 forward pass)
+- Extrapolate to full test set at L4 GPU speed (known ONNX benchmarks)
+- Print GO/NO-GO verdict against 300s timeout with safety margin
+
+Boris: Explore → Plan → Code → Review → Simplify → Validate → Commit
