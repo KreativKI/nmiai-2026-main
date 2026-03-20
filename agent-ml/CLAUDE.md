@@ -10,14 +10,16 @@ Your single purpose: maximize this track's score within the competition clock.
 Every decision you make must answer: "Does this improve my score before Sunday 15:00?"
 If the answer is unclear, choose the faster option.
 
-## CRITICAL: Submission & Query Approval
-**NEVER submit predictions or spend observation queries without JC's explicit approval.**
-All scripts default to `--preview` mode. When you want to submit or query, show JC:
-- What you intend to submit/query
-- Why (expected score improvement or information gain)
-- Wait for explicit "go" before executing
+## Autonomy: Full Submit Rights
+You have FULL AUTONOMY to submit every round and spend observation queries.
+Missing rounds = 0 points forever. ALWAYS submit, NEVER wait for approval.
 
-This is non-negotiable. Wasted queries and bad submissions cannot be undone.
+Before every submission:
+- Floor ALL probabilities at 0.01, renormalize
+- Validate shape: 40x40x6 per seed, all 5 seeds
+- Run backtester if time allows
+
+Between rounds: run autoiteration, retrain model, improve predictions.
 
 ---
 
@@ -26,9 +28,12 @@ This is non-negotiable. Wasted queries and bad submissions cannot be undone.
 2. Read rules.md (even if you think you remember it)
 3. Read plan.md (current approach and next steps)
 4. Read MEMORY.md (last 20 experiments minimum)
-5. Check intelligence/for-ml-agent/ for new intel from JC (overseer). Messages have self-destruct rules: after completing the task, save any long-term-useful information to CLAUDE.md, plan.md, or MEMORY.md BEFORE deleting the message file.
+5. Check intelligence/for-ml-agent/ for new intel from overseer
 6. Read status.json to confirm state
-7. State aloud: "Track: ML. Score: {X}. Approach: {Y}. Next step: {Z}. Rules last read: now."
+7. Read shared/tools/TOOLS.md for available QC tools
+8. Read EXPERIMENTS.md for what's already been tried (DO NOT repeat experiments)
+9. Check if GCP VM ml-churn is running (recovery if session was restarted)
+10. State aloud: "Track: ML. Score: {X}. Approach: {Y}. Next step: {Z}. Rules last read: now."
 
 If ANY of these files are missing or empty, stop and report to JC.
 
@@ -58,8 +63,7 @@ Log every experiment in MEMORY.md. Successes and failures both have value for fu
 
 ## What You NEVER Do
 - Write code for other tracks (CV, NLP)
-- Submit predictions or spend queries without JC's approval
-- Auto-submit from GCP or any automated pipeline
+- Miss a round (submit EVERY round, no exceptions)
 - Modify files outside agent-ml/ (exception: intelligence/ folder)
 - Make architecture decisions without checking plan.md first
 - Ignore a score regression (a drop means something changed, investigate)
@@ -129,8 +133,8 @@ Branch: `agent-ml` | Worktree: `/Volumes/devdrive/github_dev/nmiai-worktree-ml/`
 - Region: `europe-west1` (recommended)
 - ADC authenticated: use `gcloud` normally
 - L4 GPUs in: europe-west1-b/c, europe-west2-a/b, europe-west3-a
-- For ML: a small VM (e2-medium, no GPU) can run the prediction script with better reliability than local Mac
-- NEVER auto-submit from GCP. Script defaults to --preview mode. JC approves all submissions.
+- For ML: a small VM (e2-medium, no GPU) can run autoiteration + prediction with better reliability than local Mac
+- GCP VMs can run autoiteration loops and submit autonomously. Full autonomy granted.
 
 ---
 
@@ -163,7 +167,14 @@ This loop should run on GCP (e2-medium VM, no GPU needed) for:
 - Can run unattended between rounds
 
 **GCP setup:** Deploy solutions/ to VM, set up cron to run loop every 30 min.
-**Rule:** NEVER auto-submit. VM runs --dry-run, alerts JC for approval.
+**Rule:** VM can auto-submit. Full autonomy granted. Log every submission in EXPERIMENTS.md.
+
+### GCP VM Recovery (after session restart)
+If background GCP tasks were killed when session closed:
+1. Check if ml-churn VM is still running: `gcloud compute instances describe ml-churn --zone=europe-west1-b --project=ai-nm26osl-1779`
+2. If running: SSH in and check if scripts are still active
+3. If stopped: restart and re-launch autoiteration
+4. Always restart round monitoring: `nohup bash shared/tools/ml_round_monitor.sh &`
 
 ## Anti-Drift Rules
 - Never assume a rule from memory. Always read rules.md.
@@ -302,35 +313,24 @@ This is the single most important technique. More observation seeds = better tra
 
 ---
 
-## Score Optimization Strategy (round-based)
+## Score Optimization: Current State
 
-### Round 1: Ship Baseline (Approach C)
-- Read initial terrain for all 5 seeds
-- Apply static priors (mountain/ocean/forest near-certain, dynamic cells spread)
-- Floor at 0.01, renormalize
-- Submit all 5 seeds with ZERO queries used
-- Expected: 15-30 points
-- Purpose: establish pipeline, get first score, learn from analysis endpoint
+Best score: see EXPERIMENTS.md. Competitor benchmark: 91.49 avg.
 
-### Rounds 2-3: Build Model (Approach A)
-- Use queries on seeds 0-1 (15 each) + seed 2 (10) + seeds 3-4 (5 each)
-- Build transition matrix from observed (initial, final) pairs
-- Apply cross-seed learning
-- Compare prediction vs round 1 analysis to validate improvement
-- Expected: 40-60 points
+### Proven Techniques (from backtesting + competitor analysis)
+- **Learned neighborhood model:** 48,000+ cell transitions, hierarchical lookup
+- **Temperature scaling:** pred ** (1/T), best T found via backtest
+- **Spatial smoothing:** Gaussian smooth prediction grid
+- **Collapse thresholding:** Set probs below threshold to zero, redistribute
+- **Adaptive query strategy:** 8 batches of 5 with hindsight between each
 
-### Rounds 4+: Refine (highest weight, most impact)
-- Use post-round analysis to identify weakest predictions
-- Shift queries to high-error regions and cell types
-- Refine transition model with more data
-- Consider spatial patterns (clustering, adjacency effects)
-- Expected: 60-80 points
-
-### Ongoing Every Round
-- After scoring: hit /analysis/{round_id}/{seed_index} for all 5 seeds
-- Log per-cell-type error rates in MEMORY.md
-- Update transition matrix with new ground truth data
-- Adapt query strategy based on where errors concentrate
+### Every Round Cycle
+1. Detect round open (background monitor or manual check)
+2. Execute query strategy (adaptive stacking, all seed 0 focus)
+3. Build predictions with learned model + calibration
+4. Validate: floors >= 0.01, normalized, all 5 seeds
+5. Submit all 5 seeds
+6. After round: fetch ground truth, retrain model, run autoiteration
 
 ---
 
