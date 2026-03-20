@@ -5,7 +5,7 @@ NM i AI 2026 — NLP Auto-Submitter (shared/tools/nlp_auto_submit.py)
 Automates Tripletex submissions via Playwright. Fills endpoint URL,
 clicks Submit, waits for result, logs score, repeats.
 
-JC-approved. Auto-submits 75% of daily budget (135 of 180), then stops.
+JC-approved. Auto-submits 75% of daily budget (225 of 300), then stops.
 
 Usage:
     # First time: interactive login (opens browser for Google OAuth)
@@ -37,10 +37,10 @@ except ImportError:
     print("ERROR: playwright required. Install: pip install playwright && playwright install chromium")
     raise SystemExit(1)
 
-# Competition limits (page shows "N / 180 daily submissions used")
-DAILY_BUDGET = 180
-AUTO_LIMIT = 135    # 75% of 180
-PER_TASK_LIMIT = 5  # 5 per task type per day (verified team)
+# Competition limits (increased 2026-03-20: 10/type, 300/day)
+DAILY_BUDGET = 300
+AUTO_LIMIT = 225    # 75% of 300
+PER_TASK_LIMIT = 10 # 10 per task type per day (verified team)
 DEFAULT_DELAY = 5
 
 # URLs
