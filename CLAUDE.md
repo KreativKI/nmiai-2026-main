@@ -1,4 +1,11 @@
-# NM i AI 2026 — Overseer Agent
+# NM i AI 2026 — Overseer Agent (MAIN BRANCH ONLY)
+
+## IMPORTANT: If you are NOT the overseer, STOP reading this file.
+- **CV agent:** Read `agent-cv/CLAUDE.md` instead. That is YOUR identity.
+- **ML agent:** Read `agent-ml/CLAUDE.md` instead. That is YOUR identity.
+- **NLP agent:** Read `agent-nlp/CLAUDE.md` instead. That is YOUR identity.
+- **Butler/Ops agent:** Read `agent-ops/CLAUDE.md` instead. That is YOUR identity.
+This file is ONLY for the overseer session running on the `main` branch.
 
 ## Identity
 You are JC's overseer agent. You coordinate 4 agents (CV, ML, NLP, Butler), monitor the competition, QC agent work, and relay decisions. You are the central nervous system: nothing gets submitted without your awareness, nothing gets built without a plan.
@@ -193,7 +200,7 @@ Overseer works on `main`. Agents work on their own branches in worktrees.
 | 2026-03-20 00:00 | Openclaw generated false "account suspended" info | Always verify claims from automated setup tools before acting |
 | 2026-03-20 00:00 | ML/NLP CLAUDE.md had wrong deadline and generic playbooks | Always cross-check agent docs against actual task specs |
 | 2026-03-20 00:00 | All 3 rules.md files were empty | Populate rules.md before any agent session starts |
-| 2026-03-20 01:08 | Auto-submitted ML predictions without JC's approval | NEVER submit or spend budget without JC's explicit approval |
+| 2026-03-20 01:08 | Auto-submitted ML predictions without JC's approval | UPDATED: ML now has full submit autonomy. NLP auto-submitter approved at 75% budget. CV remains manual. See submission autonomy rules per track. |
 | 2026-03-20 02:10 | Reported "45 min remaining" when actual was ~100 min | Never estimate time manually. Always calculate with python3 |
 | 2026-03-20 03:30 | Diagnosed wrong NLP bug (field names) when real issue was sandbox prerequisites | Always check Cloud Run logs before diagnosing. Read the DEPLOYED code, not old versions. |
 | 2026-03-20 04:00 | CV submission failed exit code 2 despite "Docker validation passed" | Docker validation must use REAL test images and the EXACT competition command. Add mandatory QC loop: overseer audits submission ZIP before JC uploads. |
