@@ -32,13 +32,18 @@ export function LeaderboardView() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/data/leaderboard.json")
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((d) => setSnapshots(d as LeaderboardSnapshot[]))
-      .catch((e) => setError(String(e)));
+    const load = () =>
+      fetch("/data/leaderboard.json")
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        })
+        .then((d) => setSnapshots(d as LeaderboardSnapshot[]))
+        .catch((e) => setError(String(e)));
+
+    load();
+    const interval = setInterval(load, 5 * 60 * 1000); // Refresh every 5 min
+    return () => clearInterval(interval);
   }, []);
 
   const latest = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
@@ -104,7 +109,7 @@ export function LeaderboardView() {
               : "Loading..."}
           </p>
           <p className="text-[10px] text-sky-300 mt-1">
-            Enter scores: <code className="bg-white/60 px-1 rounded">python3 tools/add_leaderboard_entry.py</code>
+            Fetch live data: <code className="bg-white/60 px-1 rounded">python3 shared/tools/fetch_leaderboard.py</code>
           </p>
         </div>
       ) : (
