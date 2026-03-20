@@ -162,6 +162,56 @@ Empty->Settlement at 19.3% (highest ever). Forest->Settlement at 26.3%.
 
 ### Rules re-read at 2026-03-20T04:00:00Z. FOUND: scoring formula was wrong. Fixed in rules.md.
 
+## Session 4: 2026-03-20 11:00-16:00 UTC
+
+### State at session end
+- **R7:** Scored 55.1 avg (learned model +8.0 vs heuristic 47.1). Hard round (massive settlement growth).
+- **R8:** Submitted with V2 features + Dirichlet ps=12 + T=1.12. Score pending. Closes ~17:45 UTC.
+- **R9:** Opens ~17:50 UTC.
+- **Best score:** 71.77 (R4, leaderboard 87.3)
+- **GCP VM:** ml-churn (europe-west1-b) running continuous churn loop. May have stopped if nohup failed.
+
+### What was built this session
+- `backtest.py` — offline QC gate, 4 scoring modes
+- `hindsight.py` — post-round query analysis, replays for dashboard
+- `simulate.py` — Monte Carlo strategy tournament (8 strategies, 30 trials each)
+- `learned_model.py` — neighborhood lookup table (V1: 278 configs, V2: 1102 configs)
+- `churn.py` — continuous improvement loop (grid search + hindsight + feature variants)
+- `equilibrium.py` — WIP, iteration hurts (-7.9), needs rethinking
+- Adaptive stacking with hindsight in astar_v6.py
+
+### Current model stack (what v6 uses for submission)
+1. V2 NeighborhoodModel (from churn.py) — 1102 configs, distance-to-settlement features
+2. Dirichlet-Categorical Bayesian observation blending (prior_strength=12)
+3. Temperature scaling T=1.12
+4. Probability floor 0.01
+5. Adaptive stacking: 9 overview + 41 queries all seed 0, hindsight between batches
+
+### Backtest scores (leave-one-out, with obs, 7 rounds)
+- Heuristic (old): avg 60.9
+- V1 learned: avg 64.3
+- V2 + Dirichlet ps=12 + T=1.12: avg 64.5
+
+### Key findings
+- Settlement cells are #1 bottleneck (KL 0.08-0.44 with learned model, was 0.37-0.99)
+- Single-obs seeds hurt settlements (hindsight: seed 1 avg -1.5 boost)
+- Adaptive stacking beats blind by +1.5 (simulation engine, 30 MC trials)
+- Temperature scaling T=1.12 optimal (+1.2 vs no scaling)
+- Dirichlet Bayesian replaces hard blend (+1.1 vs hard obs_weight=0.70)
+- Equilibrium iteration hurts with argmax approach (-7.9)
+- Competitor at 91.49 uses equilibrium models we haven't cracked yet
+
+### Research agent findings (top 3 priorities)
+1. Dirichlet-Categorical Bayesian — IMPLEMENTED, +1.1
+2. Per-class temperature — TESTED, doesn't help over global T=1.12
+3. Information-directed query allocation — NOT YET IMPLEMENTED
+
+### Next steps for R9
+1. Execute R9 when it opens (~17:50 UTC): overview + adaptive stack + submit
+2. Cache R8 ground truth when available, retrain model (64K cells from 8 rounds)
+3. Consider: pair approximation (spatial correlation correction), information-directed queries
+4. GCP VM: verify churn loop is running, redeploy if needed
+
 ### API Discovery: simulate returns settlement STATS
 - The /simulate endpoint returns NOT just the grid but also settlement objects with:
   population, food, wealth, defense, has_port, alive, owner_id

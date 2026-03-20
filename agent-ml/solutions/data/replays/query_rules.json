@@ -1,40 +1,40 @@
 {
-  "timestamp": "2026-03-20T13:12:14.646986+00:00",
-  "rounds_analyzed": 3,
+  "timestamp": "2026-03-20T15:25:15.598526+00:00",
+  "rounds_analyzed": 4,
   "rules": [
     {
       "type": "query_priority",
       "terrain": "Empty",
-      "avg_info_gain": 11.3713,
-      "avg_error_without_obs": 0.1276,
+      "avg_info_gain": 15.1543,
+      "avg_error_without_obs": 0.1567,
       "avg_query_coverage_pct": 100.0,
-      "recommendation": "Query Empty cells: avg info gain 11.371"
+      "recommendation": "Query Empty cells: avg info gain 15.154"
     },
     {
       "type": "query_priority",
       "terrain": "Forest",
-      "avg_info_gain": 5.6698,
-      "avg_error_without_obs": 0.1434,
+      "avg_info_gain": 8.0767,
+      "avg_error_without_obs": 0.1844,
       "avg_query_coverage_pct": 100.0,
-      "recommendation": "Query Forest cells: avg info gain 5.670"
+      "recommendation": "Query Forest cells: avg info gain 8.077"
     },
     {
       "type": "seed_priority",
       "seed": 0,
-      "avg_observation_boost": 6.52,
-      "recommendation": "Seed 0: avg boost from observations = +6.5 points"
+      "avg_observation_boost": 9.95,
+      "recommendation": "Seed 0: avg boost from observations = +9.9 points"
     },
     {
       "type": "seed_priority",
       "seed": 1,
-      "avg_observation_boost": -1.54,
-      "recommendation": "Seed 1: avg boost from observations = -1.5 points"
+      "avg_observation_boost": -0.17,
+      "recommendation": "Seed 1: avg boost from observations = -0.2 points"
     },
     {
       "type": "seed_priority",
       "seed": 2,
-      "avg_observation_boost": -3.86,
-      "recommendation": "Seed 2: avg boost from observations = -3.9 points"
+      "avg_observation_boost": -3.81,
+      "recommendation": "Seed 2: avg boost from observations = -3.8 points"
     },
     {
       "type": "targeting_accuracy",
