@@ -170,6 +170,7 @@ def phase_overview(session, round_id, detail, round_num):
     log(f"Phase 1: Overview of seed 0 ({len(viewports)} viewports)")
     obs_counts = np.zeros((height, width, NUM_CLASSES))
     obs_total = np.zeros((height, width))
+    settlement_stats = []  # Capture settlement stats from observations
 
     for i, (vx, vy, vw, vh) in enumerate(viewports):
         try:
@@ -180,11 +181,28 @@ def phase_overview(session, round_id, detail, round_num):
                     cls = TERRAIN_TO_CLASS.get(terrain, 0)
                     obs_counts[ya, xa, cls] += 1
                     obs_total[ya, xa] += 1
+            # Capture settlement stats (population, food, wealth, defense, faction)
+            for s in obs.get("settlements", []):
+                settlement_stats.append(s)
             budget = obs["queries_used"]
             log(f"  [{i+1}/{len(viewports)}] ({vx},{vy}) {vw}x{vh} — budget {budget}/50")
         except Exception as e:
             log(f"  [{i+1}] FAILED: {e}")
             break
+
+    # Log settlement stats summary
+    alive = [s for s in settlement_stats if s.get("alive")]
+    dead = [s for s in settlement_stats if not s.get("alive")]
+    if alive:
+        avg_food = np.mean([s.get("food", 0) for s in alive])
+        avg_pop = np.mean([s.get("population", 0) for s in alive])
+        factions = set(s.get("owner_id") for s in alive)
+        log(f"  Settlements: {len(alive)} alive, {len(dead)} dead, "
+            f"{len(factions)} factions, avg food={avg_food:.2f}, avg pop={avg_pop:.2f}")
+    # Save settlement stats
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(DATA_DIR / f"settlement_stats_r{round_num}.json", "w") as f:
+        json.dump(settlement_stats, f)
 
     # Compare with initial terrain
     changes = 0
