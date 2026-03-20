@@ -12,7 +12,7 @@
 - Submit your HTTPS endpoint URL on the platform
 - Platform sends POST /solve requests to your endpoint
 - Must return HTTP 200 with {"status": "completed"} within 300 seconds
-- Rate limit: 5 submissions per task type per day (verified), 2/day (unverified). Resets midnight UTC = 01:00 CET.
+- Rate limit: 10 submissions per task type per day (verified), 300 total/day, 3 concurrent. Resets midnight UTC = 01:00 CET.
 - Each submission gets a RANDOM task type (weighted toward less-attempted ones)
 
 ## What the Platform Sends (ACTUAL format from competition docs)

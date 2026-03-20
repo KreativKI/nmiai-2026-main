@@ -265,7 +265,7 @@ Deploy to GCP Cloud Run. Do NOT use ngrok or local tunnels.
 ```bash
 gcloud run deploy tripletex-agent \
   --source . \
-  --region europe-west1 \
+  --region europe-west4 \
   --allow-unauthenticated \
   --memory 1Gi \
   --timeout 300
@@ -280,7 +280,7 @@ gcloud run deploy tripletex-agent \
 ## Pre-Submission Pipeline (MANDATORY, no exceptions)
 
 ### Target: 100% correctness before submitting
-Each task type only gets 5 submissions/day. A failed submission is a wasted slot that won't come back until 01:00 CET. Spend time fixing to 100% rather than burning slots on partial scores.
+Each task type gets 10 submissions/day. A failed submission is a wasted slot that won't come back until 01:00 CET. Spend time fixing to 100% rather than burning slots on partial scores.
 
 ### Pipeline steps (run ALL in order):
 1. `python3 -c "import ast; ast.parse(open('agent-nlp/solutions/tripletex_bot_v3.py').read())"` -- syntax check
@@ -300,7 +300,7 @@ Each task type only gets 5 submissions/day. A failed submission is a wasted slot
 - Monitor leaderboard: `shared/tools/scrape_leaderboard.py`
 
 ### Key principle:
-It is ALWAYS better to spend 1 hour fixing a task type to 100% than to burn 5 submission slots hoping for luck. Bad runs don't lower score, but they waste daily rate limit.
+It is ALWAYS better to spend 1 hour fixing a task type to 100% than to burn 10 submission slots hoping for luck. Bad runs don't lower score, but they waste daily rate limit.
 
 ## Shared Tools Location
 All shared tools are in `shared/tools/`. Read TOOLS.md there for full inventory.
