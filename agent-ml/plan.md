@@ -1,91 +1,119 @@
 # Astar Island — Plan
 
 **Track:** ML | **Task:** Norse World Prediction | **Weight:** 33.33%
-**Last updated:** 2026-03-20 19:55 UTC
+**Last updated:** 2026-03-20 21:25 UTC
 
 ## Current State
-- **Best score:** 71.77 (R4)
-- **Rounds submitted:** 9 (R3-R9, R1-R2 missed)
-- **R9:** active, closes 20:47 UTC. Submitted but no improvement found for resubmission.
-- **R8 score:** 61.8 (rank 126/214)
-- **Seed gap:** Seed 0 scores 5-9 points higher than seeds 1-4 (observed vs unobserved)
+- **Best score:** 82.6 (R9, rank 93/221)
+- **R10:** submitted with v7 (regime-first, all 5 seeds observed). Score pending.
+- **Model:** V2 NeighborhoodModel, 9 rounds training (72K cells)
+- **Script:** astar_v7.py (regime-first multi-seed protocol)
+- **GCP VM:** ml-churn running (europe-west1-b)
 
-## Active Phase: Distance-Based Model + Multi-Seed Strategy
-
-### The Problem (kitchen version)
-We taste-test all 50 spoons in one kitchen (seed 0) and guess the other 4 kitchens.
-Result: kitchen 0 scores 70-75, kitchens 1-4 score 55-65. 80% of our submission is guesswork.
-
-### What We Just Learned (hidden rules analysis)
-A. Settlements spread with a DISTANCE CUTOFF from existing settlements (3-12 Manhattan distance per round)
-B. Three round types: death (0% survival), quiet (60-88%), golden age (2-3x growth)
-C. Forests consumed by adjacent settlements (97% safe when isolated, 50% when adjacent)
-D. Ports only appear next to ocean (100% rule)
-E. Mountains kill adjacent settlements
-F. Ruins are background noise (<10% probability), never the main answer
-
-### Plan: Build Distance-Aware Model (astar_v7.py)
-**Boris: EXPLORE -> PLAN -> CODE -> REVIEW -> VALIDATE -> COMMIT**
-
-#### Step 1: Distance model (CODE)
-Build a prediction model that uses:
-- Manhattan distance from each cell to nearest initial settlement
-- Round regime detection (death/quiet/growth) from seed 0 observations
-- Distance-dependent settlement probability curves (learned from 35 ground truth maps)
-- Forest consumption rules (adj settlement count)
-- Port = coastal only
-- Ruin = 2-4% background
-
-#### Step 2: Multi-seed query strategy (CODE)
-Test new strategy: 10 queries per seed (full coverage of all 5 kitchens)
-- 9 queries = full map, 1 extra for highest-value cell
-- Regime detection from ANY seed helps ALL seeds
-- With distance model, even 1 observation per cell may be enough
-
-#### Step 3: Backtest (VALIDATE)
-- Leave-one-out on 7 rounds
-- Compare: current V2 (seed 0 only, 50 queries) vs distance model (all seeds, 10 each)
-- Run in simulator with Monte Carlo trials
-
-#### Step 4: Deploy + Submit R10 (if improved)
-
-### Time Budget
-- R9 closes: 20:47 UTC
-- R10 opens: ~21:02 UTC
-- Build time: ~30 min
-- Backtest: ~10 min
-- Decision point: 21:00 UTC
+## Score History
+| Round | Score | Rank | Regime | Notes |
+|-------|-------|------|--------|-------|
+| R3 | 39.7 | 33/100 | extinction | No regime detection |
+| R4 | 71.8 | 49/86 | extinction | Best until R9 |
+| R5 | 67.6 | 69/144 | stable | |
+| R6 | 70.4 | 52/186 | growth | |
+| R7 | 55.1 | 112/199 | growth | Hard round |
+| R8 | 61.8 | 126/214 | extinction | Missed death detection |
+| R9 | 82.6 | 93/221 | stable | Best round |
+| R10 | pending | - | growth | First v7 submission |
 
 ---
 
-## Hidden Rules (verified from ground truth analysis)
-See: `solutions/data/hidden_rules_analysis.md`
-Shared with overseer: `intelligence/for-overseer/hidden-rules-discovery.md`
+## Phase 1: R10 Improvement (NOW)
+**Goal:** Cache R9 ground truth, retrain model, resubmit R10.
+1. Fetch R9 ground truth via analysis API
+2. Retrain V2 model (10 rounds = 80K cells)
+3. Run hindsight on R10 observations (find model errors)
+4. Resubmit R10 with improved predictions
+5. Log in EXPERIMENTS.md
 
-### Immutable (100% confidence)
-- Mountains never change
-- Ocean -> Empty always
-- Ports require ocean adjacency
-- Empty never becomes Forest
-- Ground truth = 200 Monte Carlo runs
+## Phase 2: R11 Preparation (before JC sleeps)
+**Goal:** Deploy autonomous overnight operation to GCP VM.
+1. Cache R10 ground truth when round closes
+2. Verify v7 end-to-end with latest model
+3. Build automation script: `overnight_runner.sh`
+4. Deploy v7 + automation to GCP VM
+5. Test with mock round on VM
+6. Start autonomous loop
 
-### Per-Round Hidden Parameters
-- Settlement spread radius (3-12 Manhattan distance)
-- Survival rate (0% to 88%)
-- Growth multiplier (0x to 2.86x)
-- Forest consumption rate
+## Phase 3: Overnight Automation (GCP VM, ~15 hours)
+**Goal:** Submit every round automatically, retrain model after each.
+
+### Automation Script (`overnight_runner.sh`)
+Runs every 5 minutes on GCP VM:
+1. Check API for active rounds
+2. If new round and not yet submitted:
+   - Run v7 (regime detection, observe all seeds, submit)
+   - Log: round number, regime detected, queries used, timestamp
+3. If round just completed:
+   - Cache ground truth via analysis API
+   - Retrain V2 model with new data
+   - Log: training cells count, model configs
+4. Write all activity to `~/overnight_log.txt`
+
+### What the VM needs:
+- Latest v7 code (solutions/)
+- JWT token
+- Python venv with scipy
+- Cached ground truth from all completed rounds
+- The overnight_runner.sh script
+
+### Safety rules:
+- Never skip a round (submit with whatever model is ready)
+- Floor all probabilities at 0.01
+- Validate predictions before submitting (shape, sum, floors)
+- Log every action
+- If anything crashes: fall back to model-only predictions (no observations)
+
+## Phase 4: Morning Review (Sunday ~09:00 CET)
+1. Read `~/overnight_log.txt` from GCP VM
+2. Check leaderboard position
+3. Review scores from overnight rounds
+4. Any model improvements from accumulated data
+5. Feature freeze at 09:00 CET
+
+## Phase 5: Competition Close (Sunday 15:00 CET)
+1. 09:00: feature freeze, no more code changes
+2. Final submission with best model
+3. 14:45: repo goes public automatically
+4. 15:00: competition ends
 
 ---
 
-## Model Stack (current v6)
-1. V2 NeighborhoodModel (1102 configs)
-2. Dirichlet Bayesian observation blend (ps=12)
-3. Temperature T=1.12, collapse=0.016, smooth=0.3
-4. Backtest avg: 64.5
+## V7 Architecture (current best)
+1. **Regime detection:** 5 queries on known settlement positions
+2. **Full coverage:** 9 queries per seed x 5 seeds = 45 queries
+3. **Stacking:** remaining queries on seed 0 high-value cells
+4. **V2 NeighborhoodModel** trained on all completed rounds
+5. **Dirichlet-Categorical** observation blending (ps=12)
+6. **Extinction calibration:** override settlement probs when death detected
+7. **Port constraint:** zero port prob on non-coastal cells
+8. **Post-processing:** T=1.12, collapse=0.016, smooth=0.3
 
-## Answered Questions (this session)
-- Batch size 5 vs 8 vs 10: no significant difference (SIM-001)
-- Per-class temperature: doesn't help (PP-001)
-- Equilibrium iteration: hurts (EQ-001)
-- Tile values: empty cells = 64% of score weight, edges most valuable
-- Seed 0 vs 1-4 gap: 5-9 points (the biggest improvement opportunity)
+## Backtest Results
+| Strategy | Avg Score | vs V6 |
+|----------|-----------|-------|
+| V6 (50 queries seed 0) | 63.6 | baseline |
+| V7 (multi-seed overview) | 65.9 | +2.3 |
+| V7b (regime-first) | 70.3 | +6.7 |
+
+## Hidden Rules (verified from ground truth)
+- See: `solutions/data/hidden_rules_analysis.md`
+- Three regimes: extinction / stable / growth
+- Settlement spread radius: 3-12 Manhattan distance (per round)
+- Ports = coastal only (100%)
+- Forests consumed by adjacent settlements
+- Mountains kill adjacent settlements
+- Ruins never argmax (<10%)
+- Ground truth = 200 Monte Carlo simulation runs
+
+## Key Learnings
+- Regime detection is the #1 scoring lever (+30 points on death rounds)
+- Observing all 5 seeds beats stacking on 1 seed (+2-4 points avg)
+- Model improvements plateau fast, query strategy matters more
+- Each round of ground truth improves predictions (continuous learning)
