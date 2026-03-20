@@ -2,20 +2,37 @@ import { useState, useEffect, useCallback } from "react";
 import { MetricCard } from "./MetricCard";
 
 const ENDPOINT_DISPLAY = "https://tripletex-agent-795548831221.europe-west4.run.app/solve";
-// Use Vite proxy to avoid CORS when checking health from browser
 const ENDPOINT_PROXY = "/api/nlp-health";
 
-// 30 task types from the Tripletex competition spec
-const TASK_TYPES = [
-  "create_customer", "create_supplier", "create_employee", "create_product",
-  "create_department", "create_project", "create_invoice", "create_order",
-  "create_voucher", "create_payment", "create_account", "create_bank_reconciliation",
-  "update_customer", "update_supplier", "update_employee", "update_product",
-  "update_department", "update_project", "update_invoice", "update_order",
-  "close_invoice", "approve_voucher", "post_journal", "create_timesheet",
-  "create_travel_expense", "create_salary_transaction", "balance_report",
-  "profit_loss_report", "vat_report", "general_query",
+const TASK_TYPES: { name: string; tier: number }[] = [
+  // Tier 1
+  { name: "create_customer", tier: 1 }, { name: "create_supplier", tier: 1 },
+  { name: "create_employee", tier: 1 }, { name: "create_product", tier: 1 },
+  { name: "create_department", tier: 1 }, { name: "create_project", tier: 1 },
+  { name: "create_invoice", tier: 1 }, { name: "create_order", tier: 1 },
+  { name: "create_voucher", tier: 1 }, { name: "create_payment", tier: 1 },
+  { name: "create_account", tier: 1 }, { name: "create_bank_reconciliation", tier: 1 },
+  // Tier 2
+  { name: "update_customer", tier: 2 }, { name: "update_supplier", tier: 2 },
+  { name: "update_employee", tier: 2 }, { name: "update_product", tier: 2 },
+  { name: "update_department", tier: 2 }, { name: "update_project", tier: 2 },
+  { name: "update_invoice", tier: 2 }, { name: "update_order", tier: 2 },
+  { name: "close_invoice", tier: 2 }, { name: "approve_voucher", tier: 2 },
+  // Tier 3
+  { name: "post_journal", tier: 3 }, { name: "create_timesheet", tier: 3 },
+  { name: "create_travel_expense", tier: 3 }, { name: "create_salary_transaction", tier: 3 },
+  { name: "balance_report", tier: 3 }, { name: "profit_loss_report", tier: 3 },
+  { name: "vat_report", tier: 3 }, { name: "general_query", tier: 3 },
 ];
+
+interface TaskLog {
+  timestamp: string;
+  status: string;
+  api_calls: number;
+  errors_4xx: number;
+  elapsed_s: number;
+  summary?: string;
+}
 
 interface EndpointStatus {
   status: "up" | "down" | "checking";
@@ -25,10 +42,10 @@ interface EndpointStatus {
 
 export function NLPView() {
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>({
-    status: "checking",
-    latencyMs: null,
-    lastChecked: null,
+    status: "checking", latencyMs: null, lastChecked: null,
   });
+  const [taskLogs, setTaskLogs] = useState<TaskLog[]>([]);
+  const [selectedTask, setSelectedTask] = useState<string | null>(null);
 
   const checkEndpoint = useCallback(async () => {
     setEndpointStatus((prev) => ({ ...prev, status: "checking" }));
@@ -48,11 +65,18 @@ export function NLPView() {
       });
     } catch {
       setEndpointStatus({
-        status: "down",
-        latencyMs: null,
+        status: "down", latencyMs: null,
         lastChecked: new Date().toLocaleTimeString("en-GB", { hour12: false }),
       });
     }
+  }, []);
+
+  // Load task logs
+  useEffect(() => {
+    fetch("/data/nlp_task_log.json")
+      .then((r) => r.ok ? r.json() : [])
+      .then((d) => setTaskLogs(d as TaskLog[]))
+      .catch(() => setTaskLogs([]));
   }, []);
 
   useEffect(() => {
@@ -61,19 +85,21 @@ export function NLPView() {
     return () => clearInterval(interval);
   }, [checkEndpoint]);
 
-  const statusColor =
-    endpointStatus.status === "up"
-      ? "text-green-600"
-      : endpointStatus.status === "down"
-        ? "text-red-600"
-        : "text-amber-500";
+  const statusDot = endpointStatus.status === "up" ? "bg-green-400"
+    : endpointStatus.status === "down" ? "bg-red-400"
+    : "bg-amber-400 animate-pulse";
 
-  const statusDot =
-    endpointStatus.status === "up"
-      ? "bg-green-400"
-      : endpointStatus.status === "down"
-        ? "bg-red-400"
-        : "bg-amber-400 animate-pulse";
+  const statusColor = endpointStatus.status === "up" ? "text-green-600"
+    : endpointStatus.status === "down" ? "text-red-600"
+    : "text-amber-500";
+
+  // Stats
+  const completedTasks = taskLogs.filter((t) => t.status === "completed").length;
+  const totalAPICalls = taskLogs.reduce((s, t) => s + (t.api_calls || 0), 0);
+  const totalErrors = taskLogs.reduce((s, t) => s + (t.errors_4xx || 0), 0);
+  const avgElapsed = taskLogs.length > 0
+    ? (taskLogs.reduce((s, t) => s + (t.elapsed_s || 0), 0) / taskLogs.length).toFixed(1)
+    : "-";
 
   return (
     <div className="flex-1 flex flex-col overflow-auto p-6 gap-4">
@@ -95,8 +121,8 @@ export function NLPView() {
         </button>
       </div>
 
-      {/* Status metrics */}
-      <div className="flex gap-3">
+      {/* Status + metrics */}
+      <div className="flex gap-3 flex-wrap">
         <div className="rounded-2xl bg-white/70 backdrop-blur-sm border border-white/40 shadow-lg px-5 py-4 min-w-[180px]">
           <p className="text-xs font-medium text-sky-600 uppercase tracking-wide">Endpoint</p>
           <div className="flex items-center gap-2 mt-1">
@@ -107,44 +133,89 @@ export function NLPView() {
           </div>
           {endpointStatus.lastChecked && (
             <p className="text-xs text-sky-400 mt-1">
-              Checked: {endpointStatus.lastChecked}
+              {endpointStatus.latencyMs != null ? `${endpointStatus.latencyMs}ms` : ""} at {endpointStatus.lastChecked}
             </p>
           )}
         </div>
-        <MetricCard
-          label="Latency"
-          value={endpointStatus.latencyMs != null ? `${endpointStatus.latencyMs}ms` : "-"}
-          subtitle="last check"
-        />
-        <MetricCard label="Task Types" value="30" subtitle="3 tiers" />
-        <MetricCard label="Rate Limit" value="5/type/day" subtitle="resets 01:00 CET" />
+        <MetricCard label="Tasks Run" value={completedTasks} subtitle={`${totalAPICalls} API calls`} />
+        <MetricCard label="4xx Errors" value={totalErrors} color={totalErrors > 0 ? "text-red-600" : "text-green-700"} />
+        <MetricCard label="Avg Time" value={`${avgElapsed}s`} subtitle="per task" />
       </div>
 
-      {/* Task type grid */}
+      {/* Task type grid - clickable */}
       <div className="rounded-2xl bg-white/50 backdrop-blur-sm border border-white/30 p-4">
         <h3 className="text-sm font-bold text-sky-700 font-[Fredoka] mb-3">
-          Task Types (30 total)
+          Task Types - Click for details
         </h3>
         <div className="grid grid-cols-5 gap-2">
-          {TASK_TYPES.map((type) => {
-            const tier = type.startsWith("create_") ? 1
-              : type.startsWith("update_") || type.startsWith("close_") || type.startsWith("approve_") || type.startsWith("post_") ? 2
-              : 3;
-            const tierColor = tier === 1 ? "bg-green-100 border-green-300 text-green-800"
-              : tier === 2 ? "bg-amber-100 border-amber-300 text-amber-800"
-              : "bg-red-100 border-red-300 text-red-800";
+          {TASK_TYPES.map(({ name, tier }) => {
+            const isSelected = selectedTask === name;
+            const tierColor = tier === 1 ? "border-green-300 text-green-800"
+              : tier === 2 ? "border-amber-300 text-amber-800"
+              : "border-red-300 text-red-800";
+            const tierBg = tier === 1 ? "bg-green-50" : tier === 2 ? "bg-amber-50" : "bg-red-50";
 
             return (
-              <div
-                key={type}
-                className={`rounded-lg border px-3 py-2 ${tierColor}`}
+              <button
+                key={name}
+                onClick={() => setSelectedTask(isSelected ? null : name)}
+                className={`rounded-lg border px-3 py-2 text-left transition-all hover:shadow-md ${tierColor} ${
+                  isSelected ? "ring-2 ring-sky-500 shadow-lg " + tierBg : tierBg + "/60"
+                }`}
               >
-                <p className="text-xs font-semibold truncate">{type.replace(/_/g, " ")}</p>
-                <p className="text-[10px] opacity-70">Tier {tier} ({tier}x)</p>
-              </div>
+                <p className="text-xs font-semibold truncate">{name.replace(/_/g, " ")}</p>
+                <p className="text-[10px] opacity-60">Tier {tier} ({tier}x)</p>
+              </button>
             );
           })}
         </div>
+      </div>
+
+      {/* Selected task detail / Execution log */}
+      {selectedTask && (
+        <div className="rounded-2xl bg-white/60 backdrop-blur-sm border border-white/30 p-4">
+          <h3 className="text-sm font-bold text-sky-700 font-[Fredoka] mb-2">
+            {selectedTask.replace(/_/g, " ")}
+          </h3>
+          <p className="text-xs text-sky-500 mb-3">
+            Click Submit on app.ainm.no to test this task type. Results appear after the competition evaluates your endpoint.
+          </p>
+          <p className="text-xs text-sky-400">
+            Task-specific scores are only visible on the competition leaderboard.
+            The logs below show all endpoint calls (not filtered by task type since the competition assigns tasks randomly).
+          </p>
+        </div>
+      )}
+
+      {/* Execution log */}
+      <div className="rounded-2xl bg-white/50 backdrop-blur-sm border border-white/30 p-4">
+        <h3 className="text-sm font-bold text-sky-700 font-[Fredoka] mb-3">
+          Recent Executions ({taskLogs.length})
+        </h3>
+        {taskLogs.length === 0 ? (
+          <div className="text-xs text-sky-400">
+            No task logs yet. Run: <code className="bg-white/60 px-1 rounded">python3 tools/fetch_nlp_logs.py</code>
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-[300px] overflow-y-auto">
+            {[...taskLogs].reverse().map((task, i) => (
+              <div key={i} className="flex items-start gap-3 text-xs border-b border-sky-100/30 pb-2">
+                <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${
+                  task.status === "completed" ? "bg-green-400" : "bg-red-400"
+                }`} />
+                <div className="flex-1 min-w-0">
+                  {task.summary && (
+                    <p className="text-sky-700 truncate">{task.summary.split("\t")[0]}</p>
+                  )}
+                  <p className="text-sky-400">
+                    {task.api_calls} calls, {task.errors_4xx} errors, {task.elapsed_s}s
+                    <span className="ml-2 text-sky-300">{task.timestamp}</span>
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Endpoint URL */}
