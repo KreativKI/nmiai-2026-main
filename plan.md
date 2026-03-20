@@ -5,8 +5,8 @@
 
 | Track | Score | Status | Next Action |
 |-------|-------|--------|-------------|
-| **ML** | 45.98 (Round 4, rank #114/187) | Waiting for Round 5, auto-submitting | Keep submitting every round, close 10pt gap to top |
-| **CV** | 0 (v1 failed) | v2 ZIP FIXED and ready (65MB), 2 VMs training | JC uploads submission_yolo11m_v2.zip when awake |
+| **ML** | 45.98 (Round 4, rank #114/187) | Waiting for Round 5 | STRATEGY SHIFT: score = best single round (not cumulative). exp(-3*KL) means small KL gains = big score jumps. Focus on ONE great round. |
+| **CV** | 0.5735 (YOLO11m v2, sub 1/10) | v3 TTA + ensemble ready, 2 VMs training | Next: copy-paste synthetic data + DINOv2 classify. Nano Banana confirmed working (free on GCP). |
 | **NLP** | 8/8 PERFECT (create_customer) | tripletex_bot_v2 deployed, 3/5 submissions used today | JC submits via web UI to cover more task types |
 | **Butler** | Dashboard live, CORS fixed | Building CV submission viewer + validation tools | New standing orders delivered |
 
