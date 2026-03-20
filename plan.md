@@ -1,53 +1,55 @@
-# Overseer Plan — NM i AI 2026
-**Last updated:** 2026-03-20 14:30 CET | **Next refresh:** 22:30 CET | **Remaining:** 48.5h
+# Overseer Plan -- NM i AI 2026
+**Last updated:** 2026-03-20 19:00 CET | **Next refresh:** 03:00 CET | **Remaining:** 44h
+
+## Mode: AUTONOMOUS EXECUTION
+
+All agents have standing orders (CONSOLIDATED-ORDERS.md) and GO messages. They execute phase by phase without asking JC. Overseer monitors via intelligence/for-overseer/ status files.
 
 ## Scores
 
-| Track | Score | Rank | Subs Left Today |
-|-------|-------|------|-----------------|
-| **ML** | 71.77 (R4) | #49/191 | API (unlimited) |
-| **CV** | 0.5756 | ~mid/105 | 2/10 |
-| **NLP** | 8/8 (1 task type) | ?/161 | ~147/150 |
+| Track | Score | Rank | Status |
+|-------|-------|------|--------|
+| **ML** | 71.77 (R4) | #49/191 | Autonomous. Executing phases 1-5. Submit every round. |
+| **CV** | 0.5756 | ~mid/105 | Autonomous. Phase 1: fix .npz, Phase 2: QC, Phase 3: SAHI |
+| **NLP** | 8/8 (1 task) | ?/161 | Autonomous. Phase 1: Tier 2 fix, Phase 2: auto-submitter |
 
-## Priority Actions Right Now
+## What Changed This Session
+- Added "Autonomous Execution Mode" to all 4 agent CLAUDE.md files
+- Added scope restrictions: agents only read their own track + inbox + shared tools
+- Removed "ask JC for approval" gates that were blocking autonomous execution
+- Dropped GO-EXECUTE.md in all 4 agent inboxes (delivered via PostToolUse hook)
+- check_inbox.sh already fixed (.last_check working)
 
-### 1. NLP: Run auto-submitter (CRITICAL)
-- 147 submissions unused today. Tier 2 opened (2x multiplier).
-- Auto-submitter built at `shared/tools/nlp_auto_submit.py`
-- Test with --max 1 first, then run 75% budget
+## Overseer Role Now
+- Monitor intelligence/for-overseer/ for agent status reports
+- QC agent outputs when they report phase completion
+- Relay cross-track decisions if needed
+- Monitor competition for rule changes
+- Track scores and adjust priorities if a track stalls
 
-### 2. ML: Build simulation engine (APPROVED)
-- Test query strategies offline against 6 cached rounds
-- No API calls, no submission risk
-- Apply best strategy to R8 (~18:53 CET)
-
-### 3. CV: QC toolchain on DINOv2 ZIP
-- Run: validate_cv_zip -> cv_profiler -> cv_judge -> ab_compare
-- Submit only if classification mAP improved
-- 2 submissions left today, save for validated improvement
-
-## Key Findings (do NOT repeat this work)
-- Detection is NOT the bottleneck (TTA +0.002, ensemble +0.000)
-- Classification IS the bottleneck (DINOv2 + reference images is the path)
-- ML score = best single round, not cumulative. exp(-3*KL).
-- Nano Banana works free on GCP (gemini-2.5-flash-image, location=global)
-- Copy-paste augmentation: not built yet, for Saturday
+## Agent Communication System
+```
+Overseer writes to: intelligence/for-{agent}-agent/*.md
+Agents write to:    intelligence/for-overseer/{agent}-status.md
+Hook delivers:      PostToolUse fires check_inbox.sh on every Bash call
+                    Agent sees "NEW MESSAGES" alert, reads inbox
+```
 
 ## Deadlines
 
 | Time | What |
 |------|------|
-| Today 01:00 CET | Rate limits reset (CV 10, NLP 150) |
-| Today (Friday) | Tier 2 tasks live (NLP 2x multiplier) |
+| Tonight 01:00 CET | Rate limits reset (CV 6, NLP 300) |
+| Friday (today) | Tier 2 tasks live (NLP 2x multiplier) |
 | Saturday morning | Tier 3 tasks (NLP 3x multiplier) |
 | Saturday 12:00 | CUT-LOSS: any track with 0 = submit baseline |
 | Sunday 09:00 | FEATURE FREEZE |
-| Sunday 12:00 | Git-lfs + MIT LICENSE + prepare public repo |
-| Sunday 14:45 | MANDATORY: Repo goes public (PRIZE ELIGIBILITY) |
+| Sunday 14:45 | Repo goes public (PRIZE ELIGIBILITY) |
 | Sunday 15:00 | COMPETITION ENDS |
 
-## When JC Wakes Up (next session)
-1. Check auto-submitter log (nlp_submission_log.json)
-2. Review ML simulation results, apply best strategy
-3. Submit CV DINOv2 if QC passed
-4. Refresh this plan
+## Key Findings (carried forward)
+- Detection is NOT the bottleneck (TTA +0.002, ensemble +0.000)
+- Classification IS the bottleneck (DINOv2 + reference images is the path)
+- ML score = best single round, not cumulative. exp(-3*KL).
+- NLP: bad runs never lower score, submitting is always safe
+- NLP: 10/task/day, 300 total/day (verified from platform)
