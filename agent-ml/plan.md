@@ -56,16 +56,40 @@ Predict terrain probability distributions on a 40×40 grid after 50 years of sto
 - Cookie auth required for API (not Bearer header)
 - Broadcasting bug: always test with synthetic observations before real queries
 
-## Round 4 Plan (NEXT)
-1. When round 4 opens: learn from round 3 ground truth first
-2. Use ALL 50 queries:
-   - Seed 0: 20 queries (stacked for multi-sample estimates on dynamic areas)
-   - Seed 1: 15 queries
-   - Seed 2: 10 queries
-   - Seeds 3-4: 5 total (rely on cross-seed transfer)
-3. Build round-4-specific transition model from observations
-4. Blend 60/40 with historical transitions
-5. Submit all 5 seeds
+## Round 4 Plan (ACTIVE)
+**Score to beat:** 39.7 (round 3 avg)
+**Main error source:** Forest MAE 0.23, Empty MAE 0.19
+
+### Phase 1: Overview (9 queries on seed 0)
+- Tile seed 0 fully with 3x3 viewports (9 queries, 15x15 each)
+- This gives us ONE stochastic realization of the full map for seed 0
+- Compare with initial terrain to see what changed
+- Identify: which settlements survived? Which forests were cleared? Any new ports?
+
+### Phase 2: Analyze (0 queries)
+- Build round-4-specific transition counts from phase 1 data
+- Compare with rounds 1-3 transition rates: is this round more/less destructive?
+- Identify high-uncertainty zones: cells where initial terrain != observed terrain
+- Decide: where to stack queries for multi-sample probability estimates?
+
+### Phase 3: Targeted stacking (20-25 queries on seed 0)
+- Stack 2-3 queries on each high-uncertainty zone
+- Multiple observations of same cell -> empirical probability distribution
+- Focus on settlement frontiers (forest/empty adjacent to settlements)
+
+### Phase 4: Secondary seed coverage (16 queries on seeds 1-2)
+- Seed 1: 9 queries (full coverage)
+- Seed 2: 7 queries (partial coverage, focus on dynamic areas)
+- Seeds 3-4: rely entirely on cross-seed transfer
+
+### Phase 5: Build & Submit
+- Build round-4-specific transitions from all observations
+- Blend 70/30 with historical (3 rounds of ground truth)
+- For observed cells: use empirical distribution directly (weighted by sample count)
+- Floor at 0.01, renormalize, validate
+- Submit all 5 seeds
+
+**Total budget:** 9 + 0 + ~22 + ~16 = ~47 queries (3 spare)
 
 ## Open Research Questions
 - How much do hidden parameters vary between rounds? (answer: significantly)

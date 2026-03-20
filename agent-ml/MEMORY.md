@@ -62,5 +62,29 @@
 - Scoring is on probability distributions, not argmax. Must match distribution shape.
 - High-entropy (uncertain) cells weighted more in scoring.
 
+### Experiment 3: v6 phased observation (round 4)
+**Date:** 2026-03-20 03:36 UTC
+**Round:** 4
+**Approach:** v6 phased (overview -> analyze -> stack -> secondary -> submit)
+**Change:** Full phased strategy. 9 queries overview, 22 stacking on dynamic zones, 18 secondary (seeds 1-2 full coverage). 49/50 queries used.
+**Hypothesis:** Round-specific observations + multi-sample stacking should give much better predictions than historical transitions alone. Round 4 is MUCH more dynamic (249 terrain changes vs 37-60 in round 3).
+**Score before:** 39.7 (round 3)
+**Score after:** pending
+**Delta:** pending
+**Kept/Reverted:** kept
+**Time spent:** 0.5h
+**Notes:** Round 4 hidden params favor settlement growth (82 empty->settlement). Settlement survival only 36% (vs 40% historical). Forest more stable at 80% (vs 70% historical). 1323 cells on seed 0 have 2+ samples. Seeds 3-4 use cross-seed transfer only.
+
+### Round 4 Dynamics (very different from rounds 1-3)
+- 249 terrain changes (vs 37-60 in round 3, 10-40 in rounds 1-2)
+- Empty -> Settlement: 82 (major growth wave)
+- Empty -> Forest: 45 (reforestation)
+- Forest -> Settlement: 32 (settlements clearing forest)
+- Settlement -> Empty: 19 (some die-offs)
+- Ports appearing (10 from empty, 6 from forest)
+- Ruins appearing (8 from empty, 5 from forest)
+
+### Rules re-read at 2026-03-20T03:04:00Z. No violations found.
+
 ## Auth Note
 API uses cookie auth: `access_token` cookie. Bearer header returns "Missing token" in curl.
