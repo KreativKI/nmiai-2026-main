@@ -1,92 +1,65 @@
 # NorgesGruppen Object Detection — Plan
 
 **Track:** CV | **Task:** Grocery Shelf Detection | **Weight:** 33.33%
-**Last updated:** 2026-03-20 18:40 CET
+**Last updated:** 2026-03-21 01:10 CET
 
 ## CRITICAL: Single Source of Truth
 ALL CV work happens in this worktree (`/Volumes/devdrive/github_dev/nmiai-worktree-cv/agent-cv/`).
-The main repo (`nmiai-2026-main/agent-cv/`) is READ-ONLY reference for files created in earlier sessions.
-Never create new work in the main repo. Always merge main -> agent-cv first to sync.
 
 ## Current State
-- **Best submitted score:** 0.5756 (YOLO11m detection-only)
-- **Best local pipeline:** YOLO11m detect + DINOv2 classify + enhanced gallery (355/356 cats) + SAHI
-- **Submission ZIP ready:** submission.zip (143 MB), validator PASS
-- **GCP VMs:** cv-train-1 and cv-train-2 IDLE (training complete, delete when done)
+- **Best submitted score:** 0.5756 (YOLO11m detection-only, submission #2)
+- **Root cause of gap:** 248 images on 356 categories = extreme overfitting. Local 0.95 was fiction (val=train).
+- **Submission ready for JC:** `submission_augmented.zip` (YOLO-only, prior retrained model)
+- **GCP VM:** cv-train-1 (europe-west1-c, RUNNING)
+  - Aggressive retrain: 348 train (208 real + 140 synthetic) / 40 val, 120 epochs, ~90 min remaining
+  - Gemini generation: 64/350 categories done, running in background
 
-## What's Been Done (DO NOT REPEAT)
+## Battle Plan Status
+| Phase | Status | Notes |
+|-------|--------|-------|
+| 0: Fix Evaluation | DONE | 80/20 split created. Category IDs verified (0-355, no off-by-one). |
+| 1: Copy-Paste Augmentation | DONE (minimal) | 140 existing synthetic images integrated. Could generate more. |
+| 2: Gemini as Training Data | IN PROGRESS | 64/350 categories generating. Will use as YOLO training data when done. |
+| 3: Retrain Aggressive | RUNNING on GCP | YOLO11m, 120 epochs, mosaic=1.0, mixup=0.3, copy_paste=0.3, scale=0.5 |
+| 4: Honest Eval + Submit | NEXT | When retrain finishes: honest eval, export ONNX, build ZIP, submit. |
+
+## What's Been Proven (DO NOT REPEAT)
 | Experiment | Result | Status |
 |-----------|--------|--------|
-| YOLO11m fine-tune (imgsz=1280, 100 epochs, GCP) | mAP50=0.945 | Done, best.onnx ready |
-| YOLO26m fine-tune (GCP) | mAP50=0.890, lower than YOLO11m | Done, not used |
-| RF-DETR (GCP) | mAP50=0.572, not competitive | Done, not used |
-| Ensemble YOLO11m+YOLO26m | +0.000 over YOLO11m alone | Tried, no gain |
-| TTA (multi-scale + flip) | +0.002 | Marginal, detection saturated |
-| DINOv2 crop-and-classify (326 cat gallery) | Built, .npz bug blocked submission | Fixed now |
-| Enhanced gallery (355/356 cats, studio+shelf blend) | Built on GCP | Applied, in current ZIP |
-| Gemini synthetic photos (34 uncovered categories) | 68 images generated | Available, not yet in gallery |
-| Copy-paste augmentation research | +6.9 mAP in low-data scenarios | Script exists, not run with latest data |
-| SAHI sliced inference | +60% detections, +55% unique categories | Applied, in current ZIP |
+| YOLO11m fine-tune (all 248 images, val=train) | mAP50=0.945 (FAKE, overfitting) | Done |
+| YOLO11m leaderboard | 0.5756 | Current best |
+| SAHI sliced inference | -0.039 vs baseline | HURTS, don't revisit |
+| DINOv2 crop-and-classify | -0.039 vs baseline | HURTS, don't revisit |
+| TTA (multi-scale + flip) | +0.002 | Negligible |
+| Ensemble YOLO11m+YOLO26m | +0.000 | No gain |
+| Retrain on 248+140 images (old augmentation) | Completed, not yet submitted | In submission_augmented.zip |
 
-## Proven Key Findings
-- **Detection is NOT the bottleneck** (mAP50=0.945, TTA/ensemble give negligible gains)
-- **Classification IS the bottleneck** (DINOv2 + reference images is the path)
+## Key Findings
+- **Detection is NOT the bottleneck** (detection mAP ~0.82+ even on unseen data)
+- **Classification IS the bottleneck** (YOLO memorizes 1-2 examples per category, fails on variation)
 - Score = 0.7 * detection_mAP + 0.3 * classification_mAP
+- Category IDs: 0-355, match between YOLO and COCO annotations (no off-by-one)
+- Category 355 = "unknown_product"
+- 54 categories have <= 2 training instances, 110 have < 10
 
-## Next Actions (execute in order)
-
-### Action 1: Delete cv-train-2 VM [NOW, saves money]
-- RF-DETR was not competitive (0.572). VM is idle, burning credits.
-- `gcloud compute instances delete cv-train-2 --zone=europe-west3-a --project=ai-nm26osl-1779`
-
-### Action 2: Improve classification scoring [code-only, local]
-- Current: `combined_score = sqrt(det_score * max(cls_sim, 0.01))`
-- Test A: top-K weighted voting (use top 3 gallery matches, not just best)
-- Test B: softmax temperature on DINOv2 similarities before picking class
-- Test C: use YOLO class as tiebreaker when DINOv2 confidence is low
-- Measure: count of unique correct-looking category assignments on test images
-- Docker validate each variant. Rebuild ZIP for best.
-
-### Action 3: Build 3-source final gallery on cv-train-1 [GCP]
-- `scripts/build_final_gallery.py` exists (studio 60% + shelf 20% + Gemini 20%)
-- 68 Gemini synthetic photos already on local disk
-- Upload Gemini photos to cv-train-1, run builder, download gallery.npy
-- Expected: better embeddings for 34 categories that only had shelf crops
-- Rebuild ZIP + Docker validate
-
-### Action 4: Copy-paste augmentation + retrain YOLO11m [GCP, NOT YET DONE]
-**Status: RESEARCHED BUT NEVER EXECUTED. This is the next big move after submission.**
-- Research (commit 0764063): copy-paste augmentation gives +6.9 mAP in low-data scenarios
-- What it does: cut product instances from 248 training images, paste onto shelf backgrounds
-  using cv2.seamlessClone, auto-generate COCO annotations
-- Generate 250-500 synthetic TRAINING images (these are NOT gallery images)
-- Retrain YOLO11m on combined dataset (248 real + 500 synthetic) on GCP
-- Export new best.onnx, rebuild full pipeline ZIP
-- Script may exist at agent-cv/scripts/ or needs to be written
-- This is different from the Gemini product photos (those are for DINOv2 gallery)
-
-### Action 5: Train YOLO11l bigger backbone [GCP, cv-train-1]
-- 25.3M params vs 20.1M. Same pipeline as YOLO11m.
-- Only if time remains and Action 4 didn't fill the schedule
-
-## GCP VMs (DELETE WHEN DONE)
-| VM | Zone | Status | Action Needed |
-|---|---|---|---|
-| cv-train-1 | europe-west1-c | IDLE | Has trained weights + enhanced gallery. Delete after downloading. |
-| cv-train-2 | europe-west3-a | IDLE | Has RF-DETR (not competitive). Delete immediately. |
+## Next Actions (after retrain)
+1. Download best.onnx from retrain
+2. Run honest eval on proper val set (40 images the model hasn't seen)
+3. Compare honest eval to leaderboard score to calibrate
+4. If improved: build YOLO-only ZIP, run cv_pipeline.sh + canary, submit
+5. If Gemini generation finished: incorporate as YOLO training data, retrain again
 
 ## Submission Log
 | # | Time | ZIP | Score | Notes |
 |---|------|-----|-------|-------|
-| 1 | 04:30 CET | submission_yolo11m_v1.zip | FAILED (exit 2) | argparse rejected unknown args |
-| 2 | 04:56 CET | submission_yolo11m_v2.zip | 0.5756 | YOLO11m only |
-| 3 | ~15:00 CET | submission_dinov2_enhanced_v2.zip | SUBMITTED (score?) | Enhanced gallery 355 cats, may have .npz bug |
-| 4 | PENDING | submission.zip | NOT YET | Enhanced gallery + SAHI + .npz fix |
+| 1 | Fri 04:30 | submission_yolo11m_v1.zip | FAILED | argparse rejected unknown args |
+| 2 | Fri 04:56 | submission_yolo11m_v2.zip | 0.5756 | YOLO11m only (current best) |
+| 3 | Fri ~15:00 | submission_dinov2_enhanced_v2.zip | ? | Enhanced gallery, may have had .npz bug |
+| 4 | READY | submission_augmented.zip | NOT YET | Old retrain, pipeline PASS, JC uploads manually |
 
 ## Critical Constraints
-- `--images` and `--input` both accepted (parse_known_args)
-- No blocked imports (os, sys, subprocess, etc.)
-- Max 420 MB weights, 3 weight files, 10 .py files
+- BLOCKED IMPORTS: os, sys, subprocess, socket, pickle, yaml, etc. (instant ban)
+- Max 420 MB weights, 3 weight files, 10 .py files, 300s timeout on L4 GPU
 - 6 submissions/day (resets 01:00 CET), 2 concurrent max
 - ALLOWED extensions: .py .json .yaml .yml .cfg .pt .pth .onnx .safetensors .npy
-- Docker-validate EVERY submission before upload
+- ALL compute on GCP, never local Mac
