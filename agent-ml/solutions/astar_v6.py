@@ -30,6 +30,7 @@ from collections import Counter
 
 import numpy as np
 import requests
+from scipy.ndimage import gaussian_filter
 
 BASE = "https://api.ainm.no"
 DATA_DIR = Path(__file__).parent / "data"
@@ -682,9 +683,32 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
             pred = pred / pred.sum(axis=-1, keepdims=True)
 
         # Global temperature scaling: T=1.12 optimal across 39 autoiteration variants
-        # Per-class temperature tested but didn't beat global (Dirichlet handles calibration)
         TEMPERATURE = 1.12
         pred = pred ** (1.0 / TEMPERATURE)
+
+        # Collapse thresholding: zero out tiny probabilities, redistribute
+        COLLAPSE_THRESH = 0.016
+        for y in range(height):
+            for x in range(width):
+                if grid[y][x] in STATIC_TERRAIN:
+                    continue
+                probs = pred[y, x]
+                mask = probs < COLLAPSE_THRESH
+                if mask.any() and not mask.all():
+                    probs[mask] = 0.0
+                    probs[:] = np.maximum(probs, PROB_FLOOR)
+                    pred[y, x] = probs / probs.sum()
+
+        # Spatial smoothing: light Gaussian blur on dynamic cells
+        SMOOTH_SIGMA = 0.3
+        smoothed = np.copy(pred)
+        for cls in range(NUM_CLASSES):
+            smoothed[:, :, cls] = gaussian_filter(pred[:, :, cls], sigma=SMOOTH_SIGMA)
+        for y in range(height):
+            for x in range(width):
+                if grid[y][x] in STATIC_TERRAIN:
+                    smoothed[y, x] = pred[y, x]
+        pred = smoothed
 
         # Floor and renormalize
         pred = np.maximum(pred, PROB_FLOOR)

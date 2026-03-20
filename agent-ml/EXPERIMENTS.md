@@ -109,3 +109,39 @@ Adaptive stacking + hindsight re-targeting should improve this.
 **Delta:** -0.5
 **Verdict:** Equilibrium iteration hurts at all parameters. The argmax-based virtual grid loses probability distribution information. More steps = worse. High damping (0.9) = nearly no iteration = closest to baseline. **Approach abandoned.**
 
+## PP-001: Post-processing parameter search (temperature, smoothing, collapse)
+**Date:** 2026-03-20 17:32 UTC
+**Tool:** postprocess_search.py (new), V2 model, leave-one-out, 7 rounds with obs
+**Baseline:** T=1.12 only, avg=63.4
+
+### Temperature (best: 1.12, already optimal)
+| T | Avg |
+|---|-----|
+| 0.90 | 59.3 |
+| 1.00 | 62.4 |
+| 1.05 | 63.1 |
+| 1.10 | 63.4 |
+| **1.12** | **63.4** |
+| 1.15 | 63.3 |
+| 1.20 | 62.9 |
+
+### Gaussian Smoothing (best: sigma=0.3, +0.2)
+| sigma | Avg |
+|-------|-----|
+| 0.0 | 63.4 |
+| **0.3** | **63.6** |
+| 0.5 | 56.6 |
+| 1.0 | 38.6 |
+
+### Collapse Thresholding (best: 0.016, +0.8)
+| Threshold | Avg |
+|-----------|-----|
+| 0.000 | 63.4 |
+| **0.016** | **64.2** |
+| 0.020 | 64.0 |
+| 0.025 | 63.5 |
+
+### Combo: T=1.12 + collapse=0.016 + smooth=0.3
+**Avg: 64.5 (+1.1 vs baseline)**
+**Applied to astar_v6.py for R9.**
+
