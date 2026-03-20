@@ -34,7 +34,7 @@ app = FastAPI(title="Tripletex AI Agent", version="4.0")
 GCP_PROJECT = os.getenv("GCP_PROJECT", "ai-nm26osl-1779")
 GCP_LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-DEADLINE_SECONDS = 280
+DEADLINE_SECONDS = 110  # Cloudflare tunnel timeout is 120s, not 300s
 
 try:
     gemini_client = genai.Client(
