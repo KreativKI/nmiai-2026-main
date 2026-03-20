@@ -1,0 +1,225 @@
+"""NorgesGruppen Object Detection — YOLO11m + SAHI.
+
+Single-stage pipeline: YOLO11m detection with SAHI tiled inference
+for large images. No DINOv2, no gallery. YOLO's own trained
+classification head handles both detection and classification.
+
+SAFE IMPORTS ONLY. Blocked modules = instant ban.
+"""
+import argparse
+import json
+from pathlib import Path
+
+import cv2
+import numpy as np
+import onnxruntime as ort
+
+
+# --- Configuration ---
+YOLO_MODEL = "best.onnx"
+YOLO_INPUT_SIZE = 1280
+CONF_THRESHOLD = 0.15      # Match baseline (YOLO-only v2 that scored 0.5756)
+IOU_THRESHOLD = 0.5
+SAHI_MIN_DIM = 3000        # Only slice very large images (reduces noise on smaller ones)
+SAHI_OVERLAP = 0.2         # Tile overlap ratio
+SAHI_TILE_SIZE = 1280      # Tile size in original image pixels
+
+
+def letterbox(img, new_shape=1280):
+    """Resize with letterboxing."""
+    h, w = img.shape[:2]
+    scale = min(new_shape / h, new_shape / w)
+    new_h, new_w = int(h * scale), int(w * scale)
+    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+    pad_h = new_shape - new_h
+    pad_w = new_shape - new_w
+    top = pad_h // 2
+    left = pad_w // 2
+    padded = np.full((new_shape, new_shape, 3), 114, dtype=np.uint8)
+    padded[top:top + new_h, left:left + new_w] = resized
+    return padded, scale, (top, left)
+
+
+def decode_yolo(output, scale, pad, orig_h, orig_w, conf_thresh=0.15):
+    """Decode YOLO11 output to boxes in original coords."""
+    preds = output[0].T
+    boxes = preds[:, :4]
+    scores = preds[:, 4:]
+    class_ids = np.argmax(scores, axis=1)
+    confidences = np.max(scores, axis=1)
+
+    mask = confidences >= conf_thresh
+    boxes = boxes[mask]
+    class_ids = class_ids[mask]
+    confidences = confidences[mask]
+
+    if len(boxes) == 0:
+        return np.zeros((0, 4)), np.array([]), np.array([])
+
+    pad_top, pad_left = pad
+    x1 = (boxes[:, 0] - boxes[:, 2] / 2 - pad_left) / scale
+    y1 = (boxes[:, 1] - boxes[:, 3] / 2 - pad_top) / scale
+    x2 = (boxes[:, 0] + boxes[:, 2] / 2 - pad_left) / scale
+    y2 = (boxes[:, 1] + boxes[:, 3] / 2 - pad_top) / scale
+
+    x1 = np.clip(x1, 0, orig_w)
+    y1 = np.clip(y1, 0, orig_h)
+    x2 = np.clip(x2, 0, orig_w)
+    y2 = np.clip(y2, 0, orig_h)
+
+    return np.stack([x1, y1, x2, y2], axis=1), confidences, class_ids
+
+
+def nms_per_class(boxes, scores, labels, iou_thresh=0.5):
+    """Per-class NMS."""
+    if len(boxes) == 0:
+        return np.zeros((0, 4)), np.array([]), np.array([])
+    keep_all = []
+    for cls_id in np.unique(labels):
+        cls_mask = labels == cls_id
+        cls_idx = np.where(cls_mask)[0]
+        cls_boxes = boxes[cls_mask]
+        cls_scores = scores[cls_mask]
+        order = cls_scores.argsort()[::-1]
+        keep = []
+        while len(order) > 0:
+            i = order[0]
+            keep.append(cls_idx[i])
+            if len(order) == 1:
+                break
+            xx1 = np.maximum(cls_boxes[i, 0], cls_boxes[order[1:], 0])
+            yy1 = np.maximum(cls_boxes[i, 1], cls_boxes[order[1:], 1])
+            xx2 = np.minimum(cls_boxes[i, 2], cls_boxes[order[1:], 2])
+            yy2 = np.minimum(cls_boxes[i, 3], cls_boxes[order[1:], 3])
+            inter = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
+            area_i = (cls_boxes[i, 2] - cls_boxes[i, 0]) * (cls_boxes[i, 3] - cls_boxes[i, 1])
+            area_j = (cls_boxes[order[1:], 2] - cls_boxes[order[1:], 0]) * \
+                     (cls_boxes[order[1:], 3] - cls_boxes[order[1:], 1])
+            iou = inter / (area_i + area_j - inter + 1e-6)
+            remaining = np.where(iou <= iou_thresh)[0]
+            order = order[remaining + 1]
+        keep_all.extend(keep)
+    keep_all = np.array(keep_all)
+    return boxes[keep_all], scores[keep_all], labels[keep_all]
+
+
+def generate_tiles(img_h, img_w, tile_size=1280, overlap=0.2):
+    """Generate tile coordinates (x1, y1, x2, y2) for sliced inference."""
+    step = int(tile_size * (1 - overlap))
+    tiles = []
+    for y in range(0, img_h, step):
+        for x in range(0, img_w, step):
+            x2 = min(x + tile_size, img_w)
+            y2 = min(y + tile_size, img_h)
+            x1 = max(0, x2 - tile_size)
+            y1 = max(0, y2 - tile_size)
+            tiles.append((x1, y1, x2, y2))
+    return list(dict.fromkeys(tiles))
+
+
+def detect_with_sahi(img, yolo_sess, yolo_input_name, orig_h, orig_w):
+    """Run YOLO on full image + overlapping tiles, merge with NMS."""
+    all_boxes = []
+    all_scores = []
+    all_labels = []
+
+    # Full-image detection
+    img_lb, scale, pad = letterbox(img, YOLO_INPUT_SIZE)
+    img_rgb = cv2.cvtColor(img_lb, cv2.COLOR_BGR2RGB)
+    img_norm = img_rgb.astype(np.float32) / 255.0
+    img_batch = np.transpose(img_norm, (2, 0, 1))[np.newaxis, ...]
+    yolo_out = yolo_sess.run(None, {yolo_input_name: img_batch})
+    boxes, scores, labels = decode_yolo(
+        yolo_out[0], scale, pad, orig_h, orig_w, CONF_THRESHOLD)
+    if len(boxes) > 0:
+        all_boxes.append(boxes)
+        all_scores.append(scores)
+        all_labels.append(labels)
+
+    # Tiled detection only for large images
+    if max(orig_h, orig_w) >= SAHI_MIN_DIM:
+        tiles = generate_tiles(orig_h, orig_w, SAHI_TILE_SIZE, SAHI_OVERLAP)
+        for tx1, ty1, tx2, ty2 in tiles:
+            tile = img[ty1:ty2, tx1:tx2]
+            tile_h, tile_w = tile.shape[:2]
+            t_lb, t_scale, t_pad = letterbox(tile, YOLO_INPUT_SIZE)
+            t_rgb = cv2.cvtColor(t_lb, cv2.COLOR_BGR2RGB)
+            t_norm = t_rgb.astype(np.float32) / 255.0
+            t_batch = np.transpose(t_norm, (2, 0, 1))[np.newaxis, ...]
+            t_out = yolo_sess.run(None, {yolo_input_name: t_batch})
+            t_boxes, t_scores, t_labels = decode_yolo(
+                t_out[0], t_scale, t_pad, tile_h, tile_w, CONF_THRESHOLD)
+            if len(t_boxes) > 0:
+                t_boxes[:, 0] += tx1
+                t_boxes[:, 1] += ty1
+                t_boxes[:, 2] += tx1
+                t_boxes[:, 3] += ty1
+                all_boxes.append(t_boxes)
+                all_scores.append(t_scores)
+                all_labels.append(t_labels)
+
+    if len(all_boxes) == 0:
+        return np.zeros((0, 4)), np.array([]), np.array([])
+
+    merged_boxes = np.concatenate(all_boxes)
+    merged_scores = np.concatenate(all_scores)
+    merged_labels = np.concatenate(all_labels)
+
+    return nms_per_class(merged_boxes, merged_scores, merged_labels, IOU_THRESHOLD)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--images", "--input", type=str, required=True)
+    parser.add_argument("--output", type=str, default="/tmp/predictions.json")
+    args, _ = parser.parse_known_args()
+
+    input_dir = Path(args.images)
+    output_path = Path(args.output)
+    model_dir = Path(__file__).parent
+
+    # Load YOLO model only
+    providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    yolo_sess = ort.InferenceSession(str(model_dir / YOLO_MODEL), providers=providers)
+    yolo_input = yolo_sess.get_inputs()[0].name
+
+    predictions = []
+    image_files = sorted(input_dir.glob("*.jpg"))
+
+    for img_path in image_files:
+        stem = img_path.stem
+        try:
+            image_id = int(stem.replace("img_", ""))
+        except ValueError:
+            image_id = hash(stem) % (10**6)
+
+        img = cv2.imread(str(img_path))
+        if img is None:
+            continue
+        orig_h, orig_w = img.shape[:2]
+
+        # YOLO detection with SAHI tiles for large images
+        boxes, det_scores, class_ids = detect_with_sahi(
+            img, yolo_sess, yolo_input, orig_h, orig_w)
+
+        for box, score, cls_id in zip(boxes, det_scores, class_ids):
+            x1, y1, x2, y2 = box
+            predictions.append({
+                "image_id": image_id,
+                "category_id": int(cls_id),
+                "bbox": [round(float(x1), 2), round(float(y1), 2),
+                         round(float(x2 - x1), 2), round(float(y2 - y1), 2)],
+                "score": round(float(score), 4),
+            })
+
+    parent = output_path.parent
+    if not parent.exists():
+        parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(predictions, f)
+
+    print(f"Wrote {len(predictions)} predictions for {len(image_files)} images")
+
+
+if __name__ == "__main__":
+    main()
