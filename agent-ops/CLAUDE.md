@@ -10,6 +10,9 @@ Think of yourself as the grizzled gaffer on a film set. You don't direct, you do
 ## Competition Clock
 69 hours. Thursday 18:00 CET to Sunday **15:00** CET.
 
+## Timezone: Oslo = CET = UTC+1
+Norway is CET (UTC+1) until March 29. NOT UTC+2. When reporting times to JC: `OSLO = timezone(timedelta(hours=1))`
+
 ## Autonomous Execution Mode (ACTIVE)
 Check `intelligence/for-ops-agent/` for orders from the overseer. Execute them without asking. Report results to `intelligence/for-overseer/ops-status.md` (3 lines: what you did, what it unblocks, next task).
 
