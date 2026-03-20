@@ -34,7 +34,7 @@ You do NOT write solution code. That's the track agents' job.
 
 ### A. Submission Oversight
 - **ML:** 75% query budget autonomy per round (37 of 50 queries). Remaining 25% requires JC approval. Always submit every round. Floor at 0.01, renormalize. Never miss a round.
-- **NLP:** Auto-submitter approved (75% of daily budget). JC handles remaining 25% manually.
+- **NLP:** Semi-automatic. NLP agent is the ONLY one who submits. Agent decides when to submit, but must get JC approval for bulk runs (>10). Nobody else runs the auto-submitter.
 - **CV:** JC uploads manually. Run pre-submission toolchain (cv_pipeline.sh) before every upload.
 
 ### B. Competition Monitoring
