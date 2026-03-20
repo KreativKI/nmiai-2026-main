@@ -57,8 +57,14 @@ htmlcov/
 # Training data (too large for git)
 trainingdata/
 
-# Competition outputs (keep predictions in submissions/)
+# Competition outputs
 agent-*/best_model.pth
+agent-*/solutions/*.onnx
+agent-*/solutions/*.npy
+agent-*/solutions/*.pt
+agent-*/submission/
+agent-*/submission.zip
+agent-*/test_images/
 
 # Node (if dashboard is added)
 node_modules/
