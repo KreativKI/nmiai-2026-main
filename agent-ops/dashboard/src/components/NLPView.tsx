@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { MetricCard } from "./MetricCard";
 
-const ENDPOINT = "https://tripletex-agent-795548831221.europe-west4.run.app/solve";
+const ENDPOINT_DISPLAY = "https://tripletex-agent-795548831221.europe-west4.run.app/solve";
+// Use Vite proxy to avoid CORS when checking health from browser
+const ENDPOINT_PROXY = "/api/nlp-health";
 
 // 30 task types from the Tripletex competition spec
 const TASK_TYPES = [
@@ -32,7 +34,7 @@ export function NLPView() {
     setEndpointStatus((prev) => ({ ...prev, status: "checking" }));
     const start = performance.now();
     try {
-      const resp = await fetch(ENDPOINT, {
+      const resp = await fetch(ENDPOINT_PROXY, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: "health check", task_type: "ping" }),
@@ -147,7 +149,7 @@ export function NLPView() {
 
       {/* Endpoint URL */}
       <div className="rounded-2xl bg-white/30 backdrop-blur-sm border border-white/20 p-3">
-        <p className="text-xs text-sky-500 font-mono break-all">{ENDPOINT}</p>
+        <p className="text-xs text-sky-500 font-mono break-all">{ENDPOINT_DISPLAY}</p>
       </div>
     </div>
   );

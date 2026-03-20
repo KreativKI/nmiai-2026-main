@@ -13,6 +13,7 @@ import {
 
 interface TrainingLog {
   epoch: number;
+  model?: string;
   mAP50: number;
   mAP5095: number;
   precision: number;
@@ -28,7 +29,8 @@ const CHART_TOOLTIP_STYLE: React.CSSProperties = {
 };
 
 export function CVView() {
-  const [logs, setLogs] = useState<TrainingLog[]>([]);
+  const [allLogs, setAllLogs] = useState<TrainingLog[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>("yolo11m");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,31 +39,76 @@ export function CVView() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
-      .then((d) => setLogs(d as TrainingLog[]))
+      .then((d) => {
+        const data = d as TrainingLog[];
+        setAllLogs(data);
+        // Auto-select model with most epochs
+        const models = [...new Set(data.map((e) => e.model ?? "unknown"))];
+        if (models.length > 0) {
+          const best = models.reduce((a, b) =>
+            data.filter((e) => e.model === a).length >= data.filter((e) => e.model === b).length ? a : b
+          );
+          setSelectedModel(best);
+        }
+      })
       .catch((e) => setError(String(e)));
   }, []);
 
+  const models = [...new Set(allLogs.map((e) => e.model ?? "unknown"))];
+  const logs = allLogs.filter((e) => (e.model ?? "unknown") === selectedModel);
   const latest = logs.length > 0 ? logs[logs.length - 1] : null;
+  const bestMAP50 = logs.length > 0 ? Math.max(...logs.map((e) => e.mAP50)) : 0;
+  const bestMAP5095 = logs.length > 0 ? Math.max(...logs.map((e) => e.mAP5095)) : 0;
 
   return (
     <div className="flex-1 flex flex-col overflow-auto p-6 gap-4">
       {/* Header */}
-      <div>
-        <h2 className="text-xl font-bold text-sky-800 font-[Fredoka]">
-          NorgesGruppen - Object Detection
-        </h2>
-        <p className="text-xs text-sky-500">
-          357 categories, 70% detection mAP + 30% classification mAP
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-sky-800 font-[Fredoka]">
+            NorgesGruppen - Object Detection
+          </h2>
+          <p className="text-xs text-sky-500">
+            357 categories, 70% detection mAP + 30% classification mAP
+          </p>
+        </div>
+        {/* Model selector */}
+        {models.length > 1 && (
+          <div className="flex gap-2">
+            {models.map((m) => (
+              <button
+                key={m}
+                onClick={() => setSelectedModel(m)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  selectedModel === m
+                    ? "bg-sky-800 text-white shadow-md"
+                    : "bg-white/60 text-sky-700 hover:bg-white/80"
+                }`}
+              >
+                {m} ({allLogs.filter((e) => e.model === m).length} ep)
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Metrics */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 flex-wrap">
         <MetricCard
-          label="mAP50"
+          label="Best mAP50"
+          value={bestMAP50 > 0 ? bestMAP50.toFixed(3) : "-"}
+          subtitle={selectedModel}
+          color={bestMAP50 > 0.5 ? "text-green-700" : "text-sky-900"}
+        />
+        <MetricCard
+          label="Best mAP50-95"
+          value={bestMAP5095 > 0 ? bestMAP5095.toFixed(3) : "-"}
+          subtitle="primary metric"
+        />
+        <MetricCard
+          label="Latest mAP50"
           value={latest ? latest.mAP50.toFixed(3) : "-"}
           subtitle={latest ? `epoch ${latest.epoch}` : "no data"}
-          color={latest && latest.mAP50 > 0.5 ? "text-green-700" : "text-sky-900"}
         />
         <MetricCard
           label="mAP50-95"
