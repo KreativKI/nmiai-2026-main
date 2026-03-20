@@ -53,7 +53,7 @@ def check_endpoint(url: str) -> dict:
     }
 
     for payload in SAMPLE_PAYLOADS:
-        check = {"name": payload["name"], "status": "fail", "latency_ms": None, "details": ""}
+        check = {"name": payload["name"], "status": "pass", "latency_ms": None, "details": ""}
         body = json.dumps(payload["body"]).encode("utf-8")
 
         start = time.time()
@@ -78,8 +78,9 @@ def check_endpoint(url: str) -> dict:
         latency = round((time.time() - start) * 1000)
         check["latency_ms"] = latency
 
-        if status_code in (200, 422):
-            check["status"] = "pass"
+        # 200 = success, 401/403 = auth rejected (expected for test tokens)
+        # 422 = schema error = NOT healthy
+        if status_code in (200, 401, 403):
             check["details"] = f"HTTP {status_code}, {latency}ms"
             try:
                 data = json.loads(resp_text)

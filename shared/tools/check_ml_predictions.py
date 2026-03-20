@@ -19,8 +19,8 @@ from pathlib import Path
 GRID_W = 40
 GRID_H = 40
 NUM_CLASSES = 6
-PROB_FLOOR = 0.001  # Warn if any probability is below this
-PROB_FLOOR_HARD = 0.0  # Fail if any probability is exactly 0
+PROB_FLOOR = 0.01  # Competition recommendation: floor at 0.01
+NORM_TOLERANCE = 1e-4  # Probabilities must sum to 1.0 within this tolerance
 
 
 def validate_predictions(data: list) -> dict:
@@ -75,20 +75,20 @@ def validate_predictions(data: list) -> dict:
                     continue
 
                 total = 0.0
-                for c, p in enumerate(probs):
-                    if isinstance(p, (int, float)):
-                        if math.isnan(p) or math.isinf(p):
-                            seed_result["nan_count"] += 1
-                        else:
-                            total += p
-                            if p < seed_result["min_prob"]:
-                                seed_result["min_prob"] = p
-                            if p > seed_result["max_prob"]:
-                                seed_result["max_prob"] = p
-                            if p == PROB_FLOOR_HARD:
-                                seed_result["zero_count"] += 1
+                for p in probs:
+                    if not isinstance(p, (int, float)):
+                        continue
+                    if math.isnan(p) or math.isinf(p):
+                        seed_result["nan_count"] += 1
+                        continue
+                    total += p
+                    if p <= 0.0:
+                        seed_result["zero_count"] += 1
+                    else:
+                        seed_result["min_prob"] = min(seed_result["min_prob"], p)
+                        seed_result["max_prob"] = max(seed_result["max_prob"], p)
 
-                if abs(total - 1.0) > 0.01:
+                if abs(total - 1.0) > NORM_TOLERANCE:
                     seed_result["norm_errors"] += 1
 
         seed_result["shape"] = f"{h}x{GRID_W}x{NUM_CLASSES}"
@@ -99,13 +99,18 @@ def validate_predictions(data: list) -> dict:
             result["errors"].append(f"Seed {seed_idx}: {seed_result['nan_count']} NaN/inf values")
 
         if seed_result["zero_count"] > 0:
-            result["warnings"].append(f"Seed {seed_idx}: {seed_result['zero_count']} exact 0.0 probabilities (use floor 0.01)")
+            seed_result["valid"] = False
+            result["errors"].append(
+                f"Seed {seed_idx}: {seed_result['zero_count']} probabilities <= 0. "
+                f"KL divergence will be infinite. Floor at 0.01 and renormalize."
+            )
 
-        if seed_result["min_prob"] < PROB_FLOOR and seed_result["min_prob"] > 0:
+        if 0 < seed_result["min_prob"] < PROB_FLOOR:
             result["warnings"].append(f"Seed {seed_idx}: min probability {seed_result['min_prob']:.6f} (recommend floor 0.01)")
 
         if seed_result["norm_errors"] > 0:
-            result["warnings"].append(f"Seed {seed_idx}: {seed_result['norm_errors']} cells don't sum to 1.0")
+            seed_result["valid"] = False
+            result["errors"].append(f"Seed {seed_idx}: {seed_result['norm_errors']} cells don't sum to 1.0 (tolerance {NORM_TOLERANCE})")
 
         if not seed_result["valid"]:
             result["valid"] = False
@@ -113,7 +118,8 @@ def validate_predictions(data: list) -> dict:
         result["seeds"].append(seed_result)
 
     if len(data) != 5:
-        result["warnings"].append(f"Expected 5 seeds, got {len(data)}. Submit ALL 5 seeds.")
+        result["valid"] = False
+        result["errors"].append(f"Expected 5 seeds, got {len(data)}. Must submit ALL 5 seeds.")
 
     return result
 

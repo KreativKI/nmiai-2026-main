@@ -13,6 +13,7 @@ Output: PASS/FAIL with details. --json outputs structured JSON for the dashboard
 """
 
 import argparse
+import ast
 import json
 import re
 import sys
@@ -28,6 +29,7 @@ BLOCKED_MODULES = [
 ]
 
 BLOCKED_CALLS = ["eval(", "exec(", "compile(", "__import__("]
+BLOCKED_SET = set(BLOCKED_MODULES)
 
 WEIGHT_EXTENSIONS = {".pt", ".pth", ".onnx", ".safetensors", ".npy"}
 ALLOWED_EXTENSIONS = {".py", ".json", ".yaml", ".yml", ".cfg"} | WEIGHT_EXTENSIONS
@@ -66,6 +68,7 @@ def validate_zip(zip_path: str) -> dict:
         infos = zf.infolist()
 
         total_size = 0
+        weight_size_raw = 0
         py_files = []
         weight_files = []
 
@@ -84,9 +87,10 @@ def validate_zip(zip_path: str) -> dict:
                 py_files.append(entry)
             elif ext in WEIGHT_EXTENSIONS:
                 weight_files.append(entry)
+                weight_size_raw += info.file_size
 
         total_size_mb = total_size / (1024 * 1024)
-        weight_total_mb = sum(f["size_mb"] for f in weight_files)
+        weight_total_mb = weight_size_raw / (1024 * 1024)
 
         result["stats"] = {
             "total_files": len(result["files"]),
@@ -128,7 +132,7 @@ def validate_zip(zip_path: str) -> dict:
             result["valid"] = False
             result["errors"].append(f"Weights too large: {weight_total_mb:.1f} MB (max {MAX_WEIGHT_SIZE_MB} MB)")
 
-        # Check 4: blocked imports in .py files
+        # Check 4: blocked imports in .py files (AST-based + regex fallback)
         for py_file in py_files:
             try:
                 content = zf.read(py_file["name"]).decode("utf-8", errors="replace")
@@ -136,25 +140,54 @@ def validate_zip(zip_path: str) -> dict:
                 result["warnings"].append(f"Could not read {py_file['name']}")
                 continue
 
+            # Try AST parsing first (ignores docstrings, handles multi-import)
+            ast_checked = False
+            try:
+                tree = ast.parse(content)
+                ast_checked = True
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        for alias in node.names:
+                            top = alias.name.split(".")[0]
+                            if top in BLOCKED_SET:
+                                result["valid"] = False
+                                result["errors"].append(
+                                    f"BLOCKED IMPORT in {py_file['name']}:{node.lineno}: import {alias.name}"
+                                )
+                    elif isinstance(node, ast.ImportFrom):
+                        if node.module:
+                            top = node.module.split(".")[0]
+                            if top in BLOCKED_SET:
+                                result["valid"] = False
+                                result["errors"].append(
+                                    f"BLOCKED IMPORT in {py_file['name']}:{node.lineno}: from {node.module} import ..."
+                                )
+            except SyntaxError:
+                pass  # Fall back to regex
+
+            # Regex fallback for files that don't parse + blocked calls check
             for i, line in enumerate(content.splitlines(), 1):
                 stripped = line.strip()
                 if stripped.startswith("#"):
                     continue
 
-                for mod in BLOCKED_MODULES:
-                    patterns = [
-                        rf"^import\s+{re.escape(mod)}(\s|$|,|\.)",
-                        rf"^from\s+{re.escape(mod)}(\s|\.)",
-                    ]
-                    for pat in patterns:
-                        if re.search(pat, stripped):
-                            result["valid"] = False
-                            result["errors"].append(
-                                f"BLOCKED IMPORT in {py_file['name']}:{i}: {stripped}"
-                            )
+                # Only regex-check imports if AST parse failed
+                if not ast_checked:
+                    for mod in BLOCKED_MODULES:
+                        patterns = [
+                            rf"^import\s+{re.escape(mod)}(\s|$|,|\.)",
+                            rf"^from\s+{re.escape(mod)}(\s|\.)",
+                        ]
+                        for pat in patterns:
+                            if re.search(pat, stripped):
+                                result["valid"] = False
+                                result["errors"].append(
+                                    f"BLOCKED IMPORT in {py_file['name']}:{i}: {stripped}"
+                                )
 
+                # Always check for blocked calls (eval, exec, etc.)
                 for call in BLOCKED_CALLS:
-                    if call in stripped and not stripped.startswith("#"):
+                    if call in stripped:
                         result["valid"] = False
                         result["errors"].append(
                             f"BLOCKED CALL in {py_file['name']}:{i}: {stripped}"
