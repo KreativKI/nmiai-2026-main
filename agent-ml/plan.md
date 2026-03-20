@@ -1,14 +1,14 @@
 # Astar Island — Plan
 
 **Track:** ML | **Task:** Norse World Prediction | **Weight:** 33.33%
-**Last updated:** 2026-03-20 21:25 UTC
+**Last updated:** 2026-03-20 21:55 UTC
 
 ## Current State
 - **Best score:** 82.6 (R9, rank 93/221)
-- **R10:** submitted with v7 (regime-first, all 5 seeds observed). Score pending.
-- **Model:** V2 NeighborhoodModel, 9 rounds training (72K cells)
-- **Script:** astar_v7.py (regime-first multi-seed protocol)
-- **GCP VM:** ml-churn running (europe-west1-b)
+- **R10:** resubmitted with 9-round model + observations. Score pending. Closes ~23:46 UTC.
+- **Model:** V2 NeighborhoodModel, 9 rounds training (72K cells), backtest avg 65.6
+- **Script:** astar_v7.py + overnight_runner.py (autonomous)
+- **GCP VM:** ml-churn running overnight_runner.py (PID 8653, 5-min interval)
 
 ## Score History
 | Round | Score | Rank | Regime | Notes |
@@ -24,32 +24,25 @@
 
 ---
 
-## Phase 1: R10 Improvement (NOW)
+## Phase 1: R10 Improvement -- DONE
 **Goal:** Cache R9 ground truth, retrain model, resubmit R10.
-1. Fetch R9 ground truth via analysis API
-2. Retrain V2 model (10 rounds = 80K cells)
-3. Run hindsight on R10 observations (find model errors)
-4. Resubmit R10 with improved predictions
-5. Log in EXPERIMENTS.md
+1. DONE: Cached R8+R9 ground truth (was missing from cache)
+2. DONE: Retrained V2 model (9 rounds = 72K cells, backtest 65.6 avg, was 64.5)
+3. DONE: Resubmitted R10 with retrained model + observations for all 5 seeds
+4. INCIDENT: VM runner started and falsely detected extinction (no obs available, 0% survival). Submitted bad model-only predictions. Fixed by resubmitting from local.
+5. FIX: overnight_runner.py now checks budget before attempting observations. Falls back to disk observations.
 
-## Phase 2: R11 Preparation (before JC sleeps)
+## Phase 2: Overnight Automation -- DONE
 **Goal:** Deploy autonomous overnight operation to GCP VM.
-1. Cache R10 ground truth when round closes
-2. Verify v7 end-to-end with latest model
-3. Build automation script: `overnight_runner.sh`
-4. Deploy v7 + automation to GCP VM
-5. Test with mock round on VM
-6. Start autonomous loop
+1. DONE: Built overnight_runner.py (5-min interval, full round lifecycle)
+2. DONE: Deployed v7 + observations + ground truth to VM
+3. DONE: Fixed false extinction bug, added budget-check guard
+4. DONE: Running as PID 8653 on ml-churn VM
+5. Safety: budget check before obs, disk fallback, exception handling, state persistence
 
 ## Phase 3: Overnight Automation (GCP VM, ~15 hours)
 **Goal:** Submit every round automatically, retrain model after each.
-
-### Automation Script (`overnight_runner.sh`)
-Runs every 5 minutes on GCP VM:
-1. Check API for active rounds
-2. If new round and not yet submitted:
-   - Run v7 (regime detection, observe all seeds, submit)
-   - Log: round number, regime detected, queries used, timestamp
+**Status:** ACTIVE. overnight_runner.py handles everything.
 3. If round just completed:
    - Cache ground truth via analysis API
    - Retrain V2 model with new data

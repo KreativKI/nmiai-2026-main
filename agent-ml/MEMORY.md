@@ -239,3 +239,36 @@ This could apply to observation blending, transition model training, or post-pro
 
 ## Auth Note
 API uses cookie auth: `access_token` cookie. Bearer header returns "Missing token" in curl.
+
+## Session 6: 2026-03-20 21:37-21:55 UTC
+
+### Phase 1: R10 Improvement
+- Cached R8+R9 ground truth (were missing from local cache)
+- Retrained V2 model: 9 rounds, 72K cells, backtest avg 65.6 (was 64.5 with 7 rounds)
+- R9 backtest matches reality: 83.0 vs 82.6 actual
+- Resubmitted R10 with retrained model + all 5 seeds observed
+
+### Phase 2: Overnight Automation
+- Built overnight_runner.py: autonomous round handler
+- Deployed to GCP VM ml-churn (PID 8653, 5-min interval)
+- State file tracks submitted rounds and cached data
+
+### Incident: False Extinction Detection
+- VM started and tried to submit R10 as new round
+- Budget was 50/50 used, so observe_all_seeds tried to query but got 429
+- With 0 observations: survival=0%, detected "extinction", applied death calibration
+- Submitted very bad model-only + extinction predictions
+- FIXED: resubmitted from local with correct observations
+- FIXED: patched overnight_runner.py to check budget before attempting observations
+
+### Experiment 6: R10 resubmit with 9-round model
+**Date:** 2026-03-20 21:44 UTC
+**Round:** 10 (active, weight 1.6289)
+**Change:** Retrained V2 model with 9 rounds instead of 7
+**Hypothesis:** 2 extra rounds of training data should improve model accuracy
+**Score before:** pending (original v7 submission)
+**Score after:** pending
+**Kept/Reverted:** kept
+**Notes:** Backtest improved from 64.5 to 65.6 avg. R9 backtest 83.0 matches 82.6 actual.
+
+### Rules re-read at 2026-03-20T21:37:00Z. No violations found.
