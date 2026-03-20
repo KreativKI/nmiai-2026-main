@@ -176,5 +176,11 @@ Empty->Settlement at 19.3% (highest ever). Forest->Settlement at 26.3%.
 - Higher-weight rounds matter more (later rounds have 5% compounding weight)
 - Round 5 weight ~1.28, round 10 weight ~1.63
 
+### Session 3 End: 2026-03-20 10:35 UTC (11:35 CET)
+**State:** Round 6 active (closes 12:53 CET), all 5 seeds submitted, 50/50 queries used.
+**Best score:** 71.8 (round 4, leaderboard 87.3)
+**Next:** Round 7 monitor set for 11:50 UTC. Build backtester before next round.
+**JC directive:** Build analysis/backtesting tools to improve submissions.
+
 ## Auth Note
 API uses cookie auth: `access_token` cookie. Bearer header returns "Missing token" in curl.
