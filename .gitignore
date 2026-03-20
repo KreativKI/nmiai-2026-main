@@ -73,3 +73,11 @@ agent-*/submission/*.npz
 # Node (if dashboard is added)
 node_modules/
 .next/
+
+# Sensitive tokens and state files
+.astar_token
+**/state.json
+shared/tools/nlp_submission_log.json
+shared/tools/.ml_round_state.json
+shared/tools/.aggregate_status.json
+shared/tools/.leaderboard_snapshots/

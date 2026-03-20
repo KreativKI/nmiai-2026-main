@@ -228,7 +228,7 @@ echo "=== Done ==="
 
 Then create the token file:
 ```bash
-echo 'REDACTED_TOKEN' > /Volumes/devdrive/github_dev/nmiai-2026-main/.astar_token
+echo 'YOUR_JWT_TOKEN_HERE > /Volumes/devdrive/github_dev/nmiai-2026-main/.astar_token
 chmod 600 /Volumes/devdrive/github_dev/nmiai-2026-main/.astar_token
 echo '.astar_token' >> /Volumes/devdrive/github_dev/nmiai-2026-main/.gitignore
 ```
