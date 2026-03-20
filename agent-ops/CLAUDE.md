@@ -63,6 +63,7 @@ Review and improve tools used by other agents. Check the reusable tools archive,
 - NEVER make submissions directly or automate UI clicks on app.ainm.no
 - Commit after EVERY phase. Update status.json after every phase.
 - Drop shared tools in `shared/tools/` and notify agents via their intelligence folders
+- **Merge agent-ops into main after every batch of new tools.** Other branches need access. Do: `cd nmiai-2026-main && git merge agent-ops && git push origin main`
 
 ## Core Principle: Explore Before You Build
 We solve real problems that no existing solution covers yet. Before building anything:
