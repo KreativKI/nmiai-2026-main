@@ -120,6 +120,24 @@
 - Environment: ruins can be reclaimed by nearby settlements OR overgrown by forest
 - Key: settlement survival depends on food (adjacent forests!), defense, faction size
 
+### Settlement Analysis (all 3 completed rounds)
+- Adjacent settlements: almost always 0 (settlements are spaced apart at init)
+- Settlement survival varies MASSIVELY by round:
+  - Round 1: 41% survival, 37% -> empty
+  - Round 2: 41% survival, 38% -> empty
+  - Round 3: 1.8% survival, 68% -> empty (catastrophic winter?)
+- Historical average (28% survival) is USELESS for predicting any specific round
+- Only round-specific observations can capture this. THIS is why observations matter.
+- Ports: 21% stay port, 47% -> empty, 9% -> settlement
+- Forest adjacency has small effect (26% to 33% survival range)
+- The DOMINANT factor is the round's hidden parameters, not local features
+
+### Strategy Implication
+- The historical transition model should get VERY low weight (10% max)
+- Round-specific observations are the #1 priority
+- For unobserved seeds: use transition model from observed seeds (same hidden params)
+- Every query on dynamic cells is high-value
+
 ### Rules re-read at 2026-03-20T04:00:00Z. FOUND: scoring formula was wrong. Fixed in rules.md.
 
 ## Auth Note
