@@ -820,10 +820,10 @@ def main():
                         choices=["overview", "analyze", "stack", "secondary",
                                  "submit", "all", "post-round"])
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--max-stack", type=int, default=32,
-                        help="Max queries for stacking phase (default: 32 for 4 passes over 8 zones)")
-    parser.add_argument("--max-secondary", type=int, default=9,
-                        help="Max queries for secondary seeds (default: 9 = seed 1 full coverage)")
+    parser.add_argument("--max-stack", type=int, default=41,
+                        help="Max queries for stacking phase (default: 41, all remaining after overview)")
+    parser.add_argument("--max-secondary", type=int, default=0,
+                        help="Max queries for secondary seeds (default: 0, hindsight showed single-obs hurts)")
     args = parser.parse_args()
 
     session = get_session(args.token)

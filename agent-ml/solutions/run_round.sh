@@ -16,12 +16,12 @@ echo "=== Phase 2: Analyze ==="
 python3 solutions/astar_v6.py --token "$TOKEN" --phase analyze
 
 echo ""
-echo "=== Phase 3: Stack ==="
-python3 solutions/astar_v6.py --token "$TOKEN" --phase stack --max-stack 24
+echo "=== Phase 3: Adaptive Stack (all remaining queries on seed 0) ==="
+python3 solutions/astar_v6.py --token "$TOKEN" --phase stack --max-stack 41
 
 echo ""
-echo "=== Phase 4: Secondary ==="
-python3 solutions/astar_v6.py --token "$TOKEN" --phase secondary --max-secondary 17
+echo "=== Phase 4: Secondary (skip: hindsight showed single-obs hurts) ==="
+# python3 solutions/astar_v6.py --token "$TOKEN" --phase secondary --max-secondary 0
 
 echo ""
 echo "=== Phase 5: Submit ==="
