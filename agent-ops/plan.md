@@ -1,6 +1,6 @@
 # Operations Agent — Phased Plan
 
-## Current Phase: 5
+## Current Phase: 6
 
 ## Completed Work
 - Dashboard scaffold (React 19 + Vite + Tailwind v4, Convex stripped)
@@ -65,3 +65,28 @@ Tasks:
 - Write ops-sleep-report.md with all work done
 - Update status.json
 - Commit: "Phase 5: Sleep report"
+
+### Phase 6: QC Judge Tools (CRITICAL, blocking submissions) — Status: active
+
+**Why:** Wasted 2 of 3 CV submissions yesterday because we couldn't validate locally. JC blocked all submissions until QC judges exist.
+
+#### Tool A: shared/tools/cv_judge.py (BUILD FIRST)
+Score CV submissions exactly like the competition before uploading.
+- Convert YOLO labels to COCO format for holdout split (image_id % 5 == 0)
+- Unzip submission, run run.py against holdout images
+- Calculate detection mAP (all category_ids set to 0) and classification mAP (real category_ids)
+- Combined: 0.7 * detection + 0.3 * classification
+- Compare against previous results (shared/tools/cv_results.json)
+- Verdict: SUBMIT / SKIP / RISKY
+- Dependencies: pycocotools, numpy, json, zipfile, pathlib
+
+#### Tool B: shared/tools/ml_judge.py
+Validate + score ML predictions before submission.
+- Load predictions for all 5 seeds
+- Validate: shape 40x40x6, floors >= 0.01, normalization sums to ~1.0
+- If ground truth available: calculate per-seed KL divergence and predicted score
+- Score formula: max(0, min(100, 100 * exp(-3 * weighted_KL)))
+- Compare against previous rounds (shared/tools/ml_results.json)
+- Verdict: SUBMIT / SKIP / VALIDATION_ERROR
+
+Boris for each: Explore → Plan → Code → Review → Simplify → Validate → Commit
