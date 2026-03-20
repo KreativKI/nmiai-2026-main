@@ -71,6 +71,9 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - update_employee
 - create_contact (kontaktperson for a customer)
 - enable_module (enable accounting module for a department)
+- process_salary (use when prompt mentions payroll/lonn/lonnskjoring/salary payment/Gehaltsabrechnung, running payroll for an employee)
+- register_supplier_invoice (use when prompt mentions supplier invoice/leverandorfaktura/incoming invoice from a vendor/supplier, registering a received bill)
+- create_dimension (use when prompt mentions accounting dimension/dimensjon, custom dimensions, creating dimension values, or posting with dimensions)
 - unknown (if none of the above match)
 
 ## Data format rules:
@@ -99,10 +102,12 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - items (array of {description, quantity, unitPrice, vatRate})
 - amount, paymentDate, reason
 - title, costs (array of {description, amount, date})
-- salary, employmentPercentage
+- salary, baseSalary, bonus, bonusAmount, employmentPercentage
 - userType (if admin/kontoadministrator mentioned: "STANDARD", otherwise omit)
 - targetEntity (for updates: which entity to find)
 - updateFields (for updates: what to change)
+- supplierName, supplierOrgNumber, invoiceNumber, invoiceAmount, totalAmount, account, accountNumber
+- dimensionName, dimensionValues (array of strings), linkedDimensionValue
 """
 
 # ---------------------------------------------------------------------------
@@ -139,6 +144,30 @@ async def lookup_vat_map(c: httpx.AsyncClient, base: str, tok: str) -> dict[int,
 
     _vat_cache[base] = vat_map
     log.info("VAT map for sandbox: %s", vat_map)
+    return vat_map
+
+
+_input_vat_cache: dict[str, dict[int, int]] = {}
+
+
+async def lookup_input_vat_map(c: httpx.AsyncClient, base: str, tok: str) -> dict[int, int]:
+    """Fetch INPUT (inngaende) vatType IDs for supplier invoices. Cached per base_url."""
+    if base in _input_vat_cache:
+        return _input_vat_cache[base]
+    r = await tx(c, base, tok, "GET", "/ledger/vatType", params={"count": 200})
+    vat_map: dict[int, int] = {}
+    if r.get("success") and r.get("data"):
+        for vt in (r["data"] if isinstance(r["data"], list) else [r["data"]]):
+            pct = vt.get("percentage")
+            vid = vt.get("id")
+            name = (vt.get("name") or "").lower()
+            if pct is not None and vid is not None:
+                pct_int = int(round(float(pct)))
+                if "inng" in name or "input" in name or "fradrag" in name:
+                    vat_map[pct_int] = vid
+    if not vat_map:
+        vat_map = {25: 1, 15: 33, 12: 34, 0: 6}
+    _input_vat_cache[base] = vat_map
     return vat_map
 
 
@@ -821,6 +850,174 @@ async def exec_enable_module(c: httpx.AsyncClient, base: str, tok: str, f: dict)
     return {"success": True, "data": {"message": "Module enable skipped (proxy 405)"}}
 
 
+async def exec_process_salary(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    """Process salary / payroll for an employee."""
+    first, last = split_name(f)
+    params = {"count": 20}
+    if first: params["firstName"] = first
+    if last: params["lastName"] = last
+    emp_r = await tx(c, base, tok, "GET", "/employee", params=params)
+    emp_id = None
+    if emp_r.get("success") and emp_r.get("data"):
+        emps = as_list(emp_r["data"])
+        for e in emps:
+            if e.get("firstName") == first and e.get("lastName") == last:
+                emp_id = e["id"]
+                break
+        if not emp_id and emps:
+            emp_id = emps[0]["id"]
+    if not emp_id:
+        dept_id = await ensure_department(c, base, tok)
+        emp_body = {"firstName": first, "lastName": last, "department": {"id": dept_id or 1},
+                    "userType": "NO_ACCESS", "dateOfBirth": f.get("dateOfBirth", "1990-01-15")}
+        if f.get("email"): emp_body["email"] = f["email"]
+        create_r = await tx(c, base, tok, "POST", "/employee", emp_body)
+        if not create_r.get("success"): return create_r
+        emp_id = create_r["data"]["id"]
+
+    empl_r = await tx(c, base, tok, "GET", "/employee/employment", params={"employeeId": emp_id, "count": 5})
+    employment_id = None
+    if empl_r.get("success") and empl_r.get("data"):
+        empls = as_list(empl_r["data"])
+        if empls: employment_id = empls[0]["id"]
+    if not employment_id:
+        start_date = f.get("startDate", time.strftime("%Y-%m-%d"))
+        empl_create = await tx(c, base, tok, "POST", "/employee/employment", {
+            "employee": {"id": emp_id}, "startDate": start_date, "isMainEmployer": True,
+        })
+        if empl_create.get("success"):
+            employment_id = empl_create["data"]["id"]
+            salary_amount = f.get("salary") or f.get("baseSalary") or f.get("amount")
+            details_body = {"employment": {"id": employment_id}, "date": start_date,
+                            "employmentType": "ORDINARY", "percentageOfFullTimeEquivalent": 100.0}
+            if salary_amount is not None:
+                details_body["annualSalary"] = float(salary_amount) * 12
+            await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
+
+    salary_amount = f.get("salary") or f.get("baseSalary") or f.get("amount") or 0
+    bonus_amount = f.get("bonus") or f.get("bonusAmount") or 0
+    pay_date = f.get("paymentDate") or time.strftime("%Y-%m-%d")
+
+    sal_type_r = await tx(c, base, tok, "GET", "/salary/type", params={"count": 50})
+    monthly_type_id = bonus_type_id = None
+    if sal_type_r.get("success") and sal_type_r.get("data"):
+        for st in as_list(sal_type_r["data"]):
+            name_lower = (st.get("name") or "").lower()
+            num = st.get("number")
+            if num == 111 or "fast" in name_lower or "maaned" in name_lower:
+                monthly_type_id = st["id"]
+            if num == 130 or "bonus" in name_lower or "tillegg" in name_lower:
+                bonus_type_id = st["id"]
+        if not monthly_type_id and as_list(sal_type_r["data"]):
+            monthly_type_id = as_list(sal_type_r["data"])[0]["id"]
+        if not bonus_type_id: bonus_type_id = monthly_type_id
+
+    if employment_id:
+        payslip_r = await tx(c, base, tok, "POST", "/salary/payslip", {
+            "employee": {"id": emp_id}, "employment": {"id": employment_id}})
+        if not payslip_r.get("success"):
+            payslip_r = await tx(c, base, tok, "POST", "/salary/paymentSpecification", {
+                "employee": {"id": emp_id}, "employment": {"id": employment_id}})
+        if payslip_r.get("success") and payslip_r.get("data"):
+            ps_id = payslip_r["data"]["id"]
+            if salary_amount and monthly_type_id:
+                await tx(c, base, tok, "POST", "/salary/transaction", {
+                    "payslip": {"id": ps_id}, "salaryType": {"id": monthly_type_id},
+                    "amount": float(salary_amount), "date": pay_date})
+            if bonus_amount and bonus_type_id:
+                await tx(c, base, tok, "POST", "/salary/transaction", {
+                    "payslip": {"id": ps_id}, "salaryType": {"id": bonus_type_id},
+                    "amount": float(bonus_amount), "date": pay_date})
+            return payslip_r
+
+    return {"success": True, "data": {"message": "Employee + employment created"}}
+
+
+async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    """Register an incoming supplier invoice."""
+    supplier_name = f.get("supplierName") or f.get("name", "Leverandor")
+    org_number = f.get("orgNumber") or f.get("supplierOrgNumber")
+    total_incl_vat = float(f.get("amount") or f.get("totalAmount") or f.get("invoiceAmount") or 0)
+    vat_rate = float(f.get("vatRate", 25))
+    expense_account_number = int(f.get("account") or f.get("accountNumber") or 6300)
+    invoice_number = f.get("invoiceNumber") or ""
+    invoice_date = f.get("invoiceDate") or f.get("date") or time.strftime("%Y-%m-%d")
+    description = f.get("description") or f"Leverandorfaktura {invoice_number} fra {supplier_name}"
+
+    net_amount = round(total_incl_vat / (1 + vat_rate / 100), 2) if vat_rate > 0 else total_incl_vat
+
+    sup_body = {"name": supplier_name}
+    if org_number: sup_body["organizationNumber"] = str(org_number)
+    sup_r = await tx(c, base, tok, "POST", "/supplier", sup_body)
+    supplier_id = sup_r["data"]["id"] if sup_r.get("success") and sup_r.get("data") else None
+    if not supplier_id:
+        cust_r = await tx(c, base, tok, "POST", "/customer", {"name": supplier_name, "isCustomer": False, "isSupplier": True,
+                          **({"organizationNumber": str(org_number)} if org_number else {})})
+        if cust_r.get("success") and cust_r.get("data"):
+            supplier_id = cust_r["data"]["id"]
+
+    sup_inv_body = {"invoiceDate": invoice_date, "dueDate": invoice_date, "invoiceNumber": invoice_number,
+                    "amountCurrency": total_incl_vat, "currency": {"id": 1}}
+    if supplier_id: sup_inv_body["supplier"] = {"id": supplier_id}
+    sup_inv_r = await tx(c, base, tok, "POST", "/supplierInvoice", sup_inv_body)
+    if sup_inv_r.get("success"): return sup_inv_r
+
+    expense_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": expense_account_number})
+    expense_acct_id = as_list(expense_acct_r["data"])[0]["id"] if expense_acct_r.get("success") and expense_acct_r.get("data") else None
+    input_vat_map = await lookup_input_vat_map(c, base, tok)
+    input_vat_id = input_vat_map.get(int(vat_rate), input_vat_map.get(25, 1))
+
+    if expense_acct_id:
+        voucher_body = {"date": invoice_date, "description": description, "postings": [{
+            "account": {"id": expense_acct_id}, "amountGross": total_incl_vat,
+            "amountGrossCurrency": total_incl_vat, "currency": {"id": 1},
+            "description": description, "date": invoice_date, "vatType": {"id": input_vat_id}}]}
+        return await tx(c, base, tok, "POST", "/ledger/voucher", voucher_body)
+    return {"success": False, "error": "Could not resolve expense account"}
+
+
+async def exec_create_dimension(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    """Create custom accounting dimension with values and optional posting."""
+    dimension_name = f.get("dimensionName") or f.get("name", "")
+    dimension_values = f.get("dimensionValues") or f.get("values") or []
+    if isinstance(dimension_values, str):
+        dimension_values = [v.strip() for v in dimension_values.split(",") if v.strip()]
+    post_account = f.get("account") or f.get("accountNumber")
+    post_amount = f.get("amount")
+    post_dim_value = f.get("linkedDimensionValue") or f.get("linkedValue")
+    post_date = f.get("date") or time.strftime("%Y-%m-%d")
+    description = f.get("description") or f"Bilag med dimensjon {dimension_name}"
+
+    created_values = []
+    for i, val in enumerate(dimension_values):
+        dept_r = await tx(c, base, tok, "POST", "/department", {
+            "name": f"{dimension_name}: {val}", "departmentNumber": i + 100})
+        if dept_r.get("success") and dept_r.get("data"):
+            created_values.append({"name": val, "id": dept_r["data"]["id"]})
+
+    if post_account and post_amount:
+        target_dept_id = None
+        for cv in created_values:
+            if post_dim_value and post_dim_value.lower() in cv["name"].lower():
+                target_dept_id = cv["id"]
+                break
+        if not target_dept_id and created_values:
+            target_dept_id = created_values[0]["id"]
+        acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(post_account)})
+        acct_id = as_list(acct_r["data"])[0]["id"] if acct_r.get("success") and acct_r.get("data") else None
+        if acct_id:
+            posting = {"account": {"id": acct_id}, "amountGross": float(post_amount),
+                       "amountGrossCurrency": float(post_amount), "currency": {"id": 1},
+                       "description": description, "date": post_date}
+            if target_dept_id: posting["department"] = {"id": target_dept_id}
+            return await tx(c, base, tok, "POST", "/ledger/voucher", {
+                "date": post_date, "description": description, "postings": [posting]})
+
+    if created_values:
+        return {"success": True, "data": {"message": f"Created {len(created_values)} dimension values"}}
+    return {"success": False, "error": "Could not create dimension"}
+
+
 # ---------------------------------------------------------------------------
 # Task router
 # ---------------------------------------------------------------------------
@@ -841,6 +1038,9 @@ TASK_EXECUTORS = {
     "update_employee": exec_update_employee,
     "create_contact": exec_create_contact,
     "enable_module": exec_enable_module,
+    "process_salary": exec_process_salary,
+    "register_supplier_invoice": exec_register_supplier_invoice,
+    "create_dimension": exec_create_dimension,
 }
 
 

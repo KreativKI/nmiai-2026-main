@@ -16,25 +16,25 @@
 | 4/8 task (from auto-submit) | 4/8 | 50% | From session 5 |
 | ~25 task types | 0 | 0% | Never attempted |
 
-## Current Phase: Iteration Loop (ACTIVE)
+## Current Phase: Parallel Iteration (ACTIVE)
 
-### The Loop
+### Two tracks running simultaneously:
 
+**Track A: Submit + Fix (me)**
 ```
-SUBMIT (10 runs, auto-submitter)
-    |
-    v
-ANALYZE (score breakdown, Cloud Run logs, group by perfect/partial/broken)
-    |
-    v
-FIX (biggest point gaps first, deploy, syntax check)
-    |
-    v
-SMOKE TEST (health check, 10 sec)
-    |
-    v
-[repeat]
+SUBMIT 10 → ANALYZE logs → FIX field misses → DEPLOY → repeat
 ```
+
+**Track B: Build missing executors (subagent in worktree)**
+- Salary/payroll processing
+- Supplier invoice registration
+- Custom accounting dimensions
+- When done: I review, merge, deploy, submit
+
+### Submission budget
+- 300/day, resets 01:00 CET
+- Used today: 68 of 300
+- Remaining: 232
 
 ### Submission rules
 - Small runs (up to 10): I decide, just do it
