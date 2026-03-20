@@ -1,13 +1,13 @@
-"""Tab 0: Dashboard - at-a-glance overview."""
+"""Tab 0: Dashboard - at-a-glance overview with track cards and mini leaderboard."""
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, Container
 from textual.widgets import Static, Label
-from textual.reactive import reactive
 
 from data import (
     time_remaining, format_countdown, load_leaderboard, find_our_team,
     load_all_agent_statuses, load_nlp_submissions, load_cv_results,
+    load_agent_context,
 )
 
 
@@ -15,77 +15,93 @@ class DeadlineCard(Static):
     """Countdown timers to key deadlines."""
 
     def compose(self) -> ComposeResult:
-        yield Label("DEADLINE", classes="card-title")
+        yield Label("[bold]DEADLINES[/]", classes="card-title")
         yield Static(id="deadline-content")
 
     def refresh_data(self) -> None:
         tr = time_remaining()
         content = self.query_one("#deadline-content", Static)
+        freeze = tr["freeze"]
+        end = tr["end"]
+
+        # Color based on urgency
+        freeze_color = "red" if freeze < 3600 else "yellow" if freeze < 7200 else "green"
+        end_color = "red" if end < 7200 else "yellow" if end < 14400 else "green"
+
         content.update(
-            f"FREEZE: {format_countdown(tr['freeze'])}\n"
-            f"END:    {format_countdown(tr['end'])}\n"
+            f"  FREEZE: [{freeze_color}]{format_countdown(freeze)}[/]\n"
+            f"  END:    [{end_color}]{format_countdown(end)}[/]\n"
+            f"  CUT-LOSS: {format_countdown(tr['cutloss'])}\n"
             f"\n"
-            f"[dim]Cut-loss: {format_countdown(tr['cutloss'])}[/]"
+            f"  [dim]Freeze = no new features\n"
+            f"  End = competition closes[/]"
         )
 
 
 class TrackCard(Static):
-    """Status card for a single track."""
+    """Status card for a single track with score + agent state."""
 
-    def __init__(self, track: str, emoji: str, **kwargs) -> None:
+    TRACK_META = {
+        "ml": ("ML - Astar Island", "agent-ml", "cyan"),
+        "cv": ("CV - NorgesGruppen", "agent-cv", "yellow"),
+        "nlp": ("NLP - Tripletex", "agent-nlp", "green"),
+    }
+
+    def __init__(self, track: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self.track = track
-        self.emoji = emoji
 
     def compose(self) -> ComposeResult:
-        yield Label(f"{self.emoji} {self.track.upper()}", classes="card-title")
+        label, _, color = self.TRACK_META.get(self.track, (self.track, "", "white"))
+        yield Label(f"[{color}]{label}[/]", classes="card-title")
         yield Static(id=f"track-{self.track}")
 
     def refresh_data(self) -> None:
         widget = self.query_one(f"#track-{self.track}", Static)
-        statuses = load_all_agent_statuses()
+        _, agent_id, _ = self.TRACK_META.get(self.track, ("", "", ""))
+        lb = load_leaderboard()
+        us = find_our_team(lb)
+        ctx = load_agent_context(agent_id) if agent_id else {}
+
+        # Find best team score in this track for comparison
+        track_key = {"ml": "astar_island", "cv": "norgesgruppen", "nlp": "tripletex"}.get(self.track, "")
+        our_score = float(us.get(track_key, 0) or 0) if us else 0.0
+        best_score = max((float(r.get(track_key, 0) or 0) for r in lb), default=0)
+
+        state = ctx.get("state", "?")
+        state_color = {"active": "green", "idle": "yellow", "waiting": "blue"}.get(state, "red")
+
+        lines = [
+            f"  Score: [bold]{our_score:.1f}[/]  [dim](#1: {best_score:.1f})[/]",
+            f"  Agent: [{state_color}]{state.upper()}[/]",
+        ]
 
         if self.track == "ml":
-            s = statuses.get("agent-ml", {})
-            score = s.get("best_submitted_score", 0)
-            phase = s.get("phase", "unknown")
-            widget.update(
-                f"Score: {score or '--'}\n"
-                f"Phase: {phase}\n"
-                f"Rounds: {s.get('submissions_count', 0)}\n"
-                f"Obs: 0/50"
-            )
+            lines.append(f"  Doing: {ctx.get('what', '--')[:35]}")
         elif self.track == "cv":
-            s = statuses.get("agent-cv", {})
             results = load_cv_results()
-            best = max((r.get("combined_score", 0) for r in results), default=0)
-            subs = s.get("submissions_count", 0)
-            widget.update(
-                f"Best mAP: {best:.3f}\n"
-                f"Subs: {subs}/10\n"
-                f"Phase: {s.get('phase', 'unknown')}\n"
-                f"Approach: {s.get('approach', '--')[:20]}"
-            )
+            best_map = max((r.get("combined_score", 0) for r in results), default=0)
+            cv_status = load_all_agent_statuses().get("agent-cv", {})
+            subs = cv_status.get("submissions_count", 0)
+            lines.append(f"  Local mAP: {best_map:.3f}")
+            lines.append(f"  Subs: {subs}/10")
         elif self.track == "nlp":
-            s = statuses.get("agent-nlp", {})
-            lb = load_leaderboard()
-            us = find_our_team(lb)
-            nlp_subs = load_nlp_submissions()
-            nlp_score = us.get("tripletex", 0) if us else 0
-            rank = us.get("rank", "?") if us else "?"
-            widget.update(
-                f"Score: {nlp_score}  #{rank}\n"
-                f"Subs: {len(nlp_subs)}/300\n"
-                f"Phase: {s.get('phase', 'unknown')}\n"
-                f"Endpoint: {s.get('endpoint', 'N/A')[:30]}"
-            )
+            subs = load_nlp_submissions()
+            lines.append(f"  Subs: {len(subs)}/300")
+            if ctx.get("endpoint"):
+                lines.append(f"  Bot: [green]DEPLOYED[/]")
+
+        # What's happening now
+        lines.append(f"  [dim]{ctx.get('notes', '')[:45]}[/]")
+
+        widget.update("\n".join(lines))
 
 
 class MiniLeaderboard(Static):
-    """Top 10 leaderboard summary."""
+    """Top 10 leaderboard with our position highlighted."""
 
     def compose(self) -> ComposeResult:
-        yield Label("LEADERBOARD", classes="card-title")
+        yield Label("[bold]LEADERBOARD[/]", classes="card-title")
         yield Static(id="mini-lb")
 
     def refresh_data(self) -> None:
@@ -93,20 +109,33 @@ class MiniLeaderboard(Static):
         us = find_our_team(lb)
         widget = self.query_one("#mini-lb", Static)
 
-        lines = []
+        lines = [" [dim] #  Team                 Tripletex  Astar  NorgesGr  Total[/]"]
         for row in lb[:10]:
             team = row.get("team", "?")[:18]
-            total = row.get("total", 0)
+            total = float(row.get("total", 0) or 0)
+            nlp = float(row.get("tripletex", 0) or 0)
+            ml = float(row.get("astar_island", 0) or 0)
+            cv = float(row.get("norgesgruppen", 0) or 0)
             rank = row.get("rank", "?")
-            marker = " [bold cyan]<[/]" if "kreativ" in team.lower() else ""
-            lines.append(f" {rank:>3}. {team:<18} {total:>7.2f}{marker}")
+            is_us = "kreativ" in team.lower()
+            row_text = f" {rank:>3}. {team:<18} {nlp:>8.1f} {ml:>7.1f} {cv:>8.1f} {total:>7.1f}"
+            if is_us:
+                lines.append(f" [bold cyan]{row_text}[/] [bold cyan]<[/]")
+            else:
+                lines.append(row_text
+            )
 
         if us and isinstance(us.get("rank"), int) and us["rank"] > 10:
-            lines.append(" ...")
-            rank = us.get("rank", "?")
+            lines.append(" [dim]...[/]")
+            rank = us["rank"]
             team = us.get("team", "?")[:18]
-            total = us.get("total", 0)
-            lines.append(f" {rank:>3}. {team:<18} {total:>7.2f} [bold cyan]<[/]")
+            total = float(us.get("total", 0) or 0)
+            nlp = float(us.get("tripletex", 0) or 0)
+            ml = float(us.get("astar_island", 0) or 0)
+            cv = float(us.get("norgesgruppen", 0) or 0)
+            lines.append(
+                f" [bold cyan]{rank:>3}. {team:<18} {nlp:>8.1f} {ml:>7.1f} {cv:>8.1f} {total:>7.1f}[/] [bold cyan]<[/]"
+            )
 
         widget.update("\n".join(lines) if lines else "[dim]No data[/]")
 
@@ -117,9 +146,9 @@ class DashboardView(Container):
     def compose(self) -> ComposeResult:
         with Horizontal(classes="dashboard-top"):
             yield DeadlineCard(classes="card")
-            yield TrackCard("ml", "Mountain", classes="card")
-            yield TrackCard("cv", "Box", classes="card")
-            yield TrackCard("nlp", "Note", classes="card")
+            yield TrackCard("ml", classes="card")
+            yield TrackCard("cv", classes="card")
+            yield TrackCard("nlp", classes="card")
         yield MiniLeaderboard(classes="card wide-card")
 
     def refresh_data(self) -> None:

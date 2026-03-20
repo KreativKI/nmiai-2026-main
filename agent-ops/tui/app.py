@@ -141,14 +141,27 @@ class CompetitionTUI(App):
             tr = time_remaining()
             lb = load_leaderboard()
             us = find_our_team(lb)
+            total_teams = len(lb)
             rank = us.get("rank", "?") if us else "?"
             score = float(us.get("total", 0) or 0) if us else 0.0
             nlp_score = float(us.get("tripletex", 0) or 0) if us else 0.0
             ml_score = float(us.get("astar_island", 0) or 0) if us else 0.0
+            cv_score = float(us.get("norgesgruppen", 0) or 0) if us else 0.0
+
+            # Find #1 team for comparison
+            top = lb[0] if lb else {}
+            top_score = float(top.get("total", 0) or 0)
+            top_name = top.get("team", "?")[:12]
+            gap = top_score - score
+
             bar.update(
-                f" #{rank} | Total {score:.1f} | ML {ml_score:.1f} | NLP {nlp_score:.1f} | "
-                f"FREEZE {format_countdown(tr['freeze'])} | END {format_countdown(tr['end'])} | "
-                f"[r]efresh [0-9]tabs [q]uit"
+                f" [bold]#{rank}/{total_teams}[/] "
+                f"Total [bold]{score:.1f}[/] "
+                f"(ML:{ml_score:.1f} NLP:{nlp_score:.1f} CV:{cv_score:.1f}) "
+                f"| #1 {top_name} {top_score:.1f} [dim](gap:{gap:.1f})[/] "
+                f"| FREEZE {format_countdown(tr['freeze'])} "
+                f"| END {format_countdown(tr['end'])} "
+                f"| [dim][0-9]tabs [r]efresh [q]uit[/]"
             )
         except Exception:
             pass

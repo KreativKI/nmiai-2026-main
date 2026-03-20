@@ -148,6 +148,75 @@ def load_cv_training_log() -> list[dict]:
     return data if isinstance(data, list) else []
 
 
+def _strip_md(text: str) -> str:
+    """Strip markdown formatting that breaks Rich markup."""
+    return text.replace("**", "").replace("*", "").replace("`", "").replace("[", "(").replace("]", ")").replace("→", "->")
+
+
+def load_agent_context(agent: str) -> dict:
+    """Parse agent's plan.md + status.json into what/why/next summary.
+
+    Returns dict with keys: what, why, next_step, approach, score, phase.
+    """
+    status = load_agent_status(agent)
+    plan_path = REPO_ROOT / agent / "plan.md"
+
+    result = {
+        "what": status.get("phase", "--"),
+        "why": "",
+        "next_step": "",
+        "approach": status.get("approach", "--"),
+        "score": status.get("best_submitted_score", 0),
+        "phase": status.get("phase", "--"),
+        "state": status.get("state", "unknown"),
+        "confidence": status.get("confidence", 0),
+        "notes": _strip_md(status.get("notes", "")),
+        "endpoint": status.get("endpoint", ""),
+        "timestamp": status.get("timestamp", ""),
+    }
+
+    # Parse plan.md for current approach description
+    try:
+        plan_text = plan_path.read_text()
+        lines = plan_text.split("\n")
+
+        # Find "## Approach A (Primary)" section for the WHY
+        for i, line in enumerate(lines):
+            if "Primary" in line and "Approach" in line:
+                # Next line with "**Why" has the reasoning
+                for j in range(i + 1, min(i + 5, len(lines))):
+                    if "Why" in lines[j]:
+                        result["why"] = _strip_md(lines[j]).strip(": ")
+                        break
+                    elif lines[j].strip() and not lines[j].startswith("#"):
+                        if not result["why"]:
+                            result["why"] = _strip_md(lines[j]).strip()
+                break
+
+        # Find current phase status for next_step
+        for i, line in enumerate(lines):
+            if "Status:" in line and "current" in line.lower():
+                result["next_step"] = line.split("Status:")[-1].strip()
+                break
+
+    except (FileNotFoundError, OSError):
+        pass
+
+    # Enrich "what" based on agent type
+    if agent == "agent-cv":
+        result["what"] = f"{status.get('phase', 'unknown')}: {status.get('approach', '')[:30]}"
+    elif agent == "agent-nlp":
+        ep = status.get("endpoint", "")
+        if ep:
+            result["what"] = f"Bot deployed at Cloud Run"
+        else:
+            result["what"] = status.get("phase", "unknown")
+    elif agent == "agent-ml":
+        result["what"] = status.get("phase", "waiting for round")
+
+    return result
+
+
 def load_intelligence_messages() -> list[dict]:
     """Scan intelligence folders for messages."""
     messages = []
