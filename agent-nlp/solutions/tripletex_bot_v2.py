@@ -110,8 +110,8 @@ Common vatType IDs: check with GET /ledger/vatType.
 ### POST /ledger/account
 Create a ledger account. Use this to register a company bank account (required before invoicing).
 For bank accounts: name, number (use 1920), isBankAccount (true),
-bankAccountNumber (11-digit Norwegian bank account, e.g. "15064402172"),
-bankAccountCountry {id} (Norway = 161).
+bankAccountNumber (11-digit Norwegian bank account, e.g. "19201234568"),
+bankAccountCountry {id} (Norway = 161), currency {id} (NOK = 1, REQUIRED for bank accounts).
 
 ### POST /department
 Create department. Fields: name, departmentNumber, departmentManager {id}.
@@ -137,19 +137,28 @@ Create order line. Fields: order {id}, product {id}, description,
 count (number), unitPriceExcludingVatCurrency (number), vatType {id}.
 
 ### POST /project
-Create project. Fields: name, number, description, projectManager {id},
-department {id}, startDate, endDate, customer {id},
-isInternal (bool), isFixedPrice (bool), projectCategory {id}.
+Create project. REQUIRED: name, projectManager {id}, isInternal (bool), startDate (YYYY-MM-DD).
+The projectManager must be an employee with userType STANDARD or EXTENDED (NOT NO_ACCESS).
+So: create department first, then create employee with userType STANDARD, then create project with that employee as projectManager.
+Other fields: number, description, department {id}, endDate, customer {id},
+isFixedPrice (bool), projectCategory {id}.
 
 ### POST /travelExpense
-Create travel expense. Fields: employee {id}, project {id},
-department {id}, title, isChargeable, travelAdvance,
-perDiemCompensations [...], costs [...].
+Create travel expense. REQUIRED: employee {id}.
+Fields: employee {id}, project {id}, department {id}, title (string, short description),
+isChargeable (bool), travelAdvance (number).
+You can include costs inline as an array: costs [{paymentType {id}, amountCurrencyIncVat (number), currency {id}, costCategory {id}, vatType {id}, date (YYYY-MM-DD), comments (string)}].
+NOTE: paymentType MUST be {id: <int>}. Look up valid IDs with GET /travelExpense/paymentType.
+NOTE: Use "comments" for cost descriptions, NOT "description" (that field does not exist).
 
 ### POST /travelExpense/cost
 Create travel expense cost. Fields: travelExpense {id}, vatType {id},
-currency {id}, costCategory {id}, paymentType, date, count, rate,
-amountCurrencyIncVat, amountNOKInclVAT, description, isChargeable.
+currency {id}, costCategory {id}, paymentType {id} (MUST be object with id, NOT a string),
+date (YYYY-MM-DD), amountCurrencyIncVat (number, REQUIRED),
+comments (string, NOT "description"), isChargeable (bool).
+
+### GET /travelExpense/paymentType
+List payment types for travel expenses. Returns [{id, description}]. Use the id in paymentType {id} fields.
 
 ### PUT /invoice/{id}/:payment
 Register payment on invoice. Parameters: id (invoice id),
@@ -257,9 +266,11 @@ You receive accounting task prompts in 7 languages (Norwegian Bokmal, Nynorsk, E
 
 ## MANDATORY DEFAULTS (always include these fields)
 - POST /customer: ALWAYS include "isCustomer": true. Without this, the entity is NOT a customer.
-- POST /employee: ALWAYS include "department": {{"id": X}} and "userType": "NO_ACCESS" (unless prompt specifies a role).
+- POST /employee: ALWAYS include "department": {{"id": X}} and "userType": "NO_ACCESS" (unless prompt specifies a role). If userType is "STANDARD" or "EXTENDED", an "email" field is REQUIRED (use a placeholder like "employee@company.no" if none given).
 - POST /order and inline orders: ALWAYS include "deliveryDate". Use orderDate or invoiceDate if not specified.
 - If the prompt says the person should be an administrator/kontoadministrator, set userType to "STANDARD" or "EXTENDED" (not "NO_ACCESS").
+- POST /project: ALWAYS include "projectManager": {{"id": X}}, "isInternal": true (unless external), "startDate": today's date if not specified. The prerequisite employee MUST be created with userType "STANDARD" (NOT "NO_ACCESS"). This overrides the default NO_ACCESS rule for employees when creating a project manager.
+- POST /travelExpense costs: paymentType MUST be {{"id": X}} (integer ID, NOT a string). Look up IDs with GET /travelExpense/paymentType first. Use "comments" for descriptions, NOT "description".
 
 ## Critical Rules
 - NEVER guess IDs for referenced entities. Look them up first if needed.
@@ -272,12 +283,14 @@ You receive accounting task prompts in 7 languages (Norwegian Bokmal, Nynorsk, E
 - The API uses Basic Auth. This is handled automatically.
 - IMPORTANT: Employee creation REQUIRES department {{id}} and userType. Always create department first if needed.
 - IMPORTANT: When creating orders (standalone or inline with invoices), deliveryDate is REQUIRED. Use the order date or invoice date if no delivery date is specified.
-- IMPORTANT: The sandbox is FRESH and EMPTY with NO business data. NEVER use GET to search for customers, employees, products, or other business entities. They DO NOT EXIST. Always CREATE them with POST first.
-- The ONLY valid GET calls are for reference/system data: GET /ledger/vatType, GET /currency, GET /country, GET /division, GET /product/unit.
+- IMPORTANT: The sandbox is FRESH and EMPTY with NO business data. For CREATE tasks, do NOT search first. Just CREATE directly with POST.
+- EXCEPTION: For DELETE, UPDATE, or CORRECTION tasks that reference an existing entity by name, you MUST use GET to find the entity's ID first, then DELETE/PUT it. This is the only case where GET for business entities is valid.
+- For reference/system data lookups: GET /ledger/vatType, GET /currency, GET /country, GET /division, GET /product/unit, GET /travelExpense/paymentType, GET /travelExpense/costCategory.
 - If the prompt mentions employment details (job title, salary, start date), create the employee first, then create employment and employment details as separate calls.
 - For invoicing, follow this EXACT sequence:
   1. Create customer (POST /customer with isCustomer: true)
-  2. Register company bank account (POST /ledger/account with name: "Bankkonto", isBankAccount: true, number: 1920, bankAccountNumber: "15064402172", bankAccountCountry: {{"id": 161}})
+  2. Register company bank account: POST /ledger/account with EXACTLY this JSON body (copy verbatim, do NOT change the bank account number):
+     {{"name": "Bankkonto", "number": 1920, "isBankAccount": true, "bankAccountNumber": "19201234568", "bankAccountCountry": {{"id": 161}}, "currency": {{"id": 1}}}}
   3. Look up vatType IDs (GET /ledger/vatType) once
   4. Create invoice with inline orders and orderLines (POST /invoice)
   The bank account step is REQUIRED or invoice creation will fail with 422.

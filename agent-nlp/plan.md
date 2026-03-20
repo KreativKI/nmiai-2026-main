@@ -1,74 +1,70 @@
-# Tripletex AI Accounting Agent — Plan
+# Tripletex AI Accounting Agent -- Execution Plan
 
-**Track:** NLP | **Task:** AI Accounting Agent | **Weight:** 33.33%
-**Last updated:** 2026-03-19 22:55 CET
+**Track:** NLP | **Weight:** 33.33% | **Current Score:** 8/8 on create_customer
+**Last updated:** 2026-03-20 04:30 CET
+**Approach:** A (LLM Agent with Gemini 2.5 Flash + generic Tripletex tool)
+**Bot version:** tripletex_bot_v2.py deployed to Cloud Run
 
-## The Problem
-Build an HTTPS endpoint that receives accounting task prompts (7 languages, some with PDF/image attachments), interprets them, and executes the correct Tripletex API calls. 30 task types, 56 variants each. Scored field-by-field + efficiency bonus on perfect scores.
+## Phase 1: Audit All 30 Task Types (current)
 
-## What's new in 2026 that matters here
+**Goal:** Test every task category against live endpoint using sandbox credentials. Identify which task types work, which fail, and what's missing in the system prompt.
 
-### Tool-use / Function-calling Models
-- Claude 4, GPT-5, Gemini 2.5 all have native function-calling
-- **Don't build a prompt parser + API mapper separately** — give the LLM the Tripletex API schema as tools and let it call them directly
-- This is an agentic tool-use problem, not a traditional NLP pipeline
+**Method:** Send representative test prompts to the Cloud Run endpoint using sandbox credentials. Check logs for API calls, errors, and completion status.
 
-### MCP Integration
-- Competition provides MCP docs server: `claude mcp add --transport http nmiai https://mcp-docs.ainm.no/mcp`
-- The agent can query docs in real-time during development
+**Test categories (7 categories, ~30 types):**
 
-## Approach A (Primary): LLM Agent with Tripletex Tools
+| Category | Test prompts to write | Priority |
+|----------|----------------------|----------|
+| A. Employees | create, update, set role, employment details, delete | HIGH (Tier 1) |
+| B. Customers & Products | create customer, create product, update | HIGH (Tier 1) |
+| C. Invoicing | create invoice, payment, credit note | HIGH (Tier 1-2) |
+| D. Travel Expenses | create, add costs, delete | MEDIUM (Tier 2) |
+| E. Projects | create, link to customer | MEDIUM (Tier 1-2) |
+| F. Corrections | delete entries, reverse invoice | MEDIUM (Tier 2) |
+| G. Departments & Modules | create dept, enable module | HIGH (Tier 1) |
 
-1. **Architecture:** FastAPI endpoint → LLM (Gemini 2.5 Flash or Claude Haiku for speed/cost) → Tripletex API calls
-2. **Tool definitions:** Map Tripletex API endpoints as function-calling tools with typed parameters
-3. **Prompt:** System prompt with accounting context + Norwegian conventions. User message = task prompt.
-4. **Attachments:** Use multimodal LLM (Gemini) for PDF/image processing — extract data directly
-5. **Verification loop:** After executing, query back created resources to verify correctness
-6. **Deploy:** GCP Cloud Run (free with competition account) or ngrok tunnel
-7. **Time:** 4-6 hours
-8. **Expected:** 3.0-5.0 (out of 6.0)
+**Expected output:** Test results matrix showing pass/fail per task type, with failure analysis.
 
-## Approach B (Fallback): Keyword Router + Hardcoded Flows
+**Commit after:** Yes, commit test results to MEMORY.md + any prompt fixes found.
 
-1. Detect task type from keywords (create employee, create invoice, etc.)
-2. Extract field values with regex + LLM
-3. Execute hardcoded API call sequence per task type
-4. Cover top 10 task types in Norwegian + English
-5. **Time:** 2-3 hours
-6. **Expected:** 1.5-2.5
+## Phase 2: Fix Failures from Phase 1
 
-## Approach C (Baseline — SHIP FIRST): Top 5 Tasks Only
+**Goal:** Update system prompt to handle all failing task types. Focus on Tier 1 tasks first (highest priority, available now).
 
-1. Implement only: Create Employee, Create Customer, Create Product, Create Invoice, Delete Employee
-2. Simple pattern matching
-3. Norwegian + English only
-4. **Time:** 1-2 hours
-5. **Expected:** 0.5-1.5
+**Method:** For each failure, identify the root cause (missing API endpoint in reference, wrong field names, missing prerequisites) and add targeted guidance to the system prompt.
 
-## Tier Strategy
-- **Tier 1 (now):** Foundation tasks — get these perfect for guaranteed base score
-- **Tier 2 (Friday):** Multi-step workflows — expand agent capabilities
-- **Tier 3 (Saturday):** Complex scenarios — push for high multipliers (up to 6.0)
+**Boris per fix:** EXPLORE(failure analysis) -> PLAN(what to change) -> CODE(edit prompt) -> REVIEW(code-reviewer) -> VALIDATE(build-validator + retest) -> COMMIT
 
-## Efficiency Optimization (applies ONLY to perfect scores)
-- Minimize API calls — plan before calling
-- Zero 4xx errors — validate inputs before sending
-- Don't fetch entities you just created (you have the ID from POST response)
-- Efficiency benchmarks recalculated every 12h — the bar rises as teams improve
+**Commit after:** Yes, one commit per category of fixes.
 
-## Norwegian Accounting Gotchas
-- Comma as decimal separator (1.000,50 = 1000.50)
-- Date format: DD.MM.YYYY
-- VAT rates: 25% (standard), 15% (food), 12% (transport), 0% (exempt)
-- Nynorsk ≠ Bokmål — different vocabularies for same concepts
+## Phase 3: Deploy and Verify Fixes
 
-## Deployment
-- **Option 1:** GCP Cloud Run (recommended — free, HTTPS, auto-scaling)
-- **Option 2:** FastAPI + ngrok (faster setup, less reliable)
-- **Option 3:** FastAPI + Cloudflare Tunnel (middle ground)
+**Goal:** Deploy updated bot, retest failed task types, confirm fixes work.
 
-## Submission Strategy
-- Rate limit: 5 per task per day (verified), 2 (unverified)
-- Each submission gets a RANDOM task type — can't control which one
-- Weighted toward tasks attempted less often
-- **Strategy:** Submit frequently to cover all 30 task types over time
+**Method:** Redeploy to Cloud Run, rerun failing test prompts, verify passing.
+
+**Commit after:** Yes, with test results.
+
+## Phase 4: Efficiency Optimization (after Phase 3)
+
+**Goal:** For task types that score perfectly, reduce API calls and eliminate 4xx errors.
+
+**Method:** Analyze logs for unnecessary GET calls, redundant lookups, and wasted API calls. Update system prompt to be more directive about minimum-call strategies.
+
+**Commit after:** Yes.
+
+## Phase 5: Tier 2 Preparation (Friday)
+
+**Goal:** When Tier 2 opens, handle multi-step workflows: invoicing with payment, credit notes, travel expenses, employment details.
+
+**Method:** Expand API reference and system prompt with multi-step workflow guidance.
+
+## Phase 6: Tier 3 Preparation (Saturday)
+
+**Goal:** Handle complex scenarios: bank reconciliation, ledger corrections, year-end closing.
+
+## Sandbox Credentials (for local testing)
+
+- Base URL: https://kkpqfuj-amager.tripletex.dev/v2
+- Session token: from .env file
+- Note: sandbox is PERSISTENT (data accumulates), unlike competition (fresh each time)
