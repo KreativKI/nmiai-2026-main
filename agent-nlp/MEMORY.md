@@ -114,3 +114,52 @@ Rules re-read at 2026-03-20T04:00:00Z. No violations found.
 - Project REQUIRES: projectManager (employee with STANDARD access + email), isInternal, startDate
 - DELETE tasks need GET to find entity ID first (exception to "never GET" rule)
 - PUT /company/modules returns 405 Method Not Allowed via proxy
+
+## Session 4: 2026-03-20 07:00-13:30 CET
+
+Rules re-read at 2026-03-20T07:00:00Z. No violations found.
+
+### Experiment 5: Local Docker + QC infrastructure
+**Date:** 2026-03-20T07:00:00Z
+**Change:** Built OrbStack-based local testing pipeline + QC verification script
+**Notes:** QC script sends test prompts then queries sandbox API to verify field-level correctness. Catches issues like missing isCustomer that simple HTTP 200 checks miss.
+
+### Experiment 6: Invoice fix (PUT account 1920, not POST)
+**Date:** 2026-03-20T08:00:00Z
+**Change:** Account 1920 already exists in every sandbox. Changed from POST (fails) to GET id + PUT to set bankAccountNumber.
+**Score before:** 0 on invoicing
+**Score after:** QC PASS (31250 NOK correct amount)
+
+### Experiment 7: Project fix (use whoAmI admin as PM)
+**Date:** 2026-03-20T08:30:00Z
+**Change:** New employees lack project manager access. Use sandbox admin from GET /token/session/>whoAmI instead.
+**Score after:** QC PASS (2 calls, 0 errors)
+
+### Experiment 8: Payment fix (GET /invoice/paymentType, not /ledger/paymentTypeOut)
+**Date:** 2026-03-20T11:00:00Z
+**Change:** Invoice payments need INCOMING payment types (/invoice/paymentType), not outgoing (/ledger/paymentTypeOut).
+**Score before:** 2/7 (29%) in competition
+**Score after:** QC PASS (payment registered, no outstanding amount)
+
+### Experiment 9: Gemini MALFORMED_FUNCTION_CALL permanent fixes
+**Date:** 2026-03-20T12:30:00Z
+**Change:** Added JSON escaping guidance to system prompt, temperature=0, MAX_AGENT_TURNS=25
+**Notes:** Research showed these reduce error rate from ~15% to ~2%. Retry logic on MALFORMED/UNEXPECTED catches remaining cases.
+
+### Key Findings Session 4
+- Account 1920 "Bankinnskudd" EXISTS in every sandbox but has no bank number. PUT to set it, don't POST.
+- Project manager: use sandbox admin (GET /token/session/>whoAmI), don't create new employee
+- Invoice payment: GET /invoice/paymentType (incoming), NOT /ledger/paymentTypeOut (outgoing)
+- Payment tasks: customer + invoice ALREADY EXIST in sandbox. Search for them, don't create duplicates.
+- GET /invoice REQUIRES invoiceDateFrom + invoiceDateTo params
+- Gemini MALFORMED_FUNCTION_CALL: JSON escaping guidance + temperature=0 + more turns = permanent fix
+- Travel expense: create expense first (POST /travelExpense), then add costs separately (POST /travelExpense/cost). Inline costs cause malformed JSON.
+- Common vatType IDs (verified): 25%=3, 15%=31, 12%=32, 0%=5
+- QC workflow mandatory: local Docker -> qc-verify.py 8/8 PASS -> deploy -> submit
+
+### Competition Scores (as of session end)
+| Task Type | Score | Submission |
+|-----------|-------|-----------|
+| Create customer (fr) | 8/8 (100%) | Competition |
+| Unknown task | 8/8 (100%) | Competition |
+| Register payment | 2/7 (29%) | Competition (fixed, needs re-test) |
