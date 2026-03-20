@@ -97,5 +97,30 @@
 
 ### Rules re-read at 2026-03-20T03:04:00Z. No violations found.
 
+### CRITICAL: Scoring Formula Correction (from official MCP docs)
+- **Actual formula:** score = 100 * exp(-3 * weighted_kl)
+- We had: score = 100 * exp(-weighted_kl) — WRONG, missing the 3x multiplier
+- This means: weighted_kl of 0.3 -> score 40.7 (matches our 39.7!)
+- Implication: even small KL improvements yield big score gains
+  - weighted_kl 0.3 -> score 41
+  - weighted_kl 0.2 -> score 55
+  - weighted_kl 0.1 -> score 74
+  - weighted_kl 0.05 -> score 86
+- **Leaderboard = BEST round score** (not cumulative!)
+- Hot streak = avg of last 3 rounds
+- Strategy shift: we need ONE great round, not consistent mediocre ones
+
+### Simulation Mechanics (from official docs)
+- Ground truth computed from HUNDREDS of simulation runs (not one)
+- Settlements have: population, food, wealth, defense, tech, faction
+- Growth: settlements produce food from adjacent terrain, expand when prosperous
+- Conflict: settlements raid each other, longships extend range
+- Trade: ports trade when not at war, generates wealth + food
+- Winter: severity varies, can destroy isolated/starving settlements -> ruins
+- Environment: ruins can be reclaimed by nearby settlements OR overgrown by forest
+- Key: settlement survival depends on food (adjacent forests!), defense, faction size
+
+### Rules re-read at 2026-03-20T04:00:00Z. FOUND: scoring formula was wrong. Fixed in rules.md.
+
 ## Auth Note
 API uses cookie auth: `access_token` cookie. Bearer header returns "Missing token" in curl.

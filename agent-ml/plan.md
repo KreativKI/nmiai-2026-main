@@ -74,7 +74,21 @@ Predict terrain probability distributions on a 40x40 grid after 50 years of stoc
 - Do NOT modify files outside agent-ml/ (except intelligence/)
 - If something breaks: revert to last known good, don't experiment with live rounds
 
+## Scoring Math (verified from MCP docs)
+```
+score = 100 * exp(-3 * weighted_kl)
+```
+The 3x multiplier means:
+- weighted_kl 0.30 -> score 41 (current)
+- weighted_kl 0.20 -> score 55 (+14 points!)
+- weighted_kl 0.10 -> score 74 (+33 points!)
+Reducing settlement/port KL from 0.52 to 0.20 would be huge.
+
+## Leaderboard = BEST round score (not cumulative)
+This changes strategy: we need ONE excellent round, not many mediocre ones.
+Investing time in model quality pays more than just submitting every round.
+
 ## Open Questions
 - Does stacking (multi-sample) actually improve score vs single-coverage?
 - Can we infer hidden parameters from cross-seed patterns?
-- What's the scoring formula exactly? (check MCP docs)
+- Can we use settlement adjacency (food from forests) to predict survival?

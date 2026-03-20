@@ -5,6 +5,7 @@
 **Track weight:** 33.33% of total score
 **Change log:** (append here when rules change)
 - 2026-03-20 00:00: Initial rules populated from competition docs
+- 2026-03-20 04:00: CORRECTED scoring formula: score = 100*exp(-3*weighted_kl), not exp(-1*). Leaderboard = best round score (not cumulative).
 
 ## Submission
 - Submit predictions via REST API (not file upload)
@@ -34,14 +35,20 @@ NEVER assign probability 0.0 to any class. If ground truth has non-zero probabil
 
 **Solution:** Floor ALL probabilities at 0.01, then renormalize: `probs = probs / probs.sum()`
 
-## Scoring
+## Scoring (VERIFIED from official docs 2026-03-20 04:00)
 - Metric: entropy-weighted KL divergence
-- Score = 100 * exp(-KL_divergence)
+- Formula:
+  ```
+  weighted_kl = sum(entropy(cell) * KL(gt, pred)) / sum(entropy(cell))
+  score = max(0, min(100, 100 * exp(-3 * weighted_kl)))
+  ```
+- NOTE: The **-3** multiplier is critical. Small KL improvements matter a lot.
 - Range: 0 (worst) to 100 (perfect)
-- Only dynamic cells contribute (those that change between simulation runs)
+- Only dynamic cells contribute (entropy > 0)
 - Higher entropy cells weighted more
 - Per-round score: average of 5 seed scores
-- Leaderboard: best round score of all time
+- **Leaderboard: BEST round score of all time** (not cumulative!)
+- Hot streak score: average of last 3 rounds (also tracked)
 
 ## World Details
 - 6 terrain classes: Empty(0), Settlement(1), Port(2), Ruin(3), Forest(4), Mountain(5)
