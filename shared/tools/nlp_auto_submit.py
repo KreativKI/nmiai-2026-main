@@ -224,13 +224,17 @@ def submit_once(page, endpoint: str, attempt: int) -> dict:
         if task_match:
             result["task_type"] = task_match.group(1)
 
-        # Store page diff for debugging
+        # Store page diff for debugging when no result parsed
         if result["score"] is None and result["task_type"] is None:
             result["raw_result"] = text[-800:]
 
-        # Count as success if page changed (even if we couldn't parse score)
-        if post_submit_text != pre_submit_text:
+        # Only count as success if we got a parseable result
+        if result["score"] is not None or result["task_type"] is not None:
             result["success"] = True
+        elif post_submit_text != pre_submit_text:
+            # Page changed but we couldn't parse the result
+            result["success"] = False
+            result["error"] = "Page changed but could not parse result (check raw_result)"
         elif elapsed >= max_wait:
             result["error"] = f"Timeout waiting for result ({max_wait}s)"
 
@@ -310,8 +314,6 @@ def main():
                         help=f"Seconds between submissions (default: {DEFAULT_DELAY})")
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT,
                         help="NLP endpoint URL")
-    parser.add_argument("--resume", action="store_true",
-                        help="Resume: read existing log to track per-task limits")
     parser.add_argument("--headed", action="store_true",
                         help="Run browser in headed mode (visible)")
     parser.add_argument("--login", action="store_true",
@@ -332,15 +334,15 @@ def main():
         print(f"  Run: python3 shared/tools/nlp_auto_submit.py --login")
         raise SystemExit(1)
 
-    # Load existing log
-    log = load_log(log_path) if args.resume else []
-    today_counts = count_today_submissions(log) if args.resume else Counter()
+    # Always load existing log to enforce per-task and daily limits
+    log = load_log(log_path)
+    today_counts = count_today_submissions(log)
 
     print(f"NLP Auto-Submitter")
     print(f"  Endpoint: {args.endpoint}")
     print(f"  Max: {args.max}, Delay: {args.delay}s")
-    if args.resume:
-        print(f"  Resuming: {sum(today_counts.values())} already logged today")
+    if sum(today_counts.values()) > 0:
+        print(f"  Already logged today: {sum(today_counts.values())}")
     print()
 
     if args.max > AUTO_LIMIT:

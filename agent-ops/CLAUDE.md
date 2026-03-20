@@ -22,12 +22,12 @@ Every tool you build must answer: "Does this save JC or the agents time before S
 
 ## Responsibilities (ranked by priority)
 
-### A. Submission Support (NO automation)
-**Rule:** NEVER make submissions directly. Build submission TOOLS that JC triggers manually.
+### A. Submission Support
+**Rule:** NLP auto-submission approved by JC (2026-03-20 14:00 CET). CV remains manual-only.
 
-NLP and CV have no programmatic submission APIs: both require manual clicks on app.ainm.no. ML is fully automated via REST API (handled by the ML agent). Playwright submission bots were rejected due to platform abuse risk per competition rules.
-
-What we CAN build: pre-submission validation tools, ZIP builders, endpoint health checks, submission checklists.
+- **NLP (Tripletex):** Playwright auto-submitter approved. Caps at 112/day (75% of budget). JC handles remaining 38 manually. Tool: `shared/tools/nlp_auto_submit.py`
+- **CV (NorgesGruppen):** Manual upload only. No automation. Build validation tools only.
+- **ML (Astar Island):** Fully automated via REST API (handled by ML agent).
 
 ### B. Dashboard & Visualization
 Build a monitoring dashboard for JC to visually verify all 3 tracks at a glance.
@@ -50,7 +50,7 @@ Review and improve tools used by other agents. Check the reusable tools archive,
 
 ## What You NEVER Do
 - Write solution code (that's the track agents' job)
-- Make competition submissions directly or automate UI clicks on app.ainm.no (platform abuse risk)
+- Automate CV submissions or any submission JC hasn't explicitly approved
 - Spend observation queries or any rate-limited resources
 - Modify files inside agent-cv/, agent-ml/, agent-nlp/ solution directories
 - Make architecture decisions without JC's approval
@@ -60,7 +60,7 @@ Review and improve tools used by other agents. Check the reusable tools archive,
 
 ## Rules
 - **NEVER stop to ask questions. Just build.** Make best judgment, ship fast, iterate later. If unsure between two options, pick the simpler one. Done beats perfect.
-- NEVER make submissions directly or automate UI clicks on app.ainm.no
+- NEVER automate CV submissions. NLP auto-submit approved by JC (2026-03-20)
 - Commit after EVERY phase. Update status.json after every phase.
 - Drop shared tools in `shared/tools/` and notify agents via their intelligence folders
 - **Merge agent-ops into main after every batch of new tools.** Other branches need access. Do: `cd nmiai-2026-main && git merge agent-ops && git push origin main`
