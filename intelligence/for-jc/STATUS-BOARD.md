@@ -1,9 +1,9 @@
 # NM i AI 2026 — Status Board
 
-**Timestamp:** 2026-03-20 08:05 CET
-**Competition Clock:** T+14h 05m (56h 55m remaining)
+**Timestamp:** 2026-03-20 13:05 CET
+**Competition Clock:** T+19h 05m (51h 55m remaining)
 **Model:** Gemini 3 Flash (Gunnar Overseer)
-**Phase:** BUILD PHASE
+**Phase:** TIER 2 OPEN (NLP/ML) | BUILD PHASE (CV)
 
 ---
 
@@ -11,48 +11,48 @@
 
 ## Track Overview
 
-| Track | Sponsor | Status | Approach | Local Score | Submissions |
-|-------|---------|--------|----------|-------------|-------------|
-| **CV** | NorgesGruppen | ACTIVE | YOLO11m v2 (submitted 04:56) | 0.945 | 2 (1 fail, 1 pend) |
-| **ML** | Astar Island | **STALLED** | Bayesian Transition Matrix | — | Unknown (drift) |
-| **NLP** | Tripletex | DEPLOYED | Gemini 2.5 Flash + Cloud Run | — | 0 (ready) |
+| Track | Sponsor | Status | Approach | Local Score | Platform Score | Submissions |
+|-------|---------|--------|----------|-------------|----------------|-------------|
+| **CV** | NorgesGruppen | ACTIVE | YOLO11m v2 (scored) | 0.945 | **0.5735** | 2/10 today |
+| **ML** | Astar Island | **STALLED** | Bayesian Transition Matrix | — | 0.00 | 0 (Missed R1-R4) |
+| **NLP** | Tripletex | DEPLOYED | Gemini 2.5 Flash + Cloud Run | — | — | 0 (Waiting URL) |
 
 ---
 
 ## Per-Track Summary
 
 ### CV — NorgesGruppen (33.33%)
-- **Status:** YOLO11m v2 (64.8 MB) score pending. Local mAP50 = 0.945.
-- **Training:** YOLO26m done (mAP50=0.914, lower than 11m). Ensemble ZIP ready: `submissions/submission_ensemble_v1.zip` (131MB). RF-DETR at epoch 39 (mAP50=0.572).
-- **Priority:** Check v2 score. If mAP50 is high, save ensemble submission slots for later.
-- **Action:** Delete VMs (cv-train-1, cv-train-2) when YOLO26m/RF-DETR training is confirmed finished or discarded.
+- **Status:** YOLO11m v2 scored **0.5735**. Significant gap from local mAP50 (0.945) suggests hard test set or classification issues.
+- **Next Up:** `submission_yolo11m_v3_tta.zip` ready (06:33 CET). TTA (Test Time Augmentation) should help.
+- **Parallel:** RF-DETR training on `cv-train-2` (epoch 39, mAP50=0.572). 
+- **Priority:** Submit v3_tta. Start classification-only refinement (CLIP/SigLIP) to boost the 30% classification component.
 
 ### ML — Astar Island (33.33%)
-- **Status:** **CRITICAL DRIFT.** `status.json` and `MEMORY.md` not updated since T+0 (2026-03-16).
-- **Risk:** Missing rounds = 0 points. Rounds happen every ~3h.
-- **Priority:** Wake up agent. Run `astar_baseline.py` and submit for next round immediately.
-- **Note:** No evidence of any successful submissions.
+- **Status:** **CRITICAL.** Missed Round 4 (12:20 CET). No evidence of submissions. 
+- **Risk:** We are bleeding points every 3 hours. Round 5 closes ~15:25 CET.
+- **Priority:** **EMERGENCY WAKEUP.** Agent must run `astar_baseline.py` NOW. Even a bad prediction is better than 0.
+- **Action:** If agent doesn't respond, Overseer will request JC to manual-trigger the baseline.
 
 ### NLP — Tripletex (33.33%)
-- **Status:** `tripletex_bot_v1` deployed to Cloud Run.
-- **Endpoint:** `https://tripletex-agent-795548831221.europe-west4.run.app`
-- **Priority:** Waiting for JC to submit URL on platform. Start Tier 2 roadmap (Friday tasks).
-- **Note:** Code-reviewer (Boris) fixed critical field naming bugs (02:00 CET). Ready to roll.
+- **Status:** Tier 2 (Friday multiplier x2) is OPEN. `tripletex_bot_v1` is deployed and tested.
+- **Endpoint:** `https://tripletex-agent-795548831221.europe-west4.run.app/solve`
+- **Priority:** JC must submit URL on platform. Agent should begin Tier 2 task expansion (Multi-step workflows, Invoicing, etc.).
+- **Note:** Boris fixed critical field naming bugs. Readiness is 100%.
 
 ---
 
-## Decisions for JC (when awake)
-1. **CV:** Check v2 score on platform (submitted at 04:56).
-2. **ML:** Verify if any round submissions have been made. If not, trigger baseline now.
+## Decisions for JC
+1. **CV:** Submit `submission_yolo11m_v3_tta.zip` (ready in `agent-cv/submissions/`).
+2. **ML:** Verify why Astar Island submissions are not firing. Trigger `astar_baseline.py` manually if needed.
 3. **NLP:** Submit Cloud Run URL to platform: `https://app.ainm.no/submit/tripletex`.
 
 ---
 
 ## Infrastructure
-- **GCP:** 2x L4 VMs active (cv-train-1, cv-train-2). Cleanup needed.
-- **Cloud Run:** Active (tripletex-agent).
-- **Workspace:** DevDrive synced and primary.
+- **GCP:** `cv-train-1` (YOLO11m) and `cv-train-2` (RF-DETR) active.
+- **Cloud Run:** `tripletex-agent` active.
+- **Workspace:** All tracks synced.
 
 ---
 
-*Gunnar is monitoring hourly rounds. JC is sleeping.*
+*Gunnar is escalating the ML stall. JC is awake.*

@@ -1,13 +1,19 @@
-# ML Agent Briefing — 2026-03-20 08:05 CET
+# ML Agent Briefing — 2026-03-20 13:05 CET
 
-**Current Status:** **CRITICAL DRIFT.** `status.json` and `MEMORY.md` not updated since T+0 (2026-03-16).
-**Next Hour Goal:** **WAKE UP.** Run `astar_baseline.py` and submit for next round immediately.
+**Current Status:** **EMERGENCY.** CRITICAL DRIFT. 
+**Goal:** **WAKE UP AND RUN BASELINE.**
+
+## Analysis
+- Missed Rounds 1, 2, 3, and 4. Total points lost: ~100+.
+- Round 5 closes ~15:25 CET. We have < 2h.
+- Bayesian transition matrix (v3) was created at 01:30 UTC but no submission found.
 
 ## Guidance
-1. **Rounds:** Missing rounds = 0 points. Every ~3h a new round closes.
-2. **Priority:** Baseline submission immediately. Don't wait for perfect training. Bayesian transition matrix is the current approach.
-3. **Investigation:** Why hasn't `status.json` updated? Any blockers?
+1. **Rounds:** Missing a round = 0 points. Every ~3h is a new chance.
+2. **Priority:** **EMERGENCY WAKEUP.** Run `astar_baseline.py` NOW. Don't wait for perfect training. 
+3. **Execution:** If you are blocked on something, FLAG IT in `status.json`. Current `status.json` is from March 16.
 
 ## Notes
 - `astar_baseline.py` is ready but submission status is unknown.
-- Missing any round submissions = 0 points for that round.
+- Even a 15-30 point baseline is better than 0.
+- If you don't update `status.json` in the next hour, I will request JC to manual-trigger the baseline.
