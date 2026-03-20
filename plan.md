@@ -1,82 +1,87 @@
 # Overseer Plan — NM i AI 2026
-**Last updated:** 2026-03-20 04:50 CET (T+10.8h)
+**Last updated:** 2026-03-20 06:35 CET (T+12.6h)
 
 ## Current State
 
 | Track | Score | Status | Next Action |
 |-------|-------|--------|-------------|
-| **ML** | 45.98 (Round 4, rank #114/187) | Waiting for Round 5 | STRATEGY SHIFT: score = best single round (not cumulative). exp(-3*KL) means small KL gains = big score jumps. Focus on ONE great round. |
-| **CV** | 0.5735 (YOLO11m v2, sub 1/10) | v3 TTA + ensemble ready, 2 VMs training | Next: copy-paste synthetic data + DINOv2 classify. Nano Banana confirmed working (free on GCP). |
-| **NLP** | 8/8 PERFECT (create_customer) | tripletex_bot_v2 deployed, 3/5 submissions used today | JC submits via web UI to cover more task types |
-| **Butler** | Dashboard live, CORS fixed | Building CV submission viewer + validation tools | New standing orders delivered |
+| **ML** | 45.98 (Round 4, #114/187) | Resubmitting R4 with improved model, waiting R5 | Build better spatial model from ground truth. Score = best single round, exp(-3*KL). |
+| **CV** | 0.5756 (3 subs used, 1 left today) | Detection solved. Classification is the bottleneck. | **DINOv2 crop-and-classify with 327 reference images. #1 priority.** |
+| **NLP** | 8/8 PERFECT (create_customer) | tripletex_bot_v2 deployed | Harden more task types. JC submits 3x concurrently when awake. |
+| **Butler** | Dashboard + 4 shared tools | All tools Boris-reviewed and committed | CV submission viewer, then support other agents |
 
 ## Sleep Mode Active
-JC sleeping starting ~04:50 CET. All 4 agents confirmed alive and have standing orders.
+JC sleeping starting ~06:35 CET. All 4 agents have phased standing orders + EXPERIMENTS.md rule.
 
-### Agent Health Check (04:50 CET)
-| Agent | Last Commit | Alive | Notes |
-|-------|------------|-------|-------|
-| ML | 04:42 | YES | Waiting for Round 5, polling every 60s |
-| CV | 04:50 (reported) | YES | v2 ZIP fixed, 2 VMs training (YOLO26m epoch ~48, RF-DETR from epoch 12) |
-| NLP | 04:04 | YES | Bot ready, cannot submit without JC |
-| Butler | 04:17 | YES | Got new standing orders at 04:45, working on them |
+### Key Findings This Session
+- **Detection is NOT the bottleneck.** YOLO11m solo (0.5735), TTA (0.5756), ensemble (0.5756) all score the same. More detection models won't help.
+- **Classification IS the bottleneck.** 327 product reference images are unused. DINOv2 crop-and-classify is the highest-impact move.
+- **ML scoring:** score = 100 * exp(-3 * KL). Best single round, not cumulative. Small KL improvements = big score jumps.
+- **Nano Banana works free on GCP:** `gemini-2.5-flash-image` with `location=global`. JC decides tomorrow.
+- **Copy-paste augmentation:** +6.9 mAP in low-data regimes (CVPR 2021). 250-500 images optimal.
 
-### Staggered Communication Schedule
-| Agent | Reads inbox | Writes status |
-|-------|------------|---------------|
-| ML | :00, :30 | :05, :35 |
-| CV | :10, :40 | :15, :45 |
-| Butler | :15, :45 | :20, :50 |
-| NLP | :20, :50 | :25, :55 |
-| Overseer | every 10m | as needed |
+## CV Submissions Today (resets 01:00 CET)
+| # | What | Score | Verdict |
+|---|------|-------|---------|
+| 1 | YOLO11m v2 (baseline) | 0.5735 | Baseline |
+| 2 | YOLO11m v3 TTA + conf=0.05 | 0.5756 | TTA barely helps |
+| 3 | Ensemble YOLO11m+YOLO26m WBF | 0.5756 | More detection doesn't help |
+| 4 | (saved for DINOv2 version) | - | 1 submission left |
 
 ## Active Tasks
 
-### 1. ML: Autonomous Round Submissions
-- Rank #114/187, score 45.98 (cumulative)
-- Round 3: 39.7, Round 4: submitted v6 with improved observation weights
-- Top teams: ~100 with 2-3 rounds (per-round scores ~45-50)
-- Gap to top: ~10 points per round. Need better spatial modeling.
-- Full autonomy to submit every round. Standing orders active.
+### 1. CV: DINOv2 Crop-and-Classify (HIGHEST PRIORITY)
+- **What:** Detect with YOLO, crop each product, embed with DINOv2 ViT-S, kNN match against 327 reference images
+- **Why:** Classification is the bottleneck. This directly attacks the 30% classification component.
+- **Expected:** +5-15% on classification mAP
+- **Weight budget:** YOLO11m (78MB) + DINOv2 ViT-S FP16 (42MB) + gallery.npy (<1MB) = 121MB of 420MB
+- **Research delivered:** RESEARCH-COMPLETE-ACTION-PLAN.md, RESEARCH-ENSEMBLE-AND-CLASSIFY.md
+- **After DINOv2:** Copy-paste augmentation (250-500 images), retrain with better data
 
-### 2. CV: Upload Fixed ZIP (JC action required)
-- **v2 ZIP ready:** agent-cv/submissions/submission_yolo11m_v2.zip (65MB)
-- v1 bug: argparse rejected unknown CLI args (exit code 2)
-- v2 fix: parse_known_args() + accepts both --images and --input flags
-- Docker validated: exit code 0, 107 predictions, all fields valid
-- YOLO26m: epoch ~48, mAP50=0.815 (still training on cv-train-1)
-- RF-DETR: resumed from epoch 12 on cv-train-2, running stable
-- If YOLO26m or RF-DETR beat 0.945, CV agent will have those ZIPs ready
+### 2. ML: Build Better Spatial Model
+- Resubmitted R4 with improved distance-based model
+- Stop idle polling. Build proper spatial model from R1-R4 ground truth
+- Analyze cell transitions, neighborhood influence, parameter inference
+- Check rounds every 15-20 min, not every 60s
 
-### 3. NLP: Submit More Task Types (JC action required)
-- tripletex_bot_v2 deployed, handles customers + bank accounts + departments
-- Score: 8/8 (100%) on create_customer
-- 3/5 submissions used today, rate limits reset 01:00 CET
-- Cannot submit without JC clicking web UI
-- When JC wakes: submit repeatedly at app.ainm.no/submit/tripletex
+### 3. NLP: Harden More Task Types
+- 8/8 on create_customer. Bot handles customers + bank accounts + departments
+- Audit all 30 task types, test locally, improve for Tier 2 (Friday)
+- Cannot submit without JC. Ready when he wakes.
+- JC should click Submit 3 times quickly (3 concurrent allowed)
 
-### 4. Butler: Dashboard & Validation Tools
-- Dashboard live with CORS fix and real CV training data
-- New standing orders: CV submission viewer, pre-submission validation, leaderboard tracking
-- Desktop launcher updated and working
+### 4. Butler: Support and Tools
+- 4 shared tools delivered: validate_cv_zip.py, check_nlp_endpoint.py, check_ml_predictions.py, scrape_leaderboard.py
+- Next: CV submission viewer, leaderboard tracking, dashboard polish
+- Can take tool orders from other agents via intelligence/for-ops-agent/
+
+## Systems Established This Session
+- Intelligence folder comms (two-way, staggered schedule)
+- Phased standing orders with commit checkpoints (crash insurance)
+- EXPERIMENTS.md rule (persistent logs, prevent repeating work)
+- Tool sharing system (shared/tools/, agents can order from Butler)
+- Butler never-ask rule (just build, iterate later)
+- Stop-idling orders (productive work between monitoring checks)
+- Overseer QC process for CV submissions
 
 ## Completed This Session
 - All 5 CLAUDE.md files improved to butler quality standard
 - Git worktrees created and synced (4 branches + main)
 - Desktop shortcuts for all 5 agents
 - Two-way intelligence comms with staggered schedule
-- GCP training for CV (YOLO11m complete, YOLO26m + RF-DETR running)
+- GCP training: YOLO11m done, YOLO26m done (0.914), RF-DETR training (~epoch 39)
 - NLP deployed to Cloud Run, scored 8/8 perfect
-- ML submitted Rounds 3-4, rank #114/187
-- CV exit code 2 diagnosed and fixed (v2 ZIP ready)
-- Butler dashboard: CORS fix, real training data, model selector
-- Credentials saved to .env (gitignored)
-- Competition docs snapshots and rule tracking
+- ML submitted Rounds 3-4, rank #114/187, found scoring formula
+- CV: 3 submissions (0.5735, 0.5756, 0.5756), bottleneck identified
+- Butler: dashboard + 4 shared tools + branding + ML ground truth viewer
+- 6 research agents completed (models, ensemble, classification, synthetic data, Nano Banana)
+- Nano Banana verified working free on GCP
+- EXPERIMENTS.md rule pushed to all agents
 
 ## Key Deadlines
 | Time | What |
 |------|------|
-| Daily 01:00 CET | Rate limits reset |
+| Daily 01:00 CET | Rate limits reset (CV: 10 subs, NLP: 5/task type) |
 | Friday morning | Tier 2 tasks unlock (NLP 2x multiplier) |
 | Saturday 12:00 | CUT-LOSS: any track with no submission = baseline NOW |
 | Saturday morning | Tier 3 tasks unlock (NLP 3x multiplier) |
@@ -85,9 +90,9 @@ JC sleeping starting ~04:50 CET. All 4 agents confirmed alive and have standing 
 | Sunday 15:00 | COMPETITION ENDS |
 
 ## When JC Wakes Up (priority order)
-1. Upload agent-cv/submissions/submission_yolo11m_v2.zip at app.ainm.no
-2. Submit NLP repeatedly at app.ainm.no/submit/tripletex (each click = random task type)
-3. Report NLP scores back to NLP agent so it can fix failures
-4. Review ML overnight scores (check intelligence/for-overseer/ for reports)
-5. Check if YOLO26m or RF-DETR beat 0.945, upload if so
-6. Check Slack for auto-submission ruling
+1. Submit CV DINOv2 version if ready (1 sub left today, or 10 fresh after 01:00)
+2. Submit NLP repeatedly (3 clicks at a time, report scores back to NLP agent)
+3. Review ML overnight scores in intelligence/for-overseer/
+4. Review all agent sleep reports in intelligence/for-overseer/
+5. Decide on Nano Banana synthetic data (free on GCP, ~500 images)
+6. Check if RF-DETR finished training
