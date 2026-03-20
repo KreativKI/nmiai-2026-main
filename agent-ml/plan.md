@@ -4,10 +4,11 @@
 **Last updated:** 2026-03-20 03:58 UTC
 
 ## Current State
-- **Best score:** 39.72 (round 3, rank #33/187)
-- **Rounds submitted:** 3 (scored), 4 (pending)
+- **Best score:** 71.77 (round 4, leaderboard 87.3)
+- **Rounds submitted:** 6 (rounds 3-6, rounds 1-2 missed)
 - **Script:** `solutions/astar_v6.py` (phased observation)
-- **Top teams:** ~50 per round, ~100+ cumulative with 2-3 rounds
+- **Backtester:** `solutions/backtest.py` (offline QC gate)
+- **QC rule:** Never submit without backtesting first
 
 ## The Problem
 Predict terrain probability distributions on a 40x40 grid after 50 years of stochastic simulation. 50 observation queries per round across 5 seeds. Scored by entropy-weighted KL divergence (0-100). Leaderboard uses weighted cumulative score.
@@ -94,6 +95,17 @@ Investing time in model quality pays more than just submitting every round.
 - **Cross-seed transfer quality?** Nearly optimal (0.7 point gap vs perfect).
 - **Forest adjacency?** Small effect (26% to 33% survival). Round params dominate.
 
+## Backtester Results (BT-001, default params)
+| Mode | Avg | Best |
+|------|-----|------|
+| Hist only | 59.3 | 77.6 |
+| Oracle (ceiling) | 66.6 | 78.2 |
+| With real obs | 60.5 | 76.6 |
+
+Settlement KL dominates error (0.47-0.99). Oracle barely helps settlements (score 8-24 same as no-info).
+The model's structural limit is that it cannot distinguish which settlements survive vs die without observations.
+
 ## Remaining Questions
 - Can settlement stats (food, pop) from observations predict per-cell survival?
 - What's the theoretical max score with 50 queries?
+- Can we improve observation blending to get closer to oracle ceiling?
