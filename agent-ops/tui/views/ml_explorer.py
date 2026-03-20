@@ -206,6 +206,7 @@ class MLExplorerView(Container):
             yield RoundHistory(classes="card ml-left-panel")
             yield TerrainGridWidget(classes="card ml-center-panel")
             yield TerrainSidebar(classes="card ml-right-panel")
+        yield Static("[dim]1-5:seed  r:refresh  0:dashboard  q:quit[/]", classes="key-hints")
 
     def refresh_data(self) -> None:
         # Refresh grid

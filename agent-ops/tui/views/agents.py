@@ -117,6 +117,7 @@ class AgentsView(Container):
             yield AgentPanel("agent-nlp", classes="card")
             yield AgentPanel("agent-ops", classes="card")
         yield IntelligenceFeed(classes="card wide-card")
+        yield Static("[dim]0-9:tabs  r:refresh  q:quit[/]", classes="key-hints")
 
     def refresh_data(self) -> None:
         for panel in self.query(AgentPanel):

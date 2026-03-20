@@ -87,6 +87,7 @@ class NLPSubmitView(Container):
         with Horizontal(classes="nlp-layout"):
             yield NLPTaskGrid(classes="card main-panel")
             yield NLPRecentResults(classes="card side-panel")
+        yield Static("[dim]0-9:tabs  r:refresh  q:quit[/]", classes="key-hints")
 
     def refresh_data(self) -> None:
         for w in self.query(NLPTaskGrid):

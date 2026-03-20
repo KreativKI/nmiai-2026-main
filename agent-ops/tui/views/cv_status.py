@@ -72,6 +72,7 @@ class CVStatusView(Container):
         with Horizontal(classes="cv-layout"):
             yield CVSubmissions(classes="card main-panel")
             yield CVTraining(classes="card side-panel")
+        yield Static("[dim]0-9:tabs  r:refresh  q:quit[/]", classes="key-hints")
 
     def refresh_data(self) -> None:
         for w in self.query(CVSubmissions):

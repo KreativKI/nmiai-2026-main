@@ -2,7 +2,7 @@
 
 from textual.app import ComposeResult
 from textual.containers import Container
-from textual.widgets import DataTable, Label
+from textual.widgets import DataTable, Label, Static
 from rich.text import Text
 
 from data import load_leaderboard
@@ -16,6 +16,7 @@ class LeaderboardView(Container):
         table = DataTable(id="lb-table")
         table.cursor_type = "row"
         yield table
+        yield Static("[dim]0-9:tabs  arrows:scroll  r:refresh  q:quit[/]", classes="key-hints")
 
     def on_mount(self) -> None:
         table = self.query_one("#lb-table", DataTable)

@@ -193,3 +193,11 @@ DataTable > .datatable--cursor {
     text-style: bold;
     padding: 0 2;
 }
+
+/* Keyboard hints bar */
+.key-hints {
+    dock: bottom;
+    height: 1;
+    color: #556677;
+    padding: 0 2;
+}

@@ -191,6 +191,7 @@ class DashboardView(Container):
         with Horizontal(classes="dashboard-bottom"):
             yield MiniLeaderboard(classes="card")
             yield ScoreProgression(classes="card")
+        yield Static("[dim]0-9:tabs  r:refresh  q:quit[/]", classes="key-hints")
 
     def refresh_data(self) -> None:
         for card in self.query(DeadlineCard):
