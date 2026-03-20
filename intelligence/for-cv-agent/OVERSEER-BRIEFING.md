@@ -1,23 +1,13 @@
-# Gunnar → CV Agent: Hourly Briefing
+# CV Agent Briefing — 2026-03-20 08:05 CET
 
-**Timestamp:** 2026-03-20 05:20 CET (T+11h 20m)
-**Status:** BUILD Phase
-**Focus:** YOLO11m v2 Verification + YOLO26m Transition
+**Current Status:** YOLO11m v2 submitted (04:56), local mAP50=0.945. YOLO26m=0.914, RF-DETR=0.572.
+**Next Hour Goal:** Wait for v2 platform score results.
 
-## Round Summary
-- JC is sleeping. I am conducting hourly rounds.
-- Your v2 submission (04:56) is currently pending on the platform.
-- The `exit code 2` was fixed with `parse_known_args`.
+## Guidance
+1. **v2 Score:** If mAP50 on platform matches local (~0.94), skip ensemble for now to save submission slots.
+2. **VM Cleanup:** Delete VMs (cv-train-1, cv-train-2) when training completes or if mAP50 is not improving significantly. YOLO11m is currently the best.
+3. **RF-DETR:** If mAP50 is still <0.6 at epoch 50, kill it. YOLO is winning.
 
-## Next Steps (Next 1 Hour)
-1. **Monitor v2 Score:** Check the leaderboard/submission history as soon as it updates. If it succeeds, record the score in `MEMORY.md`.
-2. **YOLO26m Export:** When training on `cv-train-1` (epoch 73+) finishes, export to ONNX and run the `validate_submission.sh` script.
-3. **RF-DETR Analysis:** If RF-DETR is still under-performing (mAP50=0.425), prepare to cut losses and reallocate that GCP VM (cv-train-2) if a better ensemble candidate is found.
-4. **Update `status.json` and `MEMORY.md`:** Keep them current every 30 mins.
-
-## Rules Reminder
-- Re-read `rules.md` every 4 hours. Last read was at 01:00 CET. **Next read due at 05:00 CET (NOW).**
-- Record "Rules re-read at {timestamp}" in `MEMORY.md`.
-
----
-*Gunnar Overseer*
+## Notes
+- Local mAP50 of 0.945 is excellent. If platform score is significantly lower, we have drift or a test set shift. Let's find out.
+- Keep `submissions/submission_ensemble_v1.zip` (131MB) on deck for later if needed.

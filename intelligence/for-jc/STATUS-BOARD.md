@@ -1,7 +1,7 @@
 # NM i AI 2026 — Status Board
 
-**Timestamp:** 2026-03-20 05:15 CET
-**Competition Clock:** T+11h 15m (60h 45m remaining)
+**Timestamp:** 2026-03-20 08:05 CET
+**Competition Clock:** T+14h 05m (56h 55m remaining)
 **Model:** Gemini 3 Flash (Gunnar Overseer)
 **Phase:** BUILD PHASE
 
@@ -14,7 +14,7 @@
 | Track | Sponsor | Status | Approach | Local Score | Submissions |
 |-------|---------|--------|----------|-------------|-------------|
 | **CV** | NorgesGruppen | ACTIVE | YOLO11m v2 (submitted 04:56) | 0.945 | 2 (1 fail, 1 pend) |
-| **ML** | Astar Island | ACTIVE | Bayesian Transition Matrix | — | Round-based |
+| **ML** | Astar Island | **STALLED** | Bayesian Transition Matrix | — | Unknown (drift) |
 | **NLP** | Tripletex | DEPLOYED | Gemini 2.5 Flash + Cloud Run | — | 0 (ready) |
 
 ---
@@ -22,34 +22,34 @@
 ## Per-Track Summary
 
 ### CV — NorgesGruppen (33.33%)
-- **Status:** v2 submission (64.8 MB) pending. Fixes `exit code 2` (argparse).
-- **Training:** YOLO26m (epoch 73) and RF-DETR (epoch 24) on GCP L4s.
-- **Priority:** Monitor v2 score. Export YOLO26m to ONNX if it beats YOLO11m.
-- **Blocker:** None currently.
+- **Status:** YOLO11m v2 (64.8 MB) score pending. Local mAP50 = 0.945.
+- **Training:** YOLO26m done (mAP50=0.914, lower than 11m). Ensemble ZIP ready: `submissions/submission_ensemble_v1.zip` (131MB). RF-DETR at epoch 39 (mAP50=0.572).
+- **Priority:** Check v2 score. If mAP50 is high, save ensemble submission slots for later.
+- **Action:** Delete VMs (cv-train-1, cv-train-2) when YOLO26m/RF-DETR training is confirmed finished or discarded.
 
 ### ML — Astar Island (33.33%)
-- **Status:** `astar_v3.py` exists. Round-based prediction ongoing.
-- **Approach:** Bayesian transition matrix from cross-seed observations.
-- **Priority:** Ensure 5/5 seeds submitted for current round. Refine transition model.
-- **Note:** `status.json` and `MEMORY.md` need updating (drift detected).
+- **Status:** **CRITICAL DRIFT.** `status.json` and `MEMORY.md` not updated since T+0 (2026-03-16).
+- **Risk:** Missing rounds = 0 points. Rounds happen every ~3h.
+- **Priority:** Wake up agent. Run `astar_baseline.py` and submit for next round immediately.
+- **Note:** No evidence of any successful submissions.
 
 ### NLP — Tripletex (33.33%)
 - **Status:** `tripletex_bot_v1` deployed to Cloud Run.
 - **Endpoint:** `https://tripletex-agent-795548831221.europe-west4.run.app`
-- **Priority:** Ready for JC to submit URL. Monitoring logs for platform triggers.
-- **Note:** Fixed critical field naming bug (T+8h).
+- **Priority:** Waiting for JC to submit URL on platform. Start Tier 2 roadmap (Friday tasks).
+- **Note:** Code-reviewer (Boris) fixed critical field naming bugs (02:00 CET). Ready to roll.
 
 ---
 
 ## Decisions for JC (when awake)
-1. **CV:** Verify v2 score on leaderboard.
-2. **ML:** Review transition matrix quality vs simple prior.
-3. **NLP:** Submit Cloud Run URL to platform.
+1. **CV:** Check v2 score on platform (submitted at 04:56).
+2. **ML:** Verify if any round submissions have been made. If not, trigger baseline now.
+3. **NLP:** Submit Cloud Run URL to platform: `https://app.ainm.no/submit/tripletex`.
 
 ---
 
 ## Infrastructure
-- **GCP:** 2x L4 VMs running (cv-train-1, cv-train-2).
+- **GCP:** 2x L4 VMs active (cv-train-1, cv-train-2). Cleanup needed.
 - **Cloud Run:** Active (tripletex-agent).
 - **Workspace:** DevDrive synced and primary.
 

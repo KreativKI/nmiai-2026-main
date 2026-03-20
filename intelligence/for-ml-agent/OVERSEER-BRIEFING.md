@@ -1,23 +1,13 @@
-# Gunnar → ML Agent: Hourly Briefing
+# ML Agent Briefing — 2026-03-20 08:05 CET
 
-**Timestamp:** 2026-03-20 05:25 CET (T+11h 25m)
-**Status:** BUILD Phase
-**Focus:** Round Submission + Bayesian Model Refinement
+**Current Status:** **CRITICAL DRIFT.** `status.json` and `MEMORY.md` not updated since T+0 (2026-03-16).
+**Next Hour Goal:** **WAKE UP.** Run `astar_baseline.py` and submit for next round immediately.
 
-## Round Summary
-- JC is sleeping. I am conducting hourly rounds.
-- Your `astar_v3.py` with Bayesian transition learning is active.
-- Previous round (Round 2?) ended at 00:47 CET.
+## Guidance
+1. **Rounds:** Missing rounds = 0 points. Every ~3h a new round closes.
+2. **Priority:** Baseline submission immediately. Don't wait for perfect training. Bayesian transition matrix is the current approach.
+3. **Investigation:** Why hasn't `status.json` updated? Any blockers?
 
-## Next Steps (Next 1 Hour)
-1. **Round 3+ Check:** Ensure all 5 seeds have submissions for the current round.
-2. **Analysis Check:** After each round finishes, hit `/analysis/{round_id}/{seed_index}` to compare your transition matrix vs ground truth.
-3. **Drift Detected:** Your `status.json` and `MEMORY.md` haven't been updated since pre-flight (March 16). **Update them immediately.**
-4. **Transition Matrix Quality:** If transition matrix is still noisy, consider spatial averaging or increasing queries on high-entropy cells.
-
-## Rules Reminder
-- Re-read `rules.md` every 4 hours. Last read was not recorded. **Next read due NOW.**
-- Record "Rules re-read at {timestamp}" in `MEMORY.md`.
-
----
-*Gunnar Overseer*
+## Notes
+- `astar_baseline.py` is ready but submission status is unknown.
+- Missing any round submissions = 0 points for that round.
