@@ -105,7 +105,7 @@ Boris for each: Explore → Plan → Code → Review → Simplify → Validate �
 
 Boris: Explore → Plan → Code → Review → Simplify → Validate → Commit
 
-### Phase 8: A/B Compare Tool — Status: active
+### Phase 8: A/B Compare Tool — Status: done
 
 **Why:** Compare DINOv2 vs YOLO-only predictions side by side. Shows exactly which images improved/regressed. Adapted from grocery bot ab_compare.py pattern (Welch's t-test, per-item breakdown).
 
@@ -118,7 +118,7 @@ Boris: Explore → Plan → Code → Review → Simplify → Validate → Commit
 - Verdict: A_BETTER / B_BETTER / NO_SIGNIFICANT_DIFFERENCE
 - Notify CV agent + update agent configs via intelligence/
 
-### Phase 9: Batch Eval Tool — Status: pending
+### Phase 9: Batch Eval Tool — Status: done
 
 **Why:** Run cv_judge across all 5 CV ZIPs at once. Ranked table shows which is actually best. Saves JC from running cv_judge 5 times manually.
 
@@ -129,7 +129,7 @@ Boris: Explore → Plan → Code → Review → Simplify → Validate → Commit
 - Highlight the best submission
 - Notify CV agent + update agent configs via intelligence/
 
-### Phase 10: Oracle/Ceiling Estimator — Status: pending
+### Phase 10: Oracle/Ceiling Estimator — Status: done
 
 **Why:** Know our theoretical ceiling per track. If CV max is 0.75, don't chase 0.90. Focus effort where headroom exists.
 
