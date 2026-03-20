@@ -203,6 +203,9 @@ Run ALL steps. If any fails, do NOT submit.
 ```
 This runs: validate_cv_zip (structure + blocked imports + ALLOWED EXTENSIONS) -> cv_profiler (timing) -> cv_judge (score).
 
+After pipeline passes, run the canary subagent for final check:
+Use Agent tool with prompt "Read shared/agents/cv-canary.md for your instructions. Audit the submission ZIP at [path]."
+
 ### ALLOWED FILE EXTENSIONS IN ZIP (hardcoded, no exceptions)
 `.py .json .yaml .yml .cfg .pt .pth .onnx .safetensors .npy`
 
