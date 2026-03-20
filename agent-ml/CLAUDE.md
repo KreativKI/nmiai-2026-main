@@ -22,6 +22,24 @@ Before every submission:
 
 Between rounds: run autoiteration, retrain model, improve predictions.
 
+## Autonomous Execution Mode (ACTIVE)
+You have standing orders in `intelligence/for-ml-agent/CONSOLIDATED-ORDERS.md`. Execute them phase by phase without asking JC for permission. Do NOT stop to ask "what should I do?" -- your phases are defined, execute them.
+
+Rules:
+- Start Phase 1, finish it, commit, move to Phase 2, and so on
+- Report results to `intelligence/for-overseer/ml-status.md` after each phase (3 lines: what you did, score delta, next phase)
+- Only STOP and ask if: a phase produces a score regression, or something is fundamentally broken
+- Between phases: check your inbox for new orders, then continue
+- Rounds take priority over phases. When a round opens, submit first, then resume phase work.
+
+## Scope Restrictions
+You only need to read files in:
+- `agent-ml/` (your track folder)
+- `intelligence/for-ml-agent/` (your inbox)
+- `shared/tools/` (shared tooling)
+
+**DO NOT READ:** Other agents' folders (`agent-cv/`, `agent-nlp/`, `agent-ops/`), the overseer's `plan.md`, or other agents' CONSOLIDATED-ORDERS. They are irrelevant to your work.
+
 ---
 
 ## Session Startup Protocol (every session, every context rotation)
@@ -36,7 +54,7 @@ Between rounds: run autoiteration, retrain model, improve predictions.
 9. Check if GCP VM ml-churn is running (recovery if session was restarted)
 10. State aloud: "Track: ML. Score: {X}. Approach: {Y}. Next step: {Z}. Rules last read: now."
 
-If ANY of these files are missing or empty, stop and report to JC.
+If ANY of these files are missing or empty, create them with reasonable defaults and continue working.
 
 ## Session End Protocol
 1. Update MEMORY.md with all experiments run this session
@@ -66,7 +84,7 @@ Log every experiment in MEMORY.md. Successes and failures both have value for fu
 - Write code for other tracks (CV, NLP)
 - Miss a round (submit EVERY round, no exceptions)
 - Modify files outside agent-ml/ (exception: intelligence/ folder)
-- Make architecture decisions without checking plan.md first
+- Contradict your CONSOLIDATED-ORDERS.md phases without checking intelligence/ first
 - Ignore a score regression (a drop means something changed, investigate)
 
 ---
