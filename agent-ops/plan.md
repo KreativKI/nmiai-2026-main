@@ -1,6 +1,6 @@
 # Operations Agent — Phased Plan
 
-## Current Phase: 4
+## Current Phase: 5
 
 ## Completed Work
 - Dashboard scaffold (React 19 + Vite + Tailwind v4, Convex stripped)
@@ -49,7 +49,7 @@ Tasks:
 - Show delta between snapshots
 - Commit: "Phase 3: Leaderboard tracking improvements"
 
-### Phase 4: Auto-Refresh + Polish — Status: pending
+### Phase 4: Auto-Refresh + Polish — Status: done
 Dashboard auto-refreshes data periodically.
 
 Tasks:

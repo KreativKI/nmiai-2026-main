@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from "react";
 import type { DashboardTab } from "../types/dashboard";
 import { useUIStore } from "../stores/uiStore";
 import { OverviewView } from "./OverviewView";
@@ -5,16 +6,33 @@ import { MLView } from "./MLView";
 import { CVView } from "./CVView";
 import { NLPView } from "./NLPView";
 
-const TABS: { id: DashboardTab; label: string; emoji: string }[] = [
-  { id: "overview", label: "Overview", emoji: "" },
-  { id: "ml", label: "Astar Island", emoji: "" },
-  { id: "cv", label: "NorgesGruppen", emoji: "" },
-  { id: "nlp", label: "Tripletex", emoji: "" },
+const TABS: { id: DashboardTab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "ml", label: "Astar Island" },
+  { id: "cv", label: "NorgesGruppen" },
+  { id: "nlp", label: "Tripletex" },
 ];
+
+const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 export function DashboardLayout() {
   const activeTab = useUIStore((s) => s.activeTab);
   const setActiveTab = useUIStore((s) => s.setActiveTab);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastRefresh, setLastRefresh] = useState<string>(
+    new Date().toLocaleTimeString("en-GB", { hour12: false }),
+  );
+
+  const triggerRefresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+    setLastRefresh(new Date().toLocaleTimeString("en-GB", { hour12: false }));
+  }, []);
+
+  // Auto-refresh every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(triggerRefresh, REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [triggerRefresh]);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
@@ -52,16 +70,24 @@ export function DashboardLayout() {
           ))}
         </nav>
 
-        <div className="text-xs text-sky-500 font-medium">
-          Butler Agent
+        <div className="flex items-center gap-3">
+          <button
+            onClick={triggerRefresh}
+            className="px-3 py-1.5 rounded-full bg-white/60 text-xs font-semibold text-sky-600 hover:bg-white/80 transition-colors"
+          >
+            Refresh
+          </button>
+          <span className="text-[10px] text-sky-400">{lastRefresh}</span>
         </div>
       </header>
 
-      {/* Tab content */}
-      {activeTab === "overview" && <OverviewView />}
-      {activeTab === "ml" && <MLView />}
-      {activeTab === "cv" && <CVView />}
-      {activeTab === "nlp" && <NLPView />}
+      {/* Tab content — refreshKey forces re-mount to reload data */}
+      <div key={refreshKey} className="flex-1 flex flex-col overflow-hidden">
+        {activeTab === "overview" && <OverviewView />}
+        {activeTab === "ml" && <MLView />}
+        {activeTab === "cv" && <CVView />}
+        {activeTab === "nlp" && <NLPView />}
+      </div>
     </div>
   );
 }
