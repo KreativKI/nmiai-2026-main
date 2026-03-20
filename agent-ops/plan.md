@@ -1,6 +1,6 @@
 # Operations Agent — Phased Plan
 
-## Current Phase: 1
+## Current Phase: 3
 
 ## Completed Work
 - Dashboard scaffold (React 19 + Vite + Tailwind v4, Convex stripped)
@@ -18,7 +18,7 @@
 
 ## Phases
 
-### Phase 1: CV Submission Viewer — Status: active
+### Phase 1: CV Submission Viewer — Status: done
 Build `validate_cv_zip.py` shared tool + dashboard ZIP inspector component.
 
 Tasks:
@@ -28,7 +28,7 @@ Tasks:
 - Drop tool in shared/tools/, notify CV agent
 - Commit: "Phase 1: CV submission viewer with import validation"
 
-### Phase 2: Shared Validation Tools — Status: pending
+### Phase 2: Shared Validation Tools — Status: done
 Build all 4 shared tools from TOOL-SHARING.md, drop in shared/tools/, notify agents.
 
 Tasks:
