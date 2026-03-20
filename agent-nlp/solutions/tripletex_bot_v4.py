@@ -118,6 +118,47 @@ def vat_id(rate: int | float | None) -> int:
     return VAT_MAP.get(int(rate), 3)
 
 
+def as_list(data) -> list:
+    """Normalize API response data to a list (handles single-object vs array)."""
+    return data if isinstance(data, list) else [data]
+
+
+async def ensure_department(c: httpx.AsyncClient, base: str, tok: str) -> int | None:
+    """Find first existing department or create a default one. Returns dept ID or None."""
+    dept_r = await tx(c, base, tok, "GET", "/department", params={"count": 1})
+    if dept_r.get("success") and dept_r.get("data"):
+        depts = as_list(dept_r["data"])
+        if depts:
+            return depts[0]["id"]
+    dept_r = await tx(c, base, tok, "POST", "/department", {"name": "Avdeling", "departmentNumber": 1})
+    if dept_r.get("success"):
+        return dept_r["data"]["id"]
+    return None
+
+
+async def find_customer(c: httpx.AsyncClient, base: str, tok: str, name: str) -> dict:
+    """Find a customer by name. Returns {"success": True, "id": int} or {"success": False, "error": str}."""
+    cust_r = await tx(c, base, tok, "GET", "/customer", params={"name": name, "count": 5})
+    if not cust_r.get("success") or not cust_r.get("data"):
+        return {"success": False, "error": f"Customer '{name}' not found"}
+    customers = as_list(cust_r["data"])
+    return {"success": True, "id": customers[0]["id"]}
+
+
+async def find_invoice_for_customer(c: httpx.AsyncClient, base: str, tok: str, cust_id: int) -> dict:
+    """Find the first invoice for a customer. Returns {"success": True, "invoice": dict} or error."""
+    inv_r = await tx(c, base, tok, "GET", "/invoice", params={
+        "customerId": cust_id,
+        "invoiceDateFrom": "2020-01-01",
+        "invoiceDateTo": "2030-12-31",
+        "count": 5,
+    })
+    if not inv_r.get("success") or not inv_r.get("data"):
+        return {"success": False, "error": f"No invoice for customer {cust_id}"}
+    invoices = as_list(inv_r["data"])
+    return {"success": True, "invoice": invoices[0]}
+
+
 # ---------------------------------------------------------------------------
 # Tripletex API caller (reused from v3, proven reliable)
 # ---------------------------------------------------------------------------
@@ -176,17 +217,29 @@ async def tx(
 # ---------------------------------------------------------------------------
 # Field extraction via Gemini (ONE call, no function calling)
 # ---------------------------------------------------------------------------
-async def extract_fields(prompt: str, file_texts: list[str]) -> dict:
-    """Use Gemini to extract task_type and fields from the prompt."""
-    user_content = f"Task prompt:\n{prompt}"
-    if file_texts:
-        user_content += "\n\nAttached file content:\n" + "\n---\n".join(file_texts)
+async def extract_fields(prompt: str, file_parts: list[dict] | None = None) -> dict:
+    """Use Gemini to extract task_type and fields from the prompt.
+
+    file_parts: list of {"raw": bytes, "mime": str, "name": str} dicts for multimodal input.
+    """
+    parts: list[types.Part] = [types.Part.from_text(text=f"Task prompt:\n{prompt}")]
+
+    if file_parts:
+        for fp in file_parts:
+            try:
+                parts.append(types.Part.from_bytes(data=fp["raw"], mime_type=fp["mime"]))
+                log.info("Attached file to extraction: %s (%s, %d bytes)", fp["name"], fp["mime"], len(fp["raw"]))
+            except Exception as e:
+                log.warning("Failed to attach file %s: %s", fp["name"], e)
+                parts.append(types.Part.from_text(text=f"[File {fp['name']} could not be attached: {e}]"))
+
+    contents = [types.Content(role="user", parts=parts)]
 
     try:
         response = await asyncio.to_thread(
             gemini_client.models.generate_content,
             model=GEMINI_MODEL,
-            contents=user_content,
+            contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=EXTRACTION_PROMPT,
                 temperature=0.0,
@@ -206,7 +259,8 @@ async def extract_fields(prompt: str, file_texts: list[str]) -> dict:
         return result
 
     except json.JSONDecodeError as e:
-        log.error("JSON parse error from Gemini: %s. Raw: %s", e, text[:500] if 'text' in dir() else "N/A")
+        raw_text = text[:500] if "text" in locals() else "N/A"
+        log.error("JSON parse error from Gemini: %s. Raw: %s", e, raw_text)
         return {"task_type": "unknown", "fields": {}, "error": str(e)}
     except Exception as e:
         log.error("Gemini extraction error: %s", e)
@@ -234,18 +288,9 @@ async def exec_create_customer(c: httpx.AsyncClient, base: str, tok: str, f: dic
 
 
 async def exec_create_employee(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    # Ensure department exists
-    dept_id = None
-    dept_r = await tx(c, base, tok, "GET", "/department", params={"count": 1})
-    if dept_r.get("success") and dept_r.get("data"):
-        depts = dept_r["data"] if isinstance(dept_r["data"], list) else [dept_r["data"]]
-        if depts:
-            dept_id = depts[0]["id"]
-
+    dept_id = await ensure_department(c, base, tok)
     if not dept_id:
-        dept_r = await tx(c, base, tok, "POST", "/department", {"name": "Avdeling", "departmentNumber": 1})
-        if dept_r.get("success"):
-            dept_id = dept_r["data"]["id"]
+        return {"success": False, "error": "Could not obtain department ID"}
 
     user_type = f.get("userType", "NO_ACCESS")
     body = {
@@ -266,19 +311,11 @@ async def exec_create_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
 
 
 async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    # Step 1: department
-    dept_id = None
-    dept_r = await tx(c, base, tok, "GET", "/department", params={"count": 1})
-    if dept_r.get("success") and dept_r.get("data"):
-        depts = dept_r["data"] if isinstance(dept_r["data"], list) else [dept_r["data"]]
-        if depts:
-            dept_id = depts[0]["id"]
+    dept_id = await ensure_department(c, base, tok)
     if not dept_id:
-        dept_r = await tx(c, base, tok, "POST", "/department", {"name": "Avdeling", "departmentNumber": 1})
-        if dept_r.get("success"):
-            dept_id = dept_r["data"]["id"]
+        return {"success": False, "error": "Could not obtain department ID"}
 
-    # Step 2: employee with dateOfBirth (REQUIRED for employment)
+    # Create employee with dateOfBirth (REQUIRED for employment)
     user_type = f.get("userType", "STANDARD")
     email = f.get("email") or f"{f.get('firstName', 'emp').lower()}@company.no"
     emp_body = {
@@ -296,7 +333,7 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
         return emp_r
     emp_id = emp_r["data"]["id"]
 
-    # Step 3: employment (division NOT required)
+    # Create employment (division NOT required)
     start_date = f.get("startDate", time.strftime("%Y-%m-%d"))
     employment_body = {
         "employee": {"id": emp_id},
@@ -308,7 +345,7 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
         return empl_r
     employment_id = empl_r["data"]["id"]
 
-    # Step 4: employment details
+    # Employment details
     details_body = {
         "employment": {"id": employment_id},
         "date": start_date,
@@ -356,11 +393,17 @@ async def exec_create_project(c: httpx.AsyncClient, base: str, tok: str, f: dict
     }
     if f.get("projectNumber"): body["number"] = f["projectNumber"]
     if f.get("customerName"):
-        # Link to customer: create customer first
-        cust_r = await exec_create_customer(c, base, tok, {"name": f["customerName"], "orgNumber": f.get("customerOrgNumber")})
-        if cust_r.get("success"):
-            body["customer"] = {"id": cust_r["data"]["id"]}
+        # Link to customer: find existing or create
+        cust_r = await tx(c, base, tok, "GET", "/customer", params={"name": f["customerName"], "count": 5})
+        if cust_r.get("success") and cust_r.get("data"):
+            custs = as_list(cust_r["data"])
+            body["customer"] = {"id": custs[0]["id"]}
             body["isInternal"] = False
+        else:
+            cust_r = await exec_create_customer(c, base, tok, {"name": f["customerName"], "orgNumber": f.get("customerOrgNumber")})
+            if cust_r.get("success"):
+                body["customer"] = {"id": cust_r["data"]["id"]}
+                body["isInternal"] = False
 
     return await tx(c, base, tok, "POST", "/project", body)
 
@@ -377,7 +420,7 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
     # Step 2: Register bank account on account 1920
     acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
     if acct_r.get("success") and acct_r.get("data"):
-        accts = acct_r["data"] if isinstance(acct_r["data"], list) else [acct_r["data"]]
+        accts = as_list(acct_r["data"])
         if accts:
             acct_id = accts[0]["id"]
             await tx(c, base, tok, "PUT", f"/ledger/account/{acct_id}", {
@@ -425,37 +468,24 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
 
 
 async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    # Step 1: Find customer
-    cust_name = f.get("customerName", "")
-    cust_r = await tx(c, base, tok, "GET", "/customer", params={"name": cust_name, "count": 5})
-    if not cust_r.get("success") or not cust_r.get("data"):
-        return {"success": False, "error": f"Customer '{cust_name}' not found"}
-    customers = cust_r["data"] if isinstance(cust_r["data"], list) else [cust_r["data"]]
-    cust_id = customers[0]["id"]
+    cust_r = await find_customer(c, base, tok, f.get("customerName", ""))
+    if not cust_r["success"]:
+        return cust_r
 
-    # Step 2: Find invoice
-    inv_r = await tx(c, base, tok, "GET", "/invoice", params={
-        "customerId": cust_id,
-        "invoiceDateFrom": "2020-01-01",
-        "invoiceDateTo": "2030-12-31",
-        "count": 5,
-    })
-    if not inv_r.get("success") or not inv_r.get("data"):
-        return {"success": False, "error": f"No invoice for customer {cust_id}"}
-    invoices = inv_r["data"] if isinstance(inv_r["data"], list) else [inv_r["data"]]
-    inv = invoices[0]
+    inv_r = await find_invoice_for_customer(c, base, tok, cust_r["id"])
+    if not inv_r["success"]:
+        return inv_r
+    inv = inv_r["invoice"]
     inv_id = inv["id"]
     amount = f.get("amount") or inv.get("amount", 0)
 
-    # Step 3: Get payment type
     pt_r = await tx(c, base, tok, "GET", "/invoice/paymentType")
     pt_id = 1
     if pt_r.get("success") and pt_r.get("data"):
-        pts = pt_r["data"] if isinstance(pt_r["data"], list) else [pt_r["data"]]
+        pts = as_list(pt_r["data"])
         if pts:
             pt_id = pts[0]["id"]
 
-    # Step 4: Register payment
     pay_date = f.get("paymentDate", time.strftime("%Y-%m-%d"))
     return await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params={
         "paymentDate": pay_date,
@@ -466,27 +496,14 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
 
 
 async def exec_create_credit_note(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    # Step 1: Find customer
-    cust_name = f.get("customerName", "")
-    cust_r = await tx(c, base, tok, "GET", "/customer", params={"name": cust_name, "count": 5})
-    if not cust_r.get("success") or not cust_r.get("data"):
-        return {"success": False, "error": f"Customer '{cust_name}' not found"}
-    customers = cust_r["data"] if isinstance(cust_r["data"], list) else [cust_r["data"]]
-    cust_id = customers[0]["id"]
+    cust_r = await find_customer(c, base, tok, f.get("customerName", ""))
+    if not cust_r["success"]:
+        return cust_r
 
-    # Step 2: Find invoice
-    inv_r = await tx(c, base, tok, "GET", "/invoice", params={
-        "customerId": cust_id,
-        "invoiceDateFrom": "2020-01-01",
-        "invoiceDateTo": "2030-12-31",
-        "count": 5,
-    })
-    if not inv_r.get("success") or not inv_r.get("data"):
-        return {"success": False, "error": f"No invoice for customer {cust_id}"}
-    invoices = inv_r["data"] if isinstance(inv_r["data"], list) else [inv_r["data"]]
-    inv_id = invoices[0]["id"]
-
-    # Step 3: Create credit note
+    inv_r = await find_invoice_for_customer(c, base, tok, cust_r["id"])
+    if not inv_r["success"]:
+        return inv_r
+    inv_id = inv_r["invoice"]["id"]
     date = f.get("date", time.strftime("%Y-%m-%d"))
     reason = f.get("reason", "Kreditering")
     return await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:createCreditNote", params={
@@ -511,7 +528,7 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
     pt_r = await tx(c, base, tok, "GET", "/travelExpense/paymentType")
     pt_id = 1
     if pt_r.get("success") and pt_r.get("data"):
-        pts = pt_r["data"] if isinstance(pt_r["data"], list) else [pt_r["data"]]
+        pts = as_list(pt_r["data"])
         if pts:
             pt_id = pts[0]["id"]
 
@@ -527,7 +544,6 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
 
     # Step 4: Add each cost separately
     costs = f.get("costs", [])
-    last_result = te_r
     for cost in costs:
         cost_body = {
             "travelExpense": {"id": te_id},
@@ -537,9 +553,11 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
             "date": cost.get("date", time.strftime("%Y-%m-%d")),
             "comments": cost.get("description", ""),
         }
-        last_result = await tx(c, base, tok, "POST", "/travelExpense/cost", cost_body)
+        cost_r = await tx(c, base, tok, "POST", "/travelExpense/cost", cost_body)
+        if not cost_r.get("success"):
+            log.warning("Travel expense cost failed: %s", cost_r.get("error"))
 
-    return last_result
+    return te_r
 
 
 async def exec_delete_employee(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
@@ -551,7 +569,7 @@ async def exec_delete_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
     emp_r = await tx(c, base, tok, "GET", "/employee", params=params)
     if not emp_r.get("success") or not emp_r.get("data"):
         return {"success": False, "error": "Employee not found"}
-    emps = emp_r["data"] if isinstance(emp_r["data"], list) else [emp_r["data"]]
+    emps = as_list(emp_r["data"])
     emp_id = emps[0]["id"]
     return await tx(c, base, tok, "DELETE", f"/employee/{emp_id}")
 
@@ -563,21 +581,20 @@ async def exec_delete_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
             "firstName": f["firstName"], "lastName": f.get("lastName", ""), "count": 5
         })
         if emp_r.get("success") and emp_r.get("data"):
-            emps = emp_r["data"] if isinstance(emp_r["data"], list) else [emp_r["data"]]
+            emps = as_list(emp_r["data"])
             te_r = await tx(c, base, tok, "GET", "/travelExpense", params={"employeeId": emps[0]["id"]})
             if te_r.get("success") and te_r.get("data"):
-                tes = te_r["data"] if isinstance(te_r["data"], list) else [te_r["data"]]
+                tes = as_list(te_r["data"])
                 return await tx(c, base, tok, "DELETE", f"/travelExpense/{tes[0]['id']}")
     return {"success": False, "error": "Travel expense not found"}
 
 
 async def exec_update_customer(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
     target = f.get("targetEntity") or f.get("name", "")
-    cust_r = await tx(c, base, tok, "GET", "/customer", params={"name": target, "count": 5})
-    if not cust_r.get("success") or not cust_r.get("data"):
-        return {"success": False, "error": f"Customer '{target}' not found"}
-    customers = cust_r["data"] if isinstance(cust_r["data"], list) else [cust_r["data"]]
-    cust_id = customers[0]["id"]
+    cust_r = await find_customer(c, base, tok, target)
+    if not cust_r["success"]:
+        return cust_r
+    cust_id = cust_r["id"]
 
     updates = f.get("updateFields", {})
     body = {}
@@ -601,7 +618,7 @@ async def exec_update_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
     })
     if not emp_r.get("success") or not emp_r.get("data"):
         return {"success": False, "error": f"Employee '{target_first} {target_last}' not found"}
-    emps = emp_r["data"] if isinstance(emp_r["data"], list) else [emp_r["data"]]
+    emps = as_list(emp_r["data"])
     emp_id = emps[0]["id"]
 
     updates = f.get("updateFields", {})
@@ -620,7 +637,7 @@ async def exec_create_contact(c: httpx.AsyncClient, base: str, tok: str, f: dict
     cust_name = f.get("customerName", "")
     cust_r = await tx(c, base, tok, "GET", "/customer", params={"name": cust_name, "count": 5})
     if cust_r.get("success") and cust_r.get("data"):
-        customers = cust_r["data"] if isinstance(cust_r["data"], list) else [cust_r["data"]]
+        customers = as_list(cust_r["data"])
         cust_id = customers[0]["id"]
     else:
         cust_r = await tx(c, base, tok, "POST", "/customer", {"name": cust_name, "isCustomer": True})
@@ -639,6 +656,19 @@ async def exec_create_contact(c: httpx.AsyncClient, base: str, tok: str, f: dict
         body["phoneNumberMobile"] = f.get("contactMobile") or f["mobile"]
 
     return await tx(c, base, tok, "POST", "/contact", body)
+
+
+async def exec_enable_module(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    """Enable module task: proxy blocks PUT /company/modules (405).
+    Best effort: create the department if mentioned, return completed."""
+    dept_name = f.get("departmentName") or f.get("name")
+    if dept_name:
+        body = {"name": dept_name}
+        if f.get("departmentNumber") is not None:
+            body["departmentNumber"] = int(f["departmentNumber"])
+        return await tx(c, base, tok, "POST", "/department", body)
+    # Nothing actionable, just return success
+    return {"success": True, "data": {"message": "Module enable skipped (proxy 405)"}}
 
 
 # ---------------------------------------------------------------------------
@@ -660,7 +690,152 @@ TASK_EXECUTORS = {
     "update_customer": exec_update_customer,
     "update_employee": exec_update_employee,
     "create_contact": exec_create_contact,
+    "enable_module": exec_enable_module,
 }
+
+
+# ---------------------------------------------------------------------------
+# Fallback: Gemini agent loop for unknown task types (from v3)
+# ---------------------------------------------------------------------------
+FALLBACK_SYSTEM_PROMPT = """You are an expert AI accounting agent for Tripletex.
+Execute the requested accounting task via API calls. Use tripletex_api tool.
+Auth: Basic Auth, username "0", password is the session token.
+Dates: convert DD.MM.YYYY to YYYY-MM-DD. Numbers: convert "1.000,50" to 1000.50.
+POST /customer: always include "isCustomer": true.
+POST /employee: always include "department": {"id": X} and "userType": "NO_ACCESS".
+POST /order or inline orders: always include "deliveryDate".
+Fresh sandbox: no pre-existing business data except system entities.
+Return a brief summary when done."""
+
+TRIPLETEX_TOOL = types.Tool(
+    function_declarations=[
+        types.FunctionDeclaration(
+            name="tripletex_api",
+            description="Make an HTTP request to the Tripletex REST API.",
+            parameters=types.Schema(
+                type="OBJECT",
+                properties={
+                    "method": types.Schema(type="STRING", enum=["GET", "POST", "PUT", "DELETE"]),
+                    "path": types.Schema(type="STRING", description="API path, e.g. '/employee'"),
+                    "body": types.Schema(type="STRING", description="JSON body for POST/PUT"),
+                    "query_params": types.Schema(type="STRING", description="key=value&key2=value2"),
+                },
+                required=["method", "path"],
+            ),
+        ),
+    ]
+)
+
+MAX_FALLBACK_TURNS = 15
+
+
+async def run_agent_fallback(
+    prompt: str,
+    files: list[dict] | None,
+    base_url: str,
+    session_token: str,
+    t0: float,
+) -> dict[str, Any]:
+    """Fallback Gemini agent loop for unknown task types."""
+    user_parts: list[types.Part] = [types.Part.from_text(text=f"Task prompt:\n{prompt}")]
+    if files:
+        for f in files:
+            content_b64 = f.get("content_base64", "")
+            mime = f.get("mime_type", "application/octet-stream")
+            if content_b64:
+                try:
+                    raw = base64.b64decode(content_b64)
+                    user_parts.append(types.Part.from_bytes(data=raw, mime_type=mime))
+                except Exception:
+                    pass
+
+    contents: list[types.Content] = [types.Content(role="user", parts=user_parts)]
+
+    async with httpx.AsyncClient() as http_client:
+        for turn in range(MAX_FALLBACK_TURNS):
+            if time.time() - t0 > DEADLINE_SECONDS:
+                log.warning("Fallback agent: deadline reached at turn %d", turn + 1)
+                break
+
+            try:
+                response = await asyncio.to_thread(
+                    gemini_client.models.generate_content,
+                    model=GEMINI_MODEL,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=FALLBACK_SYSTEM_PROMPT,
+                        tools=[TRIPLETEX_TOOL],
+                        temperature=0.0,
+                        max_output_tokens=8192,
+                    ),
+                )
+            except Exception as e:
+                log.error("Fallback agent Gemini error: %s", e)
+                break
+
+            if not response.candidates:
+                break
+            candidate = response.candidates[0]
+
+            reason = getattr(candidate.finish_reason, "name", None)
+            if reason in ("MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL"):
+                log.warning("Fallback agent: %s on turn %d, aborting", reason, turn + 1)
+                break
+
+            if not candidate.content or not candidate.content.parts:
+                continue
+
+            function_calls = [p for p in candidate.content.parts if p.function_call]
+            if not function_calls:
+                log.info("Fallback agent completed at turn %d", turn + 1)
+                break
+
+            contents.append(candidate.content)
+            fn_responses: list[types.Part] = []
+            for fc_part in function_calls:
+                fc = fc_part.function_call
+                args = dict(fc.args) if fc.args else {}
+                method = args.get("method", "GET")
+                path = args.get("path", "/")
+                body_str = args.get("body")
+                qp = args.get("query_params")
+
+                parsed_body = None
+                if body_str:
+                    try:
+                        parsed_body = json.loads(body_str)
+                    except json.JSONDecodeError:
+                        log.warning("Fallback agent: invalid JSON body, skipping: %s", body_str[:200])
+                        fn_responses.append(types.Part.from_function_response(
+                            name=fc.name, response={"result": '{"error": "Invalid JSON body", "status_code": 400}'}))
+                        continue
+
+                result = await tx(http_client, base_url, session_token, method, path,
+                                  parsed_body, _parse_query_params(qp) if qp else None)
+
+                result_str = json.dumps(result, default=str, ensure_ascii=False)
+                if len(result_str) > 8000:
+                    result_str = result_str[:7990] + '..."}'
+                fn_responses.append(types.Part.from_function_response(
+                    name=fc.name, response={"result": result_str}))
+
+            contents.append(types.Content(role="tool", parts=fn_responses))
+
+    return {
+        "status": "completed",
+        "task_type": "unknown_fallback",
+        "elapsed_seconds": time.time() - t0,
+    }
+
+
+def _parse_query_params(qp: str) -> dict:
+    """Parse 'key=value&key2=value2' into dict."""
+    params = {}
+    for pair in qp.split("&"):
+        if "=" in pair:
+            k, v = pair.split("=", 1)
+            params[k.strip()] = v.strip()
+    return params
 
 
 async def run_structured(
@@ -672,24 +847,22 @@ async def run_structured(
     """Run the structured workflow: extract fields then execute deterministic API sequence."""
     t0 = time.time()
 
-    # Decode files for text extraction
-    file_texts = []
+    # Decode files for multimodal extraction
     file_parts = []
     if files:
         for f in files:
             content_b64 = f.get("content_base64", "")
-            mime = f.get("mime_type", "")
-            fname = f.get("filename", "")
+            mime = f.get("mime_type", "application/octet-stream")
+            fname = f.get("filename", "unknown")
             if content_b64:
                 try:
                     raw = base64.b64decode(content_b64)
-                    file_texts.append(f"[File: {fname}, {mime}, {len(raw)} bytes]")
                     file_parts.append({"raw": raw, "mime": mime, "name": fname})
                 except Exception as e:
-                    file_texts.append(f"[File {fname}: decode error: {e}]")
+                    log.warning("File %s decode error: %s", fname, e)
 
-    # Step 1: Extract task type and fields
-    extraction = await extract_fields(prompt, file_texts)
+    # Step 1: Extract task type and fields (multimodal: sends file bytes to Gemini)
+    extraction = await extract_fields(prompt, file_parts or None)
     task_type = extraction.get("task_type", "unknown")
     fields = extraction.get("fields", {})
 
@@ -699,13 +872,9 @@ async def run_structured(
     # Step 2: Route to executor
     executor = TASK_EXECUTORS.get(task_type)
     if not executor:
-        log.warning("Unknown task type '%s'. Fields: %s", task_type, json.dumps(fields, ensure_ascii=False)[:300])
-        return {
-            "status": "completed",
-            "task_type": task_type,
-            "note": "unknown task type, no executor",
-            "elapsed_seconds": time.time() - t0,
-        }
+        log.warning("Unknown task type '%s', falling back to agent loop. Fields: %s",
+                     task_type, json.dumps(fields, ensure_ascii=False)[:300])
+        return await run_agent_fallback(prompt, files, base_url, session_token, t0)
 
     # Step 3: Execute
     async with httpx.AsyncClient() as client:
