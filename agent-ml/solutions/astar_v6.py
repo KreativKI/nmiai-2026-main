@@ -669,7 +669,7 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
                 detail, seed_idx,
                 obs_counts=all_obs[seed_idx][0] if seed_idx in all_obs else None,
                 obs_total=all_obs[seed_idx][1] if seed_idx in all_obs else None,
-                obs_weight_max=0.70,  # churn found 0.70 > 0.90
+                prior_strength=12.0,  # Dirichlet-Categorical: ps=12 optimal (+1.1 avg)
             )
         else:
             # Fallback: heuristic model (old code path)
@@ -681,8 +681,8 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
             pred = np.maximum(pred, PROB_FLOOR)
             pred = pred / pred.sum(axis=-1, keepdims=True)
 
-        # Temperature scaling: softens distributions (T>1) for better calibration
-        # Autoiteration: T=1.12 optimal across 39 variants (+0.2 vs T=1.08)
+        # Global temperature scaling: T=1.12 optimal across 39 autoiteration variants
+        # Per-class temperature tested but didn't beat global (Dirichlet handles calibration)
         TEMPERATURE = 1.12
         pred = pred ** (1.0 / TEMPERATURE)
 

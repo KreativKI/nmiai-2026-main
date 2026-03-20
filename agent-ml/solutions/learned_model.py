@@ -231,8 +231,19 @@ class NeighborhoodModel:
         return pred
 
     def predict_grid_with_obs(self, round_data, seed_idx, obs_counts=None,
-                                obs_total=None, obs_weight_max=0.90):
-        """Predict with observation blending."""
+                                obs_total=None, obs_weight_max=0.90,
+                                prior_strength=3.0):
+        """Predict with Dirichlet-Categorical Bayesian posterior.
+
+        Instead of hard-coded observation blending weights, uses the
+        conjugate Dirichlet prior for principled Bayesian updating:
+
+            alpha = prior_strength * model_prior
+            posterior = (alpha + obs_counts) / (sum(alpha) + N)
+
+        With 1 observation: prior dominates. With 10+: data dominates.
+        Mathematically optimal for small-sample categorical estimation.
+        """
         h, w = round_data["map_height"], round_data["map_width"]
         grid = round_data["initial_states"][seed_idx]["grid"]
         pred = self.predict_grid(round_data, seed_idx)
@@ -240,28 +251,15 @@ class NeighborhoodModel:
         if obs_counts is not None and obs_total is not None:
             has_obs = obs_total > 0
             if has_obs.any():
-                ot_3d = obs_total[..., np.newaxis]
-                empirical = obs_counts / np.maximum(ot_3d, 1)
-
-                obs_w = np.zeros((h, w, 1))
                 for y in range(h):
                     for x in range(w):
                         if obs_total[y, x] == 0:
                             continue
-                        n = obs_total[y, x]
-                        cls = TERRAIN_TO_CLASS.get(int(grid[y][x]), 0)
-                        if cls in (1, 2, 3):
-                            obs_w[y, x, 0] = min(obs_weight_max, 0.4 + n / 12.0)
-                        elif cls == 4:
-                            obs_w[y, x, 0] = min(0.4, 0.1 + n / 20.0)
-                        else:
-                            obs_w[y, x, 0] = min(0.35, 0.1 + n / 25.0)
-
-                pred = np.where(
-                    has_obs[..., np.newaxis],
-                    obs_w * empirical + (1 - obs_w) * pred,
-                    pred
-                )
+                        # Dirichlet-Categorical posterior
+                        alpha = prior_strength * pred[y, x]
+                        alpha = np.maximum(alpha, PROB_FLOOR)
+                        posterior = (alpha + obs_counts[y, x]) / (alpha.sum() + obs_total[y, x])
+                        pred[y, x] = posterior
 
         pred = np.maximum(pred, PROB_FLOOR)
         pred = pred / pred.sum(axis=-1, keepdims=True)
