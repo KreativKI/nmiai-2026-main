@@ -628,8 +628,8 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
     log(f"Loaded observations for seeds: {list(all_obs.keys())}")
 
     # Train learned neighborhood model on all completed rounds
-    from learned_model import NeighborhoodModel
-    learned = NeighborhoodModel()
+    from churn import NeighborhoodModelV2
+    learned = NeighborhoodModelV2()
     rounds = session.get(f"{BASE}/astar-island/rounds").json()
     completed = [r for r in rounds if r["status"] == "completed"]
     learned_ok = False
@@ -669,6 +669,7 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
                 detail, seed_idx,
                 obs_counts=all_obs[seed_idx][0] if seed_idx in all_obs else None,
                 obs_total=all_obs[seed_idx][1] if seed_idx in all_obs else None,
+                obs_weight_max=0.70,  # churn found 0.70 > 0.90
             )
         else:
             # Fallback: heuristic model (old code path)
@@ -681,8 +682,8 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
             pred = pred / pred.sum(axis=-1, keepdims=True)
 
         # Temperature scaling: softens distributions (T>1) for better calibration
-        # Backtest: T=1.08 gives +1.1 avg across 7 rounds
-        TEMPERATURE = 1.08
+        # Autoiteration: T=1.12 optimal across 39 variants (+0.2 vs T=1.08)
+        TEMPERATURE = 1.12
         pred = pred ** (1.0 / TEMPERATURE)
 
         # Floor and renormalize
