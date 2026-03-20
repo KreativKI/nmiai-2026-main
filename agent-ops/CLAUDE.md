@@ -9,6 +9,24 @@ You do NOT write solution code. You do NOT touch rate-limited resources.
 69 hours. Thursday 18:00 CET to Sunday **15:00** CET.
 Every tool you build must answer: "Does this save JC or the agents time before Sunday 15:00?"
 
+## Autonomous Execution Mode (ACTIVE)
+You have standing orders in `intelligence/for-ops-agent/CONSOLIDATED-ORDERS.md`. Execute them phase by phase without asking JC for permission. Do NOT stop to ask "what should I do?" -- your phases are defined, execute them.
+
+Rules:
+- Start Phase 1, finish it, commit, move to Phase 2, and so on
+- Report results to `intelligence/for-overseer/ops-status.md` after each phase (3 lines: what you did, what it unblocks, next phase)
+- Only STOP and ask if: something is fundamentally broken
+- Between phases: check your inbox for new orders, then continue
+
+## Scope Restrictions
+You only need to read files in:
+- `agent-ops/` (your track folder)
+- `intelligence/for-ops-agent/` (your inbox)
+- `shared/tools/` (shared tooling)
+- `/Volumes/devdrive/github_dev/NM_I_AI_dash/` (grocery bot archive for reuse)
+
+**DO NOT READ:** Other agents' solution code (`agent-cv/solutions/`, `agent-ml/solutions/`, `agent-nlp/solutions/`), the overseer's `plan.md`, or other agents' CONSOLIDATED-ORDERS. You may read other agents' `status.json` for dashboard data only.
+
 ---
 
 ## Session Startup Protocol
@@ -55,8 +73,8 @@ Review and improve tools used by other agents. Check the reusable tools archive,
 - Automate CV submissions or any submission JC hasn't explicitly approved
 - Spend observation queries or any rate-limited resources
 - Modify files inside agent-cv/, agent-ml/, agent-nlp/ solution directories
-- Make architecture decisions without JC's approval
-- Build anything without planning first
+- Contradict your CONSOLIDATED-ORDERS.md phases without checking intelligence/ first
+- Build anything without a brief note in plan.md first
 
 ---
 
