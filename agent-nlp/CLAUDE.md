@@ -291,6 +291,8 @@ Each task type only gets 5 submissions/day. A failed submission is a wasted slot
 6. `python3 agent-nlp/scripts/qc-verify.py [endpoint] --tier2` -- extended Tier 2 tests
 7. Check Cloud Run logs for MALFORMED_FUNCTION_CALL errors: `gcloud run services logs read tripletex-agent --region europe-west4 --project ai-nm26osl-1779 --limit 50 | grep MALFORMED`
 8. If MALFORMED rate >20% of recent requests, fix before submitting.
+9. Run canary: Agent tool with prompt "Read shared/agents/nlp-canary.md for your instructions. Audit endpoint at [URL]."
+10. Canary MUST output PASS. If FAIL, fix violations before submitting.
 
 ### After submission:
 - Record score in EXPERIMENTS.md
