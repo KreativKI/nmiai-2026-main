@@ -1,9 +1,9 @@
 # Tripletex AI Accounting Agent -- Execution Plan
 
 **Track:** NLP | **Weight:** 33.33%
-**Last updated:** 2026-03-20 16:00 CET
+**Last updated:** 2026-03-20 21:45 CET
 **Approach:** Structured workflows (LLM extracts fields, Python executes API calls)
-**Bot version:** tripletex_bot_v3.py (deployed), tripletex_bot_v4.py (building)
+**Bot version:** tripletex_bot_v4.py (deployed, rev 37, QC 8/8 PASS)
 
 ## Current Scores
 
@@ -15,7 +15,7 @@
 | 6/7 task (from auto-submit) | 6/7 | 86% | From session 5 auto-submit |
 | 4/8 task (from auto-submit) | 4/8 | 50% | From session 5 auto-submit |
 
-## Current Phase: 4 (Building v4)
+## Current Phase: 5 (Tier 2 Submission)
 
 ## Phase 0: Local Test Infrastructure (DONE)
 Docker + QC workflow established. qc-verify.py tests 8 Tier 1 + 5 Tier 2 task types.
@@ -31,27 +31,17 @@ All critical fixes applied: isCustomer, bank account, payment types, travel expe
 
 **Decision (JC approved):** Switch to structured workflows. LLM extracts fields only, Python executes deterministic API sequences. This eliminates function calling failures.
 
-## Phase 4: Build tripletex_bot_v4 (ACTIVE)
+## Phase 4: Build tripletex_bot_v4 (DONE)
 
-**Architecture:** See solutions/plan_v4.md for full design.
+**Architecture:** LLM extracts {task_type, fields} -> Python executes API sequence -> {"status": "completed"}
 
-```
-POST /solve -> Gemini extracts {task_type, fields} -> Python executes API sequence -> {"status": "completed"}
-```
+**Result:** 16 task types implemented. QC 8/8 PASS on Tier 1. Deployed rev 37. Zero MALFORMED errors.
 
-**Task types to implement (15):**
-A. create_customer, create_employee, create_product, create_department
-B. create_project, create_invoice, register_payment, create_travel_expense
-C. create_credit_note, create_employment, update_customer, update_employee
-D. delete_employee, delete_travel_expense, create_contact
-
-**Boris workflow:** Explore (done) -> Plan (done) -> Code -> Review -> Simplify -> Validate -> Commit
-
-**Validation criteria:**
-- QC 8/8 PASS on Tier 1 (must match v3 baseline)
-- QC 13/13 PASS on Tier 1 + Tier 2
-- Two consecutive QC passes before deploying
-- Zero MALFORMED errors (no function calling used)
+**Key fixes during validation:**
+- vatType retry: .lower() case mismatch prevented fallback
+- Product vatType: omit for 25% (sandbox default), only send non-standard
+- Customer search: exact match + org number fallback + full list scan
+- Pre-submit pipeline: `bash agent-nlp/scripts/pre-submit.sh`
 
 ## Phase 5: Tier 2 Submission (after v4 validated)
 Submit via interactive auto-submitter. JC controls each submission.

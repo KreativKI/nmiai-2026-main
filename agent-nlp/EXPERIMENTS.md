@@ -76,17 +76,42 @@
 - Root cause: Gemini API-side, not code change
 - Competition impact: low (best score per task retained, bad runs don't lower score)
 
+## Session 6: 2026-03-20 19:00-21:45 CET
+
+### Experiment 13: tripletex_bot_v4 - Structured workflows
+**Date:** 2026-03-20T19:00:00Z
+**Approach:** C (Structured workflows: LLM extracts fields, Python executes API)
+**Change:** Complete rewrite. Gemini extracts {task_type, fields} as JSON, Python functions execute deterministic API sequences. No function calling.
+**Hypothesis:** Eliminates MALFORMED_FUNCTION_CALL errors entirely (30-40% rate with function calling)
+**Score before:** 8/8 + 8/8 + 6/7 + 4/8 + 2/7
+**Score after:** QC 8/8 PASS (not yet submitted to competition)
+**Delta:** N/A (pending submission)
+**Kept/Reverted:** kept
+**Time spent:** 2.5h
+**Task types tested:** 8 Tier 1 (all PASS)
+**Notes:** Three bugs found and fixed during QC:
+1. vatType retry: `.lower()` case mismatch prevented fallback from triggering on invoice vatType rejection
+2. Product vatType: omit for standard 25% (sandbox default works), only send for non-standard rates
+3. Customer search: Tripletex name search is partial match. Old QC customers polluted results. Fixed: exact match + org number fallback + full list scan
+
+### Key Findings Session 6
+- Dev sandbox rejects ALL vatType codes on invoice order lines (even code 3 "Utgående avgift, høy sats"). Competition sandboxes likely configured differently.
+- Tripletex GET /customer name search is PARTIAL match (LIKE query). Must filter for exact match locally.
+- `.lower()` in string comparisons: if checking `"vatType" in str(...).lower()`, the search term must also be lowercase ("vattype").
+- Pre-submit pipeline built: syntax check, health check, QC 8/8, MALFORMED rate check. Single script.
+
 ## Bot Versions
 
 | Version | File | Status | Key Change |
 |---------|------|--------|------------|
 | v1 | bot_v1.py | Superseded | Wrong field names |
 | v1.1 | tripletex_bot_v1.py | Superseded | Fixed field names |
-| v2 | tripletex_bot_v2.py | Previous | All fixes, QC 8/8 PASS |
-| v3 | tripletex_bot_v3.py | DEPLOYED | v2 + employment details fix |
+| v2 | tripletex_bot_v2.py | Superseded | All fixes, QC 8/8 PASS |
+| v3 | tripletex_bot_v3.py | Superseded | v2 + employment details fix |
+| v4 | tripletex_bot_v4.py | DEPLOYED | Structured workflows, no function calling |
 
 ## Deployed Endpoint
 - URL: https://tripletex-agent-795548831221.europe-west4.run.app
 - Region: europe-west4
 - Model: gemini-2.5-flash via Vertex AI
-- Revision: 23
+- Revision: 37

@@ -157,9 +157,33 @@ Rules re-read at 2026-03-20T07:00:00Z. No violations found.
 - Common vatType IDs (verified): 25%=3, 15%=31, 12%=32, 0%=5
 - QC workflow mandatory: local Docker -> qc-verify.py 8/8 PASS -> deploy -> submit
 
-### Competition Scores (as of session end)
+### Competition Scores (as of session 4 end)
 | Task Type | Score | Submission |
 |-----------|-------|-----------|
 | Create customer (fr) | 8/8 (100%) | Competition |
 | Unknown task | 8/8 (100%) | Competition |
 | Register payment | 2/7 (29%) | Competition (fixed, needs re-test) |
+
+## Session 6: 2026-03-20 19:00-21:45 CET
+
+Rules re-read at 2026-03-20T19:00:00Z. No violations found.
+
+### Experiment 13: tripletex_bot_v4 - Structured workflows (QC 8/8 PASS)
+**Date:** 2026-03-20T19:00:00Z
+**Approach:** C (Structured workflows)
+**Change:** Complete rewrite: LLM extracts {task_type, fields} as JSON, Python executes deterministic API sequences. No function calling.
+**Score before:** QC 6/8 (invoice + payment failing)
+**Score after:** QC 8/8 PASS
+**Delta:** +2 QC tasks
+**Kept/Reverted:** kept
+**Time spent:** 2.5h
+**Task types tested:** customer, employee, product, department, project, invoice, travel expense, payment (all PASS)
+**Notes:** Three bugs fixed: (A) vatType retry .lower() case mismatch, (B) product vatType omit for 25%, (C) customer search exact match + fallback
+
+### Key Findings Session 6
+- Dev sandbox rejects ALL vatType codes on invoice order lines. Competition sandboxes likely differ.
+- Tripletex GET /customer name search is PARTIAL match. Must filter exact locally.
+- `.lower()` + string-in-string: both sides must be lowercase
+- Pre-submit pipeline built: `bash agent-nlp/scripts/pre-submit.sh`
+- Bot revision 37 deployed, QC 8/8 PASS, 0% MALFORMED
+- 16 task types implemented in v4

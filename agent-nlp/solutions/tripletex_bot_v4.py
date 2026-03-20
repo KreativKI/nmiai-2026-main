@@ -167,13 +167,33 @@ async def ensure_department(c: httpx.AsyncClient, base: str, tok: str) -> int | 
     return None
 
 
-async def find_customer(c: httpx.AsyncClient, base: str, tok: str, name: str) -> dict:
-    """Find a customer by name. Returns {"success": True, "id": int} or {"success": False, "error": str}."""
-    cust_r = await tx(c, base, tok, "GET", "/customer", params={"name": name, "count": 5})
-    if not cust_r.get("success") or not cust_r.get("data"):
-        return {"success": False, "error": f"Customer '{name}' not found"}
-    customers = as_list(cust_r["data"])
-    return {"success": True, "id": customers[0]["id"]}
+async def find_customer(c: httpx.AsyncClient, base: str, tok: str, name: str, org_nr: str | None = None) -> dict:
+    """Find a customer by name or org number. Returns {"success": True, "id": int} or error."""
+    # Try name search first (API does partial match, so filter for exact)
+    cust_r = await tx(c, base, tok, "GET", "/customer", params={"name": name, "count": 20})
+    if cust_r.get("success") and cust_r.get("data"):
+        customers = as_list(cust_r["data"])
+        for c_item in customers:
+            if c_item.get("name") == name:
+                return {"success": True, "id": c_item["id"]}
+        # No exact match in name search results, try other methods
+    # Fallback: search by org number
+    if org_nr:
+        cust_r2 = await tx(c, base, tok, "GET", "/customer", params={"organizationNumber": org_nr, "count": 5})
+        if cust_r2.get("success") and cust_r2.get("data"):
+            customers2 = as_list(cust_r2["data"])
+            log.info("Customer found by orgNumber=%s (name search failed for '%s')", org_nr, name)
+            return {"success": True, "id": customers2[0]["id"]}
+    # Fallback: list all customers and search
+    all_r = await tx(c, base, tok, "GET", "/customer", params={"count": 100})
+    if all_r.get("success") and all_r.get("data"):
+        all_custs = as_list(all_r["data"])
+        for c_item in all_custs:
+            if c_item.get("name") == name:
+                log.info("Customer found via full list scan for '%s'", name)
+                return {"success": True, "id": c_item["id"]}
+    log.warning("Customer '%s' not found by any method", name)
+    return {"success": False, "error": f"Customer '{name}' not found"}
 
 
 async def find_invoice_for_customer(c: httpx.AsyncClient, base: str, tok: str, cust_id: int) -> dict:
@@ -419,12 +439,14 @@ async def exec_create_product(c: httpx.AsyncClient, base: str, tok: str, f: dict
     if f.get("productNumber"): body["number"] = f["productNumber"]
     if f.get("price") is not None:
         body["priceExcludingVatCurrency"] = float(f["price"])
-    body["vatType"] = {"id": vat_id_sync(f.get("vatRate"), vat_map)}
+    vat_rate = f.get("vatRate")
+    if vat_rate is not None and int(vat_rate) != 25:
+        body["vatType"] = {"id": vat_id_sync(vat_rate, vat_map)}
+    # Omit vatType for standard 25% -- sandbox default handles it correctly
     r = await tx(c, base, tok, "POST", "/product", body)
-    if not r.get("success") and "vatTypeId" in str(r.get("error", "")):
-        # Retry without vatType (some sandboxes reject explicit VAT codes)
+    if not r.get("success") and "vattype" in str(r.get("error", "")).lower():
         log.info("Product POST failed on vatType, retrying without it")
-        del body["vatType"]
+        body.pop("vatType", None)
         r = await tx(c, base, tok, "POST", "/product", body)
     return r
 
@@ -535,7 +557,7 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
         }],
     }
     r = await tx(c, base, tok, "POST", "/invoice", invoice_body)
-    if not r.get("success") and "vatType" in str(r.get("error", "")).lower():
+    if not r.get("success") and "vattype" in str(r.get("error", "")).lower():
         # Retry without vatType on order lines (some sandboxes reject explicit VAT codes)
         log.info("Invoice POST failed on vatType, retrying without it")
         for ol in order_lines:
@@ -545,7 +567,7 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
 
 
 async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    cust_r = await find_customer(c, base, tok, f.get("customerName", ""))
+    cust_r = await find_customer(c, base, tok, f.get("customerName", ""), f.get("customerOrgNumber"))
     if not cust_r["success"]:
         return cust_r
 
@@ -573,7 +595,7 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
 
 
 async def exec_create_credit_note(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    cust_r = await find_customer(c, base, tok, f.get("customerName", ""))
+    cust_r = await find_customer(c, base, tok, f.get("customerName", ""), f.get("customerOrgNumber"))
     if not cust_r["success"]:
         return cust_r
 
