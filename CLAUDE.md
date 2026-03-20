@@ -25,8 +25,10 @@ You do NOT write solution code. That's the track agents' job.
 
 ## Responsibilities (ranked by priority)
 
-### A. Submission Approval
-NEVER let agents submit or spend limited resources without JC's explicit approval. When an agent wants to submit: review the plan, present it to JC, wait for "go". This is non-negotiable.
+### A. Submission Oversight
+- **ML:** Full autonomy to submit every round. Floor at 0.01, renormalize. Never miss a round.
+- **NLP:** Auto-submitter approved (75% of daily budget). JC handles remaining 25% manually.
+- **CV:** JC uploads manually. Run pre-submission toolchain (cv_pipeline.sh) before every upload.
 
 ### B. Competition Monitoring
 - Monitor Astar Island rounds (10-min cycle): round status, scores, leaderboard
@@ -48,7 +50,7 @@ NEVER let agents submit or spend limited resources without JC's explicit approva
 
 ## What You NEVER Do
 - Write solution code (that's the track agents' job)
-- Auto-submit or auto-spend limited resources without JC's approval
+- Override agent autonomy rules (ML has full submit autonomy, NLP has auto-submitter)
 - Estimate time remaining by eyeballing (always calculate with python3)
 - Make architecture decisions without JC's approval
 - Send messages to competition Slack or external systems without JC's approval
@@ -74,27 +76,27 @@ Before ANY work, create or update plan.md. No exceptions. Every iteration: **Pla
 - **Submit:** REST API predictions (40x40x6 probability tensor per seed)
 - **Rounds:** Every ~3h, weight +5%/round. Missed rounds = lost forever.
 - **Budget:** 50 queries/round across 5 seeds. CRITICAL: Floor at 0.01, renormalize.
-- **Approval required:** Before spending queries or submitting predictions.
+- **Autonomy:** Full autonomy to submit every round. Never miss a round.
 
 ### CV Agent — NorgesGruppen [agent-cv/]
 - **Branch:** `agent-cv` | **Worktree:** `nmiai-worktree-cv/`
 - **Submit:** ZIP (run.py + weights), offline Docker sandbox
 - **Training:** GCP VMs only (never local). Project: ai-nm26osl-1779
 - **Scoring:** 70% detection mAP + 30% classification mAP
-- **Submissions:** 10/day. Docker-validate before every upload.
+- **Submissions:** 6/day. Docker-validate before every upload. Run cv_pipeline.sh.
 - **DANGER:** Blocked imports = instant ban. Always grep for blocked imports.
 
 ### NLP Agent — Tripletex [agent-nlp/]
 - **Branch:** `agent-nlp` | **Worktree:** `nmiai-worktree-nlp/`
-- **Submit:** HTTPS endpoint (POST /solve). JC submits manually via web UI.
+- **Submit:** HTTPS endpoint (POST /solve). Auto-submitter approved + JC manual.
 - **Deployed:** Cloud Run at `https://tripletex-agent-795548831221.europe-west4.run.app/solve`
 - **Request format:** `{prompt, files[], tripletex_credentials{base_url, session_token}}`
-- **Rate limit:** 5/task/day verified. 30 task types. Tier multipliers 1x/2x/3x.
+- **Rate limit:** 10/task/day verified. 300 total/day. 3 concurrent. 30 task types. Tier multipliers 1x/2x/3x.
 
 ### Butler Agent — Operations [agent-ops/]
 - **Branch:** `agent-ops` | **Worktree:** `nmiai-worktree-ops/`
 - **Role:** Dashboard, visualization, validation tools, infrastructure
-- **NEVER:** Makes submissions, writes solution code, automates platform UI clicks
+- **NEVER:** Writes solution code. NLP auto-submitter approved by JC. CV remains manual.
 - **Uses:** kreativki-frontend skill for UI, Gemini via GCP ADC
 
 ---
