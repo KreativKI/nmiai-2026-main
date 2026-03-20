@@ -1,87 +1,91 @@
 # Astar Island — Plan
 
 **Track:** ML | **Task:** Norse World Prediction | **Weight:** 33.33%
-**Last updated:** 2026-03-20 18:20 UTC
+**Last updated:** 2026-03-20 19:55 UTC
 
 ## Current State
-- **Best score:** 71.77 (R4, leaderboard 87.3)
-- **Rounds submitted:** 8 (R3-R8, R1-R2 missed)
-- **R8 scores:** pending (resubmitted with collapse+smoothing)
-- **R9:** active, closes 20:47 UTC (21:47 CET), 150 min remaining
-- **Script:** `solutions/astar_v6.py` with V2 model + Dirichlet + collapse + smoothing
-- **Simulator:** `solutions/simulate.py` (needs update to V2 model + post-processing)
+- **Best score:** 71.77 (R4)
+- **Rounds submitted:** 9 (R3-R9, R1-R2 missed)
+- **R9:** active, closes 20:47 UTC. Submitted but no improvement found for resubmission.
+- **R8 score:** 61.8 (rank 126/214)
+- **Seed gap:** Seed 0 scores 5-9 points higher than seeds 1-4 (observed vs unobserved)
 
-## Active Phase: Simulator Update + Strategy Optimization
+## Active Phase: Distance-Based Model + Multi-Seed Strategy
 
-### Goal
-Use Monte Carlo simulation to find the optimal query batch size before R9.
-Currently using batches of 8 (strategy G). Is 5, 8, or 10 better with the new model?
+### The Problem (kitchen version)
+We taste-test all 50 spoons in one kitchen (seed 0) and guess the other 4 kitchens.
+Result: kitchen 0 scores 70-75, kitchens 1-4 score 55-65. 80% of our submission is guesswork.
 
-### Why This Matters
-- Each query is precious (50 total per round)
-- Smaller batches = more hindsight re-targeting = better query placement
-- But: smaller batches = less data per hindsight step = noisier surprise estimates
-- The simulator can answer this definitively with 7 rounds of ground truth data
+### What We Just Learned (hidden rules analysis)
+A. Settlements spread with a DISTANCE CUTOFF from existing settlements (3-12 Manhattan distance per round)
+B. Three round types: death (0% survival), quiet (60-88%), golden age (2-3x growth)
+C. Forests consumed by adjacent settlements (97% safe when isolated, 50% when adjacent)
+D. Ports only appear next to ocean (100% rule)
+E. Mountains kill adjacent settlements
+F. Ruins are background noise (<10% probability), never the main answer
 
-### Plan
-1. **Update simulate.py** to use NeighborhoodModelV2 (was using old PredictionModel)
-2. **Add post-processing** to execute_strategy (collapse=0.016, smooth=0.3, T=1.12)
-3. **Deploy to GCP VM** and run tournament (8 strategies x 30 trials x 7 rounds)
-4. **Read results** and configure v6 with winning strategy
-5. **Submit R9** with optimized strategy at 20:00 CET or when ready
+### Plan: Build Distance-Aware Model (astar_v7.py)
+**Boris: EXPLORE -> PLAN -> CODE -> REVIEW -> VALIDATE -> COMMIT**
+
+#### Step 1: Distance model (CODE)
+Build a prediction model that uses:
+- Manhattan distance from each cell to nearest initial settlement
+- Round regime detection (death/quiet/growth) from seed 0 observations
+- Distance-dependent settlement probability curves (learned from 35 ground truth maps)
+- Forest consumption rules (adj settlement count)
+- Port = coastal only
+- Ruin = 2-4% background
+
+#### Step 2: Multi-seed query strategy (CODE)
+Test new strategy: 10 queries per seed (full coverage of all 5 kitchens)
+- 9 queries = full map, 1 extra for highest-value cell
+- Regime detection from ANY seed helps ALL seeds
+- With distance model, even 1 observation per cell may be enough
+
+#### Step 3: Backtest (VALIDATE)
+- Leave-one-out on 7 rounds
+- Compare: current V2 (seed 0 only, 50 queries) vs distance model (all seeds, 10 each)
+- Run in simulator with Monte Carlo trials
+
+#### Step 4: Deploy + Submit R10 (if improved)
 
 ### Time Budget
-- Build + deploy: ~15 min
-- GCP run (8 strats x 30 trials x 7 rounds): ~15-20 min
-- Analyze + configure: ~10 min
-- R9 execution (queries + submit): ~10 min
-- Buffer: 90+ min
+- R9 closes: 20:47 UTC
+- R10 opens: ~21:02 UTC
+- Build time: ~30 min
+- Backtest: ~10 min
+- Decision point: 21:00 UTC
 
 ---
 
-## Model Stack (current, applied to v6)
-1. V2 NeighborhoodModel (1102 configs, distance-to-settlement features)
-2. Dirichlet-Categorical Bayesian observation blending (prior_strength=12)
-3. Temperature scaling T=1.12
-4. Collapse thresholding at 0.016 (+0.8 avg)
-5. Gaussian spatial smoothing sigma=0.3 (+0.2 avg)
-6. Probability floor 0.01 + renormalization
+## Hidden Rules (verified from ground truth analysis)
+See: `solutions/data/hidden_rules_analysis.md`
+Shared with overseer: `intelligence/for-overseer/hidden-rules-discovery.md`
 
-## Proven Results
-| Technique | Delta | Source |
-|-----------|-------|--------|
-| V2 neighborhood model | +3.4 vs V1 | BT-002 |
-| Dirichlet Bayesian blend | +1.1 vs hard blend | session 4 |
-| Temperature T=1.12 | +1.2 vs no scaling | churn.py |
-| Collapse threshold 0.016 | +0.8 | PP-001 |
-| Gaussian smooth 0.3 | +0.2 | PP-001 |
-| Combo (all above) | backtest avg 64.5 | PP-001 |
+### Immutable (100% confidence)
+- Mountains never change
+- Ocean -> Empty always
+- Ports require ocean adjacency
+- Empty never becomes Forest
+- Ground truth = 200 Monte Carlo runs
 
-## Disproven
-| Technique | Delta | Source |
-|-----------|-------|--------|
-| Equilibrium iteration | -0.5 best case | EQ-001 |
-| Per-class temperature | 0 vs global | session 4 |
-| Single-obs secondary seeds | -1.5 avg | HINDSIGHT-001 |
+### Per-Round Hidden Parameters
+- Settlement spread radius (3-12 Manhattan distance)
+- Survival rate (0% to 88%)
+- Growth multiplier (0x to 2.86x)
+- Forest consumption rate
 
-## Key Learnings (rounds 1-8)
-- Settlement/Port cells dominate scoring (high entropy, high weight)
-- Hidden params vary hugely between rounds (round 4: 249 changes vs 37 in round 3)
-- Stacking wins massively: N=1 score ~2, N=7 score ~58 for settlements
-- Cross-seed transfer is nearly optimal (0.7 point gap)
-- Single-obs on secondary seeds HURTS settlements (-3.6 to -11.3)
-- Leaderboard = BEST round score (not cumulative)
+---
 
-## Scoring Math
-```
-score = 100 * exp(-3 * weighted_kl)
-```
-- weighted_kl 0.30 -> score 41
-- weighted_kl 0.20 -> score 55
-- weighted_kl 0.10 -> score 74
-- weighted_kl 0.05 -> score 86
+## Model Stack (current v6)
+1. V2 NeighborhoodModel (1102 configs)
+2. Dirichlet Bayesian observation blend (ps=12)
+3. Temperature T=1.12, collapse=0.016, smooth=0.3
+4. Backtest avg: 64.5
 
-## Remaining Questions
-- Which batch size is optimal for adaptive stacking? (this session's focus)
-- Can settlement stats (food, pop) predict per-cell survival?
-- What's the theoretical max score with 50 queries?
+## Answered Questions (this session)
+- Batch size 5 vs 8 vs 10: no significant difference (SIM-001)
+- Per-class temperature: doesn't help (PP-001)
+- Equilibrium iteration: hurts (EQ-001)
+- Tile values: empty cells = 64% of score weight, edges most valuable
+- Seed 0 vs 1-4 gap: 5-9 points (the biggest improvement opportunity)
