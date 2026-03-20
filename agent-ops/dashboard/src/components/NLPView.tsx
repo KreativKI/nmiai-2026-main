@@ -40,6 +40,18 @@ interface EndpointStatus {
   lastChecked: string | null;
 }
 
+function taskScoreColor(isPerfect: boolean, hasPartial: boolean): string {
+  if (isPerfect) return "text-green-700";
+  if (hasPartial) return "text-amber-700";
+  return "text-red-600";
+}
+
+function taskBarColor(isPerfect: boolean, hasPartial: boolean): string {
+  if (isPerfect) return "bg-green-500";
+  if (hasPartial) return "bg-amber-500";
+  return "bg-red-400";
+}
+
 export function NLPView() {
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>({
     status: "checking", latencyMs: null, lastChecked: null,
@@ -203,7 +215,7 @@ export function NLPView() {
                   </p>
                   {hasData ? (
                     <p className={`text-[10px] font-bold ${
-                      isPerfect ? "text-green-700" : hasPartial ? "text-amber-700" : "text-red-600"
+                      taskScoreColor(isPerfect, hasPartial)
                     }`}>
                       {score.best_checks}/{score.total_checks}
                       {score.attempts > 1 && (
@@ -220,9 +232,7 @@ export function NLPView() {
                 {hasData && (
                   <div className="mt-1 h-1 bg-slate-200 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full ${
-                        isPerfect ? "bg-green-500" : hasPartial ? "bg-amber-500" : "bg-red-400"
-                      }`}
+                      className={`h-full rounded-full ${taskBarColor(isPerfect, hasPartial)}`}
                       style={{ width: `${score.best_percentage}%` }}
                     />
                   </div>
@@ -238,7 +248,7 @@ export function NLPView() {
 
       {/* Endpoint URL */}
       <div className="rounded-2xl bg-white/30 backdrop-blur-sm border border-white/20 p-3">
-        <p className="text-xs text-sky-500 font-mono break-all">{ENDPOINT_DISPLAY}</p>
+        <p className="text-xs text-sky-500 font-mono break-all">{ENDPOINT_URL}</p>
       </div>
     </div>
   );
