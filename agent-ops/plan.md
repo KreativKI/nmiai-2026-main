@@ -131,6 +131,136 @@ Boris: Explore → Plan → Code → Review → Simplify → Validate → Commit
 
 ### Phase 10: Oracle/Ceiling Estimator — Status: done
 
+### Phase 11: NLP Auto-Submitter — Status: done
+
+### Phase 12: Live Leaderboard Feed — Status: done
+
+### Phase 13: Competition TUI — Status: planning
+
+**Why:** Web dashboard doesn't give JC a good enough overview. Need a terminal UI that shows everything at a glance, with keyboard navigation.
+
+**Tech:** Python `textual` (modern TUI framework, async, rich-based)
+
+**Inspiration:** The screenshot shows a split-pane TUI with tabs, inline charts, data tables, and a 40x40 terrain grid. We adapt this for 3-track competition monitoring.
+
+#### Layout
+
+```
+[Tab bar: 1:Overview  2:Leaderboard  3:ML  4:CV  5:NLP  6:Tools  7:Logs]
++---------------------------+----------------------------------+
+|   Left pane (data)        |   Right pane (visualization)     |
+|                           |                                  |
++---------------------------+----------------------------------+
+[Status bar: Rank #62 | Score 18.4 | Deadline 23h12m | Subs today 15/300]
+```
+
+#### Tab 1: Overview (default view)
+Left pane:
+- Countdown timer to each deadline (cut-loss, freeze, repo public, end)
+- 3 track cards:
+  - ML: score, rank, rounds participated, last round time
+  - NLP: total 18.4, rank #62, 13/30 tasks, 15 submissions, tier breakdown
+  - CV: best mAP, submissions used/10, last submission verdict
+- Submission budget: ML (unlimited API), NLP (15/300 used), CV (X/10 used)
+
+Right pane:
+- Live leaderboard top 10 with our position highlighted
+- Score progression sparkline per track
+
+#### Tab 2: Leaderboard
+- Full leaderboard table (top 30 + our position)
+- Per-track columns: Tripletex, Astar Island, NorgesGruppen, Total
+- Delta since last snapshot (green/red arrows)
+- Auto-refresh from fetch_leaderboard.py data
+- Keyboard: arrow keys to scroll, Enter for team detail
+
+#### Tab 3: ML Explorer
+Left pane:
+- Round history table: round#, score, weight, seeds submitted
+- Per-seed score breakdown
+- Observation budget: queries used/remaining
+
+Right pane:
+- 40x40 terrain grid (unicode symbols, color-coded)
+  - Mountain=gray triangle, Forest=green tree, Settlement=yellow house, Port=blue anchor, Ruin=red cross, Empty=dot
+- Seed selector: 1-5 keys
+- View modes: Initial / Predicted / Ground Truth / Changes
+- Keyboard: arrow keys to pan viewport
+
+#### Tab 4: CV Status
+Left pane:
+- Submission table: ZIP name, det_mAP, cls_mAP, combined, verdict, profiler result
+- Best submission highlighted
+- Submissions remaining today: X/10
+
+Right pane:
+- Training progress from GCP logs (if available)
+- Category coverage bar (X/357 categories seen)
+- Profiler summary: estimated time vs 300s timeout
+
+#### Tab 5: NLP Submit
+Left pane:
+- 30-task grid (6x5): colored cards showing task#, best score, tries
+  - GREEN = scored, GREY = not attempted, RED = 0 score, YELLOW = low
+- Total: 18.4 | Solved: 13/30 | Tier1: 7.31 | Tier2: 11.13 | Tier3: 0
+- Top team comparison row
+
+Right pane:
+- Recent Results list (scrollable)
+- Endpoint health status
+- Submit button (interactive, asks y/n)
+- Live submission log
+
+Data sources:
+- Tripletex leaderboard API (our team entry) for total/rank/tiers
+- nlp_submission_log.json for recent results
+- nlp_task_scores.json for manual task score entry
+- Platform scrape for task-level detail (task names not in API)
+
+#### Tab 6: Tools
+- Menu of all shared tools with one-key launch
+- cv_judge, ml_judge, cv_profiler, ab_compare, batch_eval, oracle_sim
+- Output shown inline in right pane
+
+#### Tab 7: Logs
+- Combined log viewer from all tracks
+- Filter by track (ML/CV/NLP/OPS)
+- Search
+
+#### Status Bar (always visible)
+`Rank #62 | Score 18.4 | NLP 13/30 | CV 3/10 subs | ML R6 | Deadline: 23h12m | [q]uit`
+
+#### Keyboard
+- 1-7: switch tabs
+- q: quit
+- r: refresh data
+- Tab within panes: switch focus
+- Arrow keys: navigate tables/grid
+
+#### Data Sources (no new fetching, reuse existing)
+- fetch_leaderboard.py output (leaderboard.json)
+- Tripletex API (direct fetch for our team stats)
+- Astar Island API (round status, leaderboard)
+- nlp_submission_log.json
+- nlp_task_scores.json (manual entry file, created by ops)
+- cv_results.json, ml_results.json (from judges)
+- viz_data.json (ML terrain data)
+
+#### Build Phases
+A. Skeleton: textual app with tab bar, status bar, placeholder views
+B. Overview tab: deadline countdown, track cards, budget display
+C. Leaderboard tab: table from fetch_leaderboard data
+D. NLP tab: 30-task grid, submission log, submit button
+E. ML tab: terrain grid viewer, round history
+F. CV tab: submission table, profiler results
+G. Tools tab: tool launcher
+H. Polish: keyboard shortcuts, auto-refresh, colors
+
+#### Outstanding Orders (from intelligence/)
+- UPDATE-AUTO-SUBMITTER-LIMIT: raise to 300/day, 10/type (do first)
+- UPDATE-CV-VALIDATOR: add .npz to allowed extensions (do first)
+- ADAPT-ARCHIVE-TOOLS: already done (Phases 8-10)
+
 **Why:** Know our theoretical ceiling per track. If CV max is 0.75, don't chase 0.90. Focus effort where headroom exists.
 
 #### shared/tools/oracle_sim.py
