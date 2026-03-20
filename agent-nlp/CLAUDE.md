@@ -64,8 +64,16 @@ Tier 2 (Friday) and Tier 3 (Saturday) have higher multipliers. Each perfect Tier
 ### D. Optimize efficiency for perfect-scoring tasks
 Once a task type scores perfectly, reduce API calls and eliminate 4xx errors to earn the efficiency bonus (up to 2x multiplier).
 
-### E. Submit frequently to cover all task types
-Rate limit: 10/task/day (verified), 300 total/day, 3 concurrent. Each submission gets a random task type. Auto-submitter approved: `shared/tools/nlp_auto_submit.py` (75% budget auto, JC handles 25% manually).
+### E. Submit to cover all task types (YOU own submissions)
+Rate limit: 10/task/day (verified), 300 total/day, 3 concurrent. Each submission gets a random task type.
+
+**You are the ONLY one who submits.** Not the Butler, not the overseer, not JC. You decide when your bot is ready and you trigger submissions. This is semi-automatic: you control the auto-submitter tool at `shared/tools/nlp_auto_submit.py`.
+
+Rules:
+- Small runs (up to 10): you decide, just do it
+- Bulk runs (>10): get JC approval first
+- Always log results and analyze failures before the next run
+- Nobody else touches this tool
 
 ---
 
@@ -260,9 +268,10 @@ Rules:
 
 ### Ongoing: Submit Frequently
 - Rate limit: 10/task/day (verified), 300 total/day, 3 concurrent. Resets 01:00 CET.
-- Auto-submitter: `python3 /Volumes/devdrive/github_dev/nmiai-worktree-ops/shared/tools/nlp_auto_submit.py --max 225`
-- Each submission gets a random task type, weighted toward less-attempted ones
+- Auto-submitter: `python3 shared/tools/nlp_auto_submit.py` (YOU run this, nobody else)
+- Small runs (up to 10): your call. Bulk runs (>10): JC approval.
 - Bad runs never lower your score, so submitting is always safe
+- Analyze failures after each run, fix, resubmit. This is an iteration loop.
 
 ### Feature Freeze: T+63h (Sunday 09:00)
 Last 6 hours: bug fixes and submission verification only. No new features.
