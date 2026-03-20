@@ -562,6 +562,21 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
         grid = detail["initial_states"][seed_idx]["grid"]
         pred = np.full((height, width, NUM_CLASSES), PROB_FLOOR)
 
+        # Precompute settlement positions for distance calculation
+        settlement_positions = []
+        for y in range(height):
+            for x in range(width):
+                if TERRAIN_TO_CLASS.get(grid[y][x], 0) in (1, 2):
+                    settlement_positions.append((y, x))
+
+        # Precompute distance-to-nearest-settlement for every cell
+        dist_map = np.full((height, width), 99)
+        for sy, sx in settlement_positions:
+            for y in range(height):
+                for x in range(width):
+                    d = abs(y - sy) + abs(x - sx)
+                    dist_map[y, x] = min(dist_map[y, x], d)
+
         for y in range(height):
             for x in range(width):
                 terrain = grid[y][x]
@@ -571,18 +586,37 @@ def phase_submit(session, round_id, detail, round_num, hist_trans, dry_run=False
                     pred[y, x] = final_trans["global"][cls]
                     continue
 
-                adj = sum(
+                # Distance-weighted blending between near and far transitions
+                dist = dist_map[y, x]
+                if dist <= 1:
+                    w_near = 0.8
+                elif dist <= 3:
+                    w_near = 0.6
+                elif dist <= 5:
+                    w_near = 0.3
+                else:
+                    w_near = 0.0
+
+                # Also count adjacent forests for settlement survival bonus
+                adj_forests = sum(
                     1 for dy in (-1, 0, 1) for dx in (-1, 0, 1)
                     if (dy, dx) != (0, 0)
                     and 0 <= y+dy < height and 0 <= x+dx < width
-                    and TERRAIN_TO_CLASS.get(grid[y+dy][x+dx], 0) in (1, 2)
+                    and TERRAIN_TO_CLASS.get(grid[y+dy][x+dx], 0) == 4
                 )
-                if adj > 0:
-                    w_near = min(adj / 3.0, 0.8)
-                    pred[y, x] = w_near * final_trans["near"][cls] + \
-                                 (1 - w_near) * final_trans["global"][cls]
-                else:
-                    pred[y, x] = final_trans["far"][cls]
+
+                base = w_near * final_trans["near"][cls] + \
+                       (1 - w_near) * final_trans["far"][cls]
+
+                # Adjust settlement cells based on forest adjacency
+                # More forests = slightly higher survival probability
+                if cls == 1 and adj_forests > 0:
+                    forest_bonus = min(adj_forests * 0.02, 0.08)
+                    base[1] += forest_bonus  # boost settlement survival
+                    base[0] -= forest_bonus * 0.6  # reduce empty
+                    base[4] -= forest_bonus * 0.4  # reduce forest
+
+                pred[y, x] = base
 
         # Blend with direct observations for this seed
         if seed_idx in all_obs:
