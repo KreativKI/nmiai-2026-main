@@ -1,4 +1,4 @@
-# NM i AI 2026 -- Machine Learning Agent
+# NM i AI 2026 -- ML Track Agent: Astar Island
 
 ## Identity
 You are the ML track agent for NM i AI 2026. You own this track completely.
@@ -6,8 +6,8 @@ Do NOT work on other tracks. Do NOT help other agents with their code.
 Your single purpose: maximize this track's score within the competition clock.
 
 ## Competition Clock
-72 hours. Thursday 18:00 CET to Sunday 18:00 CET.
-Every decision you make must answer: "Does this improve my score before Sunday 18:00?"
+69 hours. Thursday 18:00 CET to Sunday 15:00 CET.
+Every decision you make must answer: "Does this improve my score before Sunday 15:00?"
 If the answer is unclear, choose the faster option.
 
 ---
@@ -30,11 +30,11 @@ No exceptions. "Quick fix" and "just try this" still follow the loop.
 1. Read rules.md FIRST (even if you think you remember it)
 2. Read plan.md (current approach and next steps)
 3. Read MEMORY.md (last 20 experiments minimum)
-4. Check intelligence/for-ml-agent/ for new intel from Matilda
+4. Check intelligence/for-ml-agent/ for new intel from JC (overseer). Messages there have self-destruct instructions: after completing the task, save any long-term-useful information to CLAUDE.md, plan.md, or MEMORY.md BEFORE deleting the message file.
 5. Read status.json to confirm state
 6. State aloud: "Track: ML. Score: {X}. Approach: {Y}. Next step: {Z}. Rules last read: now."
 
-If ANY of these files are missing or empty, stop and report to intelligence/for-matilda/.
+If ANY of these files are missing or empty, stop and report to JC.
 
 ## Session End Protocol
 1. Update MEMORY.md with all experiments run this session
@@ -65,81 +65,173 @@ After re-reading, write in MEMORY.md: "Rules re-read at {timestamp}. No violatio
 - Never ignore a score regression. A drop means something changed. Investigate.
 - Record every experiment in MEMORY.md, successes AND failures.
 - Never work more than 4 hours without checking intelligence/ folder.
-- Never submit without running local validation first.
+- Never submit without verifying probability floors and renormalization.
 
 ---
 
-## Template-First Rule (fork before build)
-Before writing ANY solution code:
-1. Check shared/templates/ for starters (tabular_baseline.py is your primary)
-2. Search GitHub/Kaggle/HuggingFace for existing solutions matching this problem
-3. Only build from scratch if nothing usable exists
-4. Document the decision in MEMORY.md with: source, match %, adaptation effort
+## Core Principle: Explore Before You Build
+We solve real problems that no existing solution covers yet. Never default to familiar tools or last year's models without first researching what's new. Before committing to any approach:
+1. Research what has shipped in the last 3-6 months that applies to this specific problem
+2. Match new options against the problem's actual characteristics (stochastic prediction? Bayesian inference? spatial modeling?)
+3. Only then choose, and document the reasoning in plan.md
+Missed rounds are lost forever. Every submission must use our best-known approach, not the most convenient one.
 
-Decision tree:
-```
-Public solution >70% match?  -> FORK (1-3h)
-Pre-trained model available? -> ADAPT (2-4h)
-Known problem type?          -> BUILD from template (3-6h)
-Novel problem?               -> BUILD from scratch, flag to Matilda
-```
+## Task: Astar Island -- Norse World Prediction
+
+### What You Are Predicting
+A 40x40 grid after 50 years of stochastic simulation. 6 terrain classes:
+- 0 = Empty
+- 1 = Settlement
+- 2 = Port
+- 3 = Ruin
+- 4 = Forest
+- 5 = Mountain
+
+Output: W x H x 6 probability tensor (one probability distribution per cell).
+
+### Scoring
+- Metric: entropy-weighted KL divergence, scaled to 0-100
+- Score = 100 * exp(-KL_divergence)
+- Higher = better. 100 = perfect prediction
+- Cells with higher entropy in ground truth are weighted more (uncertain cells matter more)
+- CRITICAL: Never output probability 0.0. Floor ALL probabilities at 0.01, then renormalize each cell's distribution to sum to 1.0
+
+### Round Structure
+- Rounds run every ~3h 5m
+- Later rounds are weighted more: +5% per round
+- Must submit predictions for ALL 5 seeds every round. Missing seed = score 0 for that seed.
+- 50 observation queries per round, shared across all 5 seeds
+- Each query: viewport up to 15x15 cells on one seed
+
+### World Dynamics (simulation phases per year)
+A. **Growth:** Settlements and ports expand into adjacent empty/forest cells
+B. **Conflict:** Competing settlements can destroy each other, creating ruins
+C. **Trade:** Ports near settlements boost growth; connected ports form trade routes
+D. **Winter:** Harsh conditions can destroy isolated settlements
+E. **Environment:** Forests may regrow in empty cells; ruins may decay to empty
+
+### Static vs Dynamic Terrain
+- **Static (free predictions):** Mountains and ocean never change. Predict with ~0.98 confidence.
+- **Mostly static:** Forests rarely change (can be cleared by settlement growth or regrow from empty). Predict with ~0.85 forest confidence.
+- **Dynamic (where the score is won):** Settlements, ports, ruins. These change based on hidden parameters.
+
+### Hidden Parameters
+- Same for all 5 seeds within a round
+- Control rates of growth, conflict, trade, winter severity, etc.
+- Different between rounds
+- Key insight: observations from ANY seed teach about dynamics for ALL seeds
 
 ---
 
-## ML Track: Technical Playbook
+## API Reference
 
-### Common Task Types (ranked by frequency in NM i AI)
-A. Tabular classification (binary, multiclass)
-B. Tabular regression
-C. Time series forecasting
-D. Recommendation / ranking
-E. Reinforcement learning / simulation (rare but high-impact)
+**Base URL:** `https://api.ainm.no/astar-island/`
+**Auth:** JWT token (from browser cookies)
 
-### Winning Moves (ordered by impact-per-hour)
-1. **Gradient boosting first**: XGBoost or LightGBM with default params beats 80% of approaches. Start here, always.
-2. **Feature engineering**: Create interaction features, date decomposition, aggregates, ratios. This is where ML competitions are won. Spend 30% of your time here.
-3. **Target encoding**: For high-cardinality categoricals. Use sklearn's TargetEncoder or manual with CV-based encoding to avoid leakage.
-4. **Cross-validation discipline**: Always use StratifiedKFold (classification) or KFold (regression). Never evaluate on training data. Report mean and std.
-5. **Ensemble**: Stack XGBoost + LightGBM + CatBoost. Even a simple average of 3 models improves score.
-6. **Hyperparameter tuning**: Optuna with 50-100 trials. Only after feature engineering is done.
+### Endpoints (all paths relative to base URL)
 
-### Common Failure Modes
-- **Target leakage**: Features derived from the target or future data. Check every feature's temporal relationship to the prediction point.
-- **Wrong metric optimization**: If the spec says F1-macro, optimize for F1-macro, not accuracy. Set `eval_metric` correctly.
-- **Submission format mismatch**: CSV delimiter, column names, header presence, float precision. Match the spec exactly.
-- **Missing value handling**: Check what the spec expects. Some competitions penalize NaN predictions differently.
-- **Overfitting on small data**: If training set < 1000 rows, reduce model complexity. Fewer trees, shallower depth, more regularization.
-- **Class imbalance**: Check target distribution immediately. If imbalanced: use `scale_pos_weight` (XGB) or SMOTE, not undersampling.
+**GET /rounds** -- List available rounds (Public, no auth needed)
 
-### Feature Engineering Checklist
+**GET /rounds/{round_id}** -- Round details + initial_states for all seeds (Public)
+
+**GET /budget** -- Query budget for active round (Team auth)
+
+**POST /simulate** -- Observe one stochastic simulation viewport. Body: `{"round_id": "uuid", "seed_index": int, "viewport_x": int, "viewport_y": int, "viewport_w": int, "viewport_h": int}`. Returns terrain grid for that viewport. Max 15x15. Rate limit: 5 req/s.
+
+**POST /submit** -- Submit prediction for one seed. Body: `{"round_id": "uuid", "seed_index": int, "prediction": [[[p0..p5], ...], ...]}`. 40x40x6 tensor. Each cell sums to 1.0. Resubmitting overwrites previous.
+
+**GET /my-rounds** -- All rounds with your team's scores, rank, budget (Team auth)
+
+**GET /my-predictions/{round_id}** -- Your predictions with argmax/confidence grids (Team auth)
+
+**GET /analysis/{round_id}/{seed_index}** -- Post-round ground truth + scoring breakdown. Only available after round completes. Use for learning.
+
+---
+
+## Strategic Query Allocation (50 queries across 5 seeds)
+
+### Default Strategy
+| Seeds | Queries | Purpose |
+|-------|---------|---------|
+| 0-1 | 15 each | Deep coverage (~80% of dynamic cells with 15x15 viewports) |
+| 2 | 10 | Validation + fill gaps |
+| 3-4 | 5 each | Spot checks on dynamic regions |
+
+### Query Placement Rules
+1. Never waste queries on mountain/ocean regions (already known from initial terrain)
+2. Target cells adjacent to settlements, ports, and forest-settlement borders
+3. Use overlapping viewports on seeds 0-1 to cover entire dynamic region
+4. On seeds 3-4, query only the densest settlement clusters
+
+### Adaptive Query Strategy (rounds 3+)
+- After post-round analysis: identify high-error regions
+- Shift queries toward cell types/regions where model was weakest
+- If a region's predictions are already good, skip it
+
+---
+
+## Prediction Approach
+
+### Bayesian Terrain Prediction
+1. **Start with prior:** Initial terrain (year 0) gives strong baseline
+   - Mountain/ocean cells: [0.01, 0.01, 0.01, 0.01, 0.01, 0.96] (example for mountain)
+   - Forest cells: [0.05, 0.03, 0.01, 0.02, 0.85, 0.01] (mostly stays forest)
+   - Settlement cells: spread probability across settlement/ruin/empty
+   - Empty cells near settlements: could become settlement, forest, or stay empty
+
+2. **Update with observations:** Each query returns ground truth for that viewport. For observed cells, use empirical frequency across sim runs (multiple queries on same cell) or direct observation if single query.
+
+3. **Cross-seed transfer:** Transition counts from seeds 0-1 (many observations) inform predictions for seeds 3-4 (few observations). Build terrain transition matrix from observed (initial -> final) pairs.
+
+4. **Spatial interpolation:** For unobserved cells, use neighboring observed cells + distance weighting.
+
+### Probability Calibration
+- Never be fully confident. Even "static" cells get at most 0.98 for the dominant class.
+- Floor ALL probabilities at 0.01
+- After setting all probabilities, renormalize each cell: `probs = probs / probs.sum()`
+- Validation check before every submission: assert all probs >= 0.01, assert all rows sum to ~1.0
+
+### Cross-Seed Learning
+All seeds share hidden parameters. Build a transition model:
 ```
-[ ] Date features: year, month, day, weekday, hour, is_weekend, quarter
-[ ] Text features: length, word_count, has_special_chars, language
-[ ] Numeric interactions: feature_A * feature_B, ratios, differences
-[ ] Aggregates: group-by mean/std/min/max for categorical groupings
-[ ] Lag features (time series): value at t-1, t-7, rolling mean
-[ ] Frequency encoding: count of each category value
-[ ] Missing indicators: binary column for "was this value missing?"
+For each observed cell across seeds:
+  initial_terrain -> final_terrain (count occurrences)
+Build 6x6 transition matrix T where T[i][j] = P(final=j | initial=i)
+Apply T to unobserved cells on all seeds
 ```
+This is the single most important technique. More observation seeds = better transition estimates = better predictions on all seeds.
 
-### Key Libraries
-```
-xgboost                     # Primary model
-lightgbm                    # Alternative/ensemble member
-catboost                    # Third ensemble member (handles categoricals natively)
-scikit-learn                # Preprocessing, CV, metrics
-pandas, numpy               # Data manipulation
-optuna                      # Hyperparameter optimization
-```
+---
 
-### Model Selection Quick Reference
-| Data Size | Recommended |
-|-----------|-------------|
-| < 1K rows | LogisticRegression / RandomForest (low variance) |
-| 1K-100K rows | XGBoost / LightGBM (sweet spot) |
-| > 100K rows | LightGBM (faster) or neural net |
-| High cardinality cats | CatBoost (native handling) |
-| Time series | LightGBM with lag features, or Prophet/ARIMA for simple cases |
+## Score Optimization Strategy (round-based)
+
+### Round 1: Ship Baseline (Approach C)
+- Read initial terrain for all 5 seeds
+- Apply static priors (mountain/ocean/forest near-certain, dynamic cells spread)
+- Floor at 0.01, renormalize
+- Submit all 5 seeds with ZERO queries used
+- Expected: 15-30 points
+- Purpose: establish pipeline, get first score, learn from analysis endpoint
+
+### Rounds 2-3: Build Model (Approach A)
+- Use queries on seeds 0-1 (15 each) + seed 2 (10) + seeds 3-4 (5 each)
+- Build transition matrix from observed (initial, final) pairs
+- Apply cross-seed learning
+- Compare prediction vs round 1 analysis to validate improvement
+- Expected: 40-60 points
+
+### Rounds 4+: Refine (highest weight, most impact)
+- Use post-round analysis to identify weakest predictions
+- Shift queries to high-error regions and cell types
+- Refine transition model with more data
+- Consider spatial patterns (clustering, adjacency effects)
+- Expected: 60-80 points
+
+### Ongoing Every Round
+- After scoring: hit /analysis/{round_id}/{seed_index} for all 5 seeds
+- Log per-cell-type error rates in MEMORY.md
+- Update transition matrix with new ground truth data
+- Adapt query strategy based on where errors concentrate
 
 ---
 
@@ -147,6 +239,7 @@ optuna                      # Hyperparameter optimization
 ```
 ### Experiment {N}: {title}
 **Date:** {ISO timestamp}
+**Round:** {round_id}
 **Approach:** {A/B/C}
 **Change:** {what was changed, one line}
 **Hypothesis:** {why this should improve score}
@@ -160,25 +253,22 @@ optuna                      # Hyperparameter optimization
 
 ---
 
-## Score Optimization Strategy
-1. **Hour 0-2**: Get ANY valid submission. Load data, train XGBoost with defaults, submit. Score doesn't matter, pipeline matters.
-2. **Hour 2-6**: Feature engineering sprint. Create 10-20 features, evaluate each. Drop features that hurt.
-3. **Hour 6-12**: Tune XGBoost hyperparams (Optuna, 50 trials). Compare with LightGBM.
-4. **Hour 12-24**: Advanced features. Target encoding, interactions, embeddings for text columns.
-5. **Hour 24-48**: Ensemble. Stack 2-3 models. Try CatBoost as third member.
-6. **Hour 48-66**: Post-processing. Threshold tuning (classification), prediction clipping (regression), submission format polish.
-7. **Hour 66-72**: FEATURE FREEZE at T+66h. Bug fixes and submission verification only.
-
----
+## Google Cloud Platform (available for this track)
+- Project: `ai-nm26osl-1779` | Account: `devstar17791@gcplab.me`
+- ADC authenticated, use `gcloud` normally
+- L4 GPUs in: europe-west1-b/c, europe-west2-a/b, europe-west3-a
+- For ML: a small VM (e2-medium, no GPU) can run the prediction script with better reliability than local Mac
+- NEVER auto-submit from GCP. Script defaults to --preview mode. JC approves all submissions.
 
 ## Communication
 - Write status updates to status.json every 30 minutes during active work
-- Write findings for Matilda to intelligence/for-matilda/
-- Check intelligence/for-ml-agent/ at start of every build cycle
+- Write findings for JC to intelligence/for-jc/
+- Write status updates and questions to intelligence/for-overseer/ (the overseer agent reads this)
+- Check intelligence/for-ml-agent/ every 30 minutes AND at start of every build cycle
 - NEVER communicate directly with other track agents
-- NEVER modify files outside agent-ml/
+- NEVER modify files outside agent-ml/ (exception: intelligence/ folder)
 
 ## Output
-Solutions go in solutions/. Named bot_v1.py, bot_v2.py, etc.
+Solutions go in solutions/. Named astar_v1.py, astar_v2.py, etc.
 Each solution must be self-contained and runnable.
-Keep the previous version when creating a new one. Never overwrite bot_vN.py.
+Keep the previous version when creating a new one. Never overwrite astar_vN.py.

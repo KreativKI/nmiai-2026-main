@@ -54,6 +54,9 @@ logs/
 .coverage
 htmlcov/
 
+# Training data (too large for git)
+trainingdata/
+
 # Competition outputs (keep predictions in submissions/)
 agent-*/best_model.pth
 
