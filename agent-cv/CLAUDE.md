@@ -74,10 +74,17 @@ Before writing ANY code, create or update plan.md:
 
 No exceptions. Every iteration: **Plan -> Build -> Review -> Commit.**
 
+## ALLOWED FILE TYPES IN ZIP (hardcoded, platform rejects anything else)
+```
+.py .json .yaml .yml .cfg .pt .pth .onnx .safetensors .npy
+```
+**EVERYTHING ELSE IS REJECTED.** No .npz, .bin, .data, .h5, .pkl, executables, or symlinks.
+Burned a submission on 2026-03-20 because of .npz. Never again.
+
 ## Pre-Submission Toolchain (MANDATORY before every submission)
 Run ALL tools in order. If any fails, do NOT submit.
 
-1. `python3 shared/tools/validate_cv_zip.py submission.zip` -- blocked imports, sizes, structure
+1. `python3 shared/tools/validate_cv_zip.py submission.zip` -- file types, blocked imports, sizes, structure
 2. `python3 shared/tools/cv_profiler.py submission.zip` -- timing check vs 300s timeout
 3. `python3 shared/tools/cv_judge.py --predictions-json predictions.json` -- score vs holdout
 4. `python3 shared/tools/ab_compare.py --a prev_best.json --b new.json` -- compare vs previous best

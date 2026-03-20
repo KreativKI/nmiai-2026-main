@@ -44,16 +44,24 @@ def main():
     print(f"Timeout: {TIMEOUT_SECONDS}s\n")
 
     # Extract ZIP
+    ALLOWED_EXTS = {".py", ".json", ".yaml", ".yml", ".cfg", ".pt", ".pth", ".onnx", ".safetensors", ".npy"}
+
     t0 = time.time()
     with tempfile.TemporaryDirectory() as tmpdir:
         with zipfile.ZipFile(zip_path) as zf:
+            # Check for disallowed file types BEFORE profiling
+            bad = [n for n in zf.namelist() if Path(n).suffix.lower() and Path(n).suffix.lower() not in ALLOWED_EXTS]
+            if bad:
+                print(f"FAIL: Disallowed file types: {bad}")
+                print(f"Allowed: {', '.join(sorted(ALLOWED_EXTS))}")
+                raise SystemExit(1)
             zf.extractall(tmpdir)
         t_extract = time.time() - t0
         print(f"[1] Extract ZIP:       {t_extract:6.2f}s")
 
         # Check for model files
         tmppath = Path(tmpdir)
-        model_files = list(tmppath.glob("*.onnx")) + list(tmppath.glob("*.onnx.data"))
+        model_files = list(tmppath.glob("*.onnx"))
         print(f"    Models found: {[f.name for f in model_files]}")
 
         # Try to load models with onnxruntime

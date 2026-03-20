@@ -37,6 +37,25 @@ if ! unzip -l "$ZIP_PATH" | grep -q "^ .* run.py$"; then
 fi
 echo "OK: run.py found at root"
 
+# Check for DISALLOWED file types
+# ALLOWED: .py .json .yaml .yml .cfg .pt .pth .onnx .safetensors .npy
+# ANYTHING ELSE (e.g. .npz .bin .data .h5 .pkl) = REJECTED BY PLATFORM
+echo ""
+echo "=== Checking file types ==="
+# Extract filenames from unzip -l: skip header/footer, get only file entries
+DISALLOWED=$(unzip -l "$ZIP_PATH" | awk 'NR>3 && /^[ ]*[0-9]/ {print $NF}' | grep -vE '\.(py|json|yaml|yml|cfg|pt|pth|onnx|safetensors|npy)$' | grep '\.')
+if [ -n "$DISALLOWED" ]; then
+    echo "FATAL: DISALLOWED file types found!"
+    echo "Allowed: .py .json .yaml .yml .cfg .pt .pth .onnx .safetensors .npy"
+    echo "Disallowed files:"
+    echo "$DISALLOWED"
+    echo ""
+    echo "The platform WILL REJECT this ZIP. Fix file types before submitting."
+    rm -rf "$TMPDIR"
+    exit 1
+fi
+echo "OK: All file types allowed"
+
 # Count .py files
 PY_COUNT=$(unzip -l "$ZIP_PATH" | grep '\.py$' | wc -l)
 echo "Python files: $PY_COUNT (limit: 10)"
@@ -46,7 +65,7 @@ if [ "$PY_COUNT" -gt 10 ]; then
 fi
 
 # Count weight files
-WEIGHT_COUNT=$(unzip -l "$ZIP_PATH" | grep -E '\.(onnx|pt|pth|bin|safetensors)$' | wc -l)
+WEIGHT_COUNT=$(unzip -l "$ZIP_PATH" | grep -E '\.(onnx|pt|pth|safetensors|npy)$' | wc -l)
 echo "Weight files: $WEIGHT_COUNT (limit: 3)"
 if [ "$WEIGHT_COUNT" -gt 3 ]; then
     echo "ERROR: More than 3 weight files!"

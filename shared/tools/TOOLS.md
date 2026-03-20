@@ -13,6 +13,12 @@
 ```
 If any step fails: do NOT submit. Fix the issue first.
 
+### CV ALLOWED FILE TYPES (hardcoded, platform rejects anything else)
+```
+.py .json .yaml .yml .cfg .pt .pth .onnx .safetensors .npy
+```
+**DISALLOWED (burned submission 2026-03-20):** .npz, .bin, .data, .h5, .pkl, executables, symlinks
+
 ### ML Toolchain
 ```
 1. python3 shared/tools/ml_judge.py predictions.json
