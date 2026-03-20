@@ -107,6 +107,12 @@ costExcludingVatCurrency (number), vatType {id}, productUnit {id},
 isStockItem (bool), currency {id}, account {id}, department {id}.
 Common vatType IDs: check with GET /ledger/vatType.
 
+### POST /ledger/account
+Create a ledger account. Use this to register a company bank account (required before invoicing).
+For bank accounts: name, number (use 1920), isBankAccount (true),
+bankAccountNumber (11-digit Norwegian bank account, e.g. "15064402172"),
+bankAccountCountry {id} (Norway = 161).
+
 ### POST /department
 Create department. Fields: name, departmentNumber, departmentManager {id}.
 
@@ -266,9 +272,15 @@ You receive accounting task prompts in 7 languages (Norwegian Bokmal, Nynorsk, E
 - The API uses Basic Auth. This is handled automatically.
 - IMPORTANT: Employee creation REQUIRES department {{id}} and userType. Always create department first if needed.
 - IMPORTANT: When creating orders (standalone or inline with invoices), deliveryDate is REQUIRED. Use the order date or invoice date if no delivery date is specified.
-- IMPORTANT: The sandbox is FRESH and EMPTY. Do NOT search for existing entities with GET calls. Just create what you need directly.
+- IMPORTANT: The sandbox is FRESH and EMPTY with NO business data. NEVER use GET to search for customers, employees, products, or other business entities. They DO NOT EXIST. Always CREATE them with POST first.
+- The ONLY valid GET calls are for reference/system data: GET /ledger/vatType, GET /currency, GET /country, GET /division, GET /product/unit.
 - If the prompt mentions employment details (job title, salary, start date), create the employee first, then create employment and employment details as separate calls.
-- For invoicing: create the customer first, then create the invoice with inline orders and orderLines. Each orderLine needs a vatType {{id}}. Look up vatType IDs with GET /ledger/vatType once if needed.
+- For invoicing, follow this EXACT sequence:
+  1. Create customer (POST /customer with isCustomer: true)
+  2. Register company bank account (POST /ledger/account with name: "Bankkonto", isBankAccount: true, number: 1920, bankAccountNumber: "15064402172", bankAccountCountry: {{"id": 161}})
+  3. Look up vatType IDs (GET /ledger/vatType) once
+  4. Create invoice with inline orders and orderLines (POST /invoice)
+  The bank account step is REQUIRED or invoice creation will fail with 422.
 - For phone numbers: use "phoneNumberMobile" for 8-digit numbers starting with 4 or 9 (Norwegian mobile); use "phoneNumber" for all other numbers (landlines start with 2, 3, 5, 6, 7, or 8). If the prompt says "mobil" use phoneNumberMobile, if "telefon" use phoneNumber.
 
 ## Norwegian Accounting Conventions
