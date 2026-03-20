@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { getTile, TILE_SOURCE_SIZE, initTileCache } from "../canvas/terrainTiles";
+import { getTile, TILE_SOURCE_SIZE } from "../canvas/terrainTiles";
 import { TERRAIN_COLORS, GRID_COLORS } from "../canvas/terrainColors";
 import { TERRAIN_NAMES, TERRAIN_TO_CLASS } from "../types/dashboard";
 
@@ -318,6 +318,8 @@ export function MLExplorer() {
       }
     };
     void loadData();
+    const interval = setInterval(() => void loadData(), 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   // --- Derived data ---
@@ -494,8 +496,7 @@ export function MLExplorer() {
     return { correct, total, accuracy: total > 0 ? (correct / total) * 100 : 0 };
   }, [viewMode, currentSeed]);
 
-  // --- Canvas rendering ---
-  initTileCache();
+  // --- Canvas rendering (getTile() lazily inits cache) ---
 
   const renderCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -740,7 +741,12 @@ export function MLExplorer() {
 
   // ─── Render ──────────────────────────────────────────────────────────────
 
-  const yearDisplay = isPlaying ? Math.round(animProgress * 50) : viewMode === "ground_truth" ? 50 : 0;
+  let yearDisplay = 0;
+  if (isPlaying) {
+    yearDisplay = Math.round(animProgress * 50);
+  } else if (viewMode === "ground_truth") {
+    yearDisplay = 50;
+  }
 
   return (
     <div className="flex-1 flex overflow-hidden h-full">
@@ -776,6 +782,13 @@ export function MLExplorer() {
           <span className="text-xs text-sky-600 font-semibold">View:</span>
           {viewModes.map(({ mode, label, needsGT, needsPred }) => {
             const enabled = (!needsGT || hasGT) && (!needsPred || hasPred);
+            const isActive = viewMode === mode && !isPlaying;
+            let btnStyle = "bg-white/30 text-sky-400 cursor-not-allowed";
+            if (isActive) {
+              btnStyle = "bg-sky-800 text-white shadow-md";
+            } else if (enabled) {
+              btnStyle = "bg-white/60 text-sky-700 hover:bg-white/80";
+            }
             return (
               <button
                 key={mode}
@@ -786,13 +799,7 @@ export function MLExplorer() {
                   setAnimProgress(0);
                 }}
                 disabled={!enabled}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                  viewMode === mode && !isPlaying
-                    ? "bg-sky-800 text-white shadow-md"
-                    : enabled
-                      ? "bg-white/60 text-sky-700 hover:bg-white/80"
-                      : "bg-white/30 text-sky-400 cursor-not-allowed"
-                }`}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${btnStyle}`}
               >
                 {label}
               </button>
@@ -943,18 +950,18 @@ export function MLExplorer() {
           <div className="flex gap-1">
             {Array.from({ length: 5 }, (_, i) => {
               const hasSeed = currentRound && currentRound.seeds.length > i;
+              let seedStyle = "bg-slate-800/50 text-slate-600 cursor-not-allowed";
+              if (selectedSeed === i) {
+                seedStyle = "bg-sky-600 text-white shadow-lg";
+              } else if (hasSeed) {
+                seedStyle = "bg-slate-800 text-slate-300 hover:bg-slate-700";
+              }
               return (
                 <button
                   key={i}
                   onClick={() => setSelectedSeed(i)}
                   disabled={!hasSeed}
-                  className={`flex-1 px-2 py-2 rounded-lg text-xs font-bold transition-all ${
-                    selectedSeed === i
-                      ? "bg-sky-600 text-white shadow-lg"
-                      : hasSeed
-                        ? "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                        : "bg-slate-800/50 text-slate-600 cursor-not-allowed"
-                  }`}
+                  className={`flex-1 px-2 py-2 rounded-lg text-xs font-bold transition-all ${seedStyle}`}
                 >
                   S{i}
                 </button>
@@ -1063,7 +1070,7 @@ export function MLExplorer() {
         )}
 
         {/* Terrain distribution */}
-        {!hasData || viewMode === "initial" || isPlaying ? null : (
+        {hasData && viewMode !== "initial" && !isPlaying && (
           <div className="rounded-xl bg-slate-800/80 border border-slate-700 p-4">
             <DistributionBars counts={terrainCounts} />
           </div>
