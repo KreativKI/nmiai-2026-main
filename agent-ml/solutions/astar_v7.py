@@ -120,73 +120,174 @@ def compute_ocean_adjacency(grid, h, w):
 
 
 # ──────────────────────────────────────────────
-# PHASE 1: Observe ALL 5 seeds (9 queries each = 45 total)
+# PHASE 1: Regime-first observation strategy
+# Step A: 5 queries on known settlements (regime detection)
+# Step B: Regime-specific remaining queries (overview all seeds)
 # ──────────────────────────────────────────────
+def find_settlement_cells(grid, h, w):
+    """Find initial settlement/port positions."""
+    cells = []
+    for y in range(h):
+        for x in range(w):
+            cls = TERRAIN_TO_CLASS.get(int(grid[y][x]), 0)
+            if cls in (1, 2):
+                cells.append((y, x))
+    return cells
+
+
 def phase_observe(session, round_id, detail, round_num):
-    """Overview all 5 seeds. 9 queries per seed, 45 total."""
+    """Regime-first: detect regime from 5 settlement queries, then observe all seeds."""
     height, width = detail["map_height"], detail["map_width"]
     seeds_count = detail["seeds_count"]
-    viewports = tile_viewports(height, width, 15)  # 9 viewports
+    viewports = tile_viewports(height, width, 15)
+    ig0 = detail["initial_states"][0]["grid"]
+    settle_cells = find_settlement_cells(ig0, height, width)
 
-    log(f"Phase 1: Overview ALL {seeds_count} seeds ({len(viewports)} queries each)")
+    # ── Step A: 5 queries on seed 0 settlement locations ──
+    log(f"Phase 1A: Regime detection (5 queries on {len(settle_cells)} known settlements)")
+    obs_counts_0 = np.zeros((height, width, NUM_CLASSES))
+    obs_total_0 = np.zeros((height, width))
+    all_settlement_stats = {0: []}
+    queried_vps = set()
 
-    all_settlement_stats = {}
+    for sy, sx in settle_cells:
+        if len(queried_vps) >= 5:
+            break
+        vx = max(0, min(sx - 7, width - 15))
+        vy = max(0, min(sy - 7, height - 15))
+        vp_key = (vx, vy)
+        if vp_key in queried_vps:
+            continue
+        queried_vps.add(vp_key)
+        try:
+            obs = query_viewport(session, round_id, 0, vx, vy, 15, 15)
+            for dy, row in enumerate(obs["grid"]):
+                for dx, terrain in enumerate(row):
+                    ya, xa = obs["viewport"]["y"] + dy, obs["viewport"]["x"] + dx
+                    cls = TERRAIN_TO_CLASS.get(terrain, 0)
+                    obs_counts_0[ya, xa, cls] += 1
+                    obs_total_0[ya, xa] += 1
+            for s in obs.get("settlements", []):
+                all_settlement_stats[0].append(s)
+            budget = obs["queries_used"]
+            log(f"  [{len(queried_vps)}/5] ({vx},{vy}) — budget {budget}/50")
+        except Exception as e:
+            log(f"  FAILED: {e}")
+            break
 
-    for seed_idx in range(seeds_count):
+    # Check settlement survival in observed area
+    alive = 0
+    dead = 0
+    new_s = 0
+    for sy, sx in settle_cells:
+        if obs_total_0[sy, sx] == 0:
+            continue
+        sp = obs_counts_0[sy, sx, 1] + obs_counts_0[sy, sx, 2]
+        if sp > 0:
+            alive += 1
+        else:
+            dead += 1
+    for y in range(height):
+        for x in range(width):
+            if obs_total_0[y, x] == 0:
+                continue
+            cls = TERRAIN_TO_CLASS.get(int(ig0[y][x]), 0)
+            if cls not in (1, 2) and ig0[y][x] not in STATIC_TERRAIN:
+                if obs_counts_0[y, x, 1] + obs_counts_0[y, x, 2] > 0:
+                    new_s += 1
+
+    total_checked = alive + dead
+    survival_rate = alive / max(1, total_checked)
+    if survival_rate < 0.10 and new_s <= 2:
+        regime = "extinction"
+    elif new_s > total_checked * 0.5:
+        regime = "growth"
+    else:
+        regime = "stable"
+
+    log(f"\n  REGIME DETECTED: {regime}")
+    log(f"  Settlements checked: {total_checked} ({alive} alive, {dead} dead)")
+    log(f"  New settlements seen: {new_s}")
+    log(f"  Survival rate: {survival_rate:.0%}")
+
+    # ── Step B: Regime-specific remaining queries ──
+    budget_info = get_budget(session)
+    remaining = budget_info["queries_max"] - budget_info["queries_used"]
+    log(f"\nPhase 1B: {remaining} queries remaining, strategy: {regime}")
+
+    # Complete seed 0 overview first
+    for vx, vy, vw, vh in viewports:
+        if remaining <= 0:
+            break
+        if obs_total_0[vy, vx] > 0:
+            continue  # already observed
+        try:
+            obs = query_viewport(session, round_id, 0, vx, vy, vw, vh)
+            for dy, row in enumerate(obs["grid"]):
+                for dx, terrain in enumerate(row):
+                    ya, xa = obs["viewport"]["y"] + dy, obs["viewport"]["x"] + dx
+                    c = TERRAIN_TO_CLASS.get(terrain, 0)
+                    obs_counts_0[ya, xa, c] += 1
+                    obs_total_0[ya, xa] += 1
+            for s in obs.get("settlements", []):
+                all_settlement_stats[0].append(s)
+            remaining -= 1
+            budget = obs["queries_used"]
+            log(f"  Seed 0 fill ({vx},{vy}) — budget {budget}/50")
+        except Exception as e:
+            log(f"  FAILED: {e}")
+            break
+
+    save_observations(obs_counts_0, obs_total_0, round_num, "seed0_overview")
+
+    # Overview seeds 1-4
+    for seed_idx in range(1, seeds_count):
+        if remaining <= 0:
+            break
         grid = detail["initial_states"][seed_idx]["grid"]
         obs_counts = np.zeros((height, width, NUM_CLASSES))
         obs_total = np.zeros((height, width))
         settlement_stats = []
 
-        for i, (vx, vy, vw, vh) in enumerate(viewports):
+        for vx, vy, vw, vh in viewports:
+            if remaining <= 0:
+                break
             try:
                 obs = query_viewport(session, round_id, seed_idx, vx, vy, vw, vh)
                 for dy, row in enumerate(obs["grid"]):
                     for dx, terrain in enumerate(row):
                         ya, xa = obs["viewport"]["y"] + dy, obs["viewport"]["x"] + dx
-                        cls = TERRAIN_TO_CLASS.get(terrain, 0)
-                        obs_counts[ya, xa, cls] += 1
+                        c = TERRAIN_TO_CLASS.get(terrain, 0)
+                        obs_counts[ya, xa, c] += 1
                         obs_total[ya, xa] += 1
                 for s in obs.get("settlements", []):
                     settlement_stats.append(s)
+                remaining -= 1
                 budget = obs["queries_used"]
             except Exception as e:
-                log(f"  Seed {seed_idx} [{i+1}] FAILED: {e}")
+                log(f"  Seed {seed_idx} FAILED: {e}")
                 break
 
         save_observations(obs_counts, obs_total, round_num, f"seed{seed_idx}_overview")
         all_settlement_stats[seed_idx] = settlement_stats
 
-        # Log summary
-        alive = [s for s in settlement_stats if s.get("alive")]
-        changes = 0
-        for y in range(height):
-            for x in range(width):
-                if obs_total[y, x] == 0:
-                    continue
-                initial_cls = TERRAIN_TO_CLASS.get(grid[y][x], 0)
-                if obs_counts[y, x].argmax() != initial_cls:
-                    changes += 1
+        covered = (obs_total > 0).sum()
+        log(f"  Seed {seed_idx}: {covered}/{height*width} cells covered, budget {budget}/50")
 
-        log(f"  Seed {seed_idx}: {len(alive)} settlements alive, "
-            f"{changes} terrain changes, budget {budget}/50")
-
-    # Save all settlement stats
+    # Save regime and settlement stats
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(DATA_DIR / f"settlement_stats_r{round_num}.json", "w") as f:
-        json.dump(all_settlement_stats, f, default=str)
-
-    # Detect regime from seed 0
-    oc0, ot0 = load_observations(round_num, "seed0_overview")
-    regime_info = detect_regime(oc0, ot0, detail["initial_states"][0]["grid"], height, width)
-    log(f"\n  REGIME DETECTED: {regime_info['regime']}")
-    log(f"  Settlement survival: {regime_info['survival_rate']:.0%}")
-    log(f"  New settlements: {regime_info['new_settlements']} "
-        f"(growth rate: {regime_info['growth_rate']:.2f})")
-
-    # Save regime info
+    regime_info = {
+        "regime": regime,
+        "survival_rate": float(survival_rate),
+        "growth_rate": float(new_s / max(1, total_checked)),
+        "init_settlements": len(settle_cells),
+        "survived": alive,
+        "new_settlements": new_s,
+    }
     with open(DATA_DIR / f"regime_r{round_num}.json", "w") as f:
         json.dump(regime_info, f, default=str)
+    with open(DATA_DIR / f"settlement_stats_r{round_num}.json", "w") as f:
+        json.dump(all_settlement_stats, f, default=str)
 
 
 def detect_regime(obs_counts, obs_total, grid, h, w):
@@ -214,7 +315,9 @@ def detect_regime(obs_counts, obs_total, grid, h, w):
     survival_rate = survived / max(1, init_settlements)
     growth_rate = new_settlements / max(1, init_settlements)
 
-    if survival_rate < 0.05:
+    # Death detection: low survival AND no new settlements
+    # Threshold 10% catches noisy single-sample observations (real death = 0-2%)
+    if survival_rate < 0.10 and new_settlements <= 2:
         regime = "death"
     elif growth_rate > 1.0:
         regime = "growth"

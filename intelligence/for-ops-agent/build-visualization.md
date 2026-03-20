@@ -1,43 +1,49 @@
 ---
-priority: HIGH
+priority: URGENT
 from: agent-ml
-timestamp: 2026-03-20 19:55 UTC
+timestamp: 2026-03-20 20:55 UTC
 ---
 
-## Build: Astar Island Map Visualization
+## Build: Astar Island Visual Round Viewer
 
-JC wants to SEE what's happening on the maps. Build an HTML visualization that shows:
+JC wants a VISUAL dashboard to watch rounds play out, not just numbers.
 
-### What to visualize
-A. **Initial terrain map** (40x40 grid, color-coded by terrain type)
-B. **Prediction map** (40x40, colored by most likely predicted terrain, opacity = confidence)
-C. **Observation coverage** (which cells were observed, how many times)
-D. **Ground truth** (for completed rounds, the actual outcome)
-E. **Error map** (where our predictions were wrong, highlighted in red)
+### What to build
+A single HTML file that shows the 40x40 map as a color grid. JC double-clicks to open.
+
+### Views (toggle buttons at top)
+A. **Initial terrain** — what the map looked like at year 0
+B. **Ground truth** — what actually happened (colored by most likely terrain, opacity = confidence)
+C. **Our prediction** — what we predicted (same coloring)
+D. **Error map** — red = we were wrong, green = we were right, brightness = how wrong
+E. **Observation coverage** — blue intensity = how many times we observed each cell
+F. **Tile value** — yellow intensity = how valuable each cell is for scoring
+
+### Controls
+- Dropdown: select round (1-9)
+- Dropdown: select seed (0-4)
+- Toggle buttons for views A-F
+- Hover on any cell: show terrain type, probabilities, observation count
 
 ### Color scheme
-- Empty: light gray
-- Settlement: red
-- Port: blue
-- Ruin: brown/dark gray
-- Forest: green
-- Mountain: dark gray
-- Ocean: dark blue
+- Ocean: #1a3a5c (dark blue)
+- Empty: #d4d4d4 (light gray)
+- Settlement: #e74c3c (red)
+- Port: #3498db (blue)
+- Ruin: #7f8c8d (brown-gray)
+- Forest: #27ae60 (green)
+- Mountain: #555555 (dark gray)
 
-### Data sources
-All data is in `agent-ml/solutions/data/`:
-- Ground truth cache: `ground_truth_cache/round_*.json`
-- Observation data: `obs_counts_r*_seed0_*.npy`, `obs_total_r*_seed0_*.npy`
-- Tile values: `tile_value_map.json`
+### Data
+The data is JSON. Load from these paths (or embed):
+- `agent-ml/solutions/data/ground_truth_cache/round_*.json` — has initial_states and ground_truth
+- `agent-ml/solutions/data/tile_value_map.json` — tile values
 
-### Requirements
-- Single HTML file with embedded JavaScript (no server needed)
-- Dropdown to select round and seed
-- Toggle between: initial / prediction / ground truth / error / observation coverage / tile value
-- Cell hover shows: terrain type, probabilities, observation count
-- Save to: `agent-ops/dashboard/map-viewer.html` or similar
+### Technical
+- Single HTML file, no server, no npm. Vanilla JS + Canvas or SVG.
+- Each cell = 12x12 pixels (480x480 grid).
+- Save to: `agent-ops/dashboard/map-viewer.html`
+- Create desktop shortcut: `/Users/jcfrugaard/Desktop/Github_shortcuts/launch-map-viewer.command`
 
-### Context
-The map is 40x40 cells. Row 0 and row 39 are ocean. Mountains are scattered.
-Settlements, ports, forests, and empty cells are the dynamic terrain.
-JC is non-technical, needs visual understanding of what the model is doing.
+### Priority
+JC is watching the competition live. This helps him understand what's happening.
