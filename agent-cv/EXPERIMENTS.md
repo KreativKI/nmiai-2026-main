@@ -50,4 +50,16 @@ Persistent record across sessions. Add new experiments at the bottom. Never dele
 **Delta:** TBD
 **Kept/Reverted:** TBD
 **Time spent:** ~3h
-**Notes:** Pre-submission toolchain all PASS. 114 predictions (vs 107 YOLO-only). Different category distribution: 32 unique cats (vs 45 YOLO), 15 new categories, 28 lost. Lower mean confidence (0.58 vs 0.77) due to detection*classification score blending. Submission ZIP: submission_dinov2_classify_v1.zip (143MB).
+**Notes:** Pre-submission toolchain all PASS. 114 predictions (vs 107 YOLO-only). Different category distribution: 32 unique cats (vs 45 YOLO), 15 new categories, 28 lost. Lower mean confidence (0.58 vs 0.77) due to detection*classification score blending. Submission ZIP: submission_dinov2_classify_v1.zip (143MB). NOT SUBMITTED (superseded by Experiment 5).
+
+### Experiment 5: DINOv2 Enhanced Gallery (355 categories)
+**Date:** 2026-03-20 ~15:00 CET
+**Approach:** B+ (YOLO detect + DINOv2 classify with enhanced gallery)
+**Change:** Built enhanced gallery from ALL training data: 321 blended studio+shelf embeddings + 34 NEW shelf-crop-only categories. Excluded unknown_product (cat 355). Gallery built on GCP L4 (22,303 shelf crops embedded).
+**Hypothesis:** More complete gallery (355 vs 321 cats) + shelf-context blending should improve classification mAP
+**Score before:** 0.5756 (YOLO-only best)
+**Score after:** SUBMITTED, awaiting score
+**Delta:** TBD
+**Kept/Reverted:** TBD
+**Time spent:** ~2h (script + GCP run + toolchain)
+**Notes:** Toolchain all PASS. ab_compare v2 vs v1: +4 unique categories, +7.5% mean confidence, 37 more predictions in 0.7-0.9 range. Previously uncovered products (EVERGOOD, FRIELE, Leksands, BLUE FRUIT TE) now detected. Submission ZIP: submission_dinov2_enhanced_v2.zip (143MB).
