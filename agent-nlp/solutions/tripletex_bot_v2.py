@@ -54,6 +54,9 @@ except Exception as e:
     )
     raise
 
+# ---------------------------------------------------------------------------
+# Tripletex API Reference (factual endpoint documentation for the LLM)
+# ---------------------------------------------------------------------------
 TRIPLETEX_API_REFERENCE = """
 ## Tripletex REST API - Key Endpoints
 
@@ -219,7 +222,8 @@ Get employments. Query param: employeeId.
 Get company modules status.
 
 ### PUT /company/modules
-Enable/disable company modules.
+WARNING: Returns 405 Method Not Allowed via competition proxy. Do NOT attempt this call.
+If the task asks to enable a module, skip the module step and only create the department.
 
 ### GET /invoice
 Search invoices. Query params: invoiceNumber, customerId.
@@ -255,6 +259,13 @@ Update contact.
 Update project.
 """
 
+# ---------------------------------------------------------------------------
+# System Prompt (behavioral instructions for the LLM)
+#
+# The API reference above covers what fields exist and what's required.
+# This prompt covers HOW the agent should behave: workflow, defaults,
+# data conversion, and task-specific sequences.
+# ---------------------------------------------------------------------------
 SYSTEM_PROMPT = f"""You are an expert AI accounting agent for Tripletex, a Norwegian accounting system.
 You receive accounting task prompts in 7 languages (Norwegian Bokmal, Nynorsk, English, Spanish, Portuguese, German, French) and must execute the correct API calls.
 
@@ -262,50 +273,46 @@ You receive accounting task prompts in 7 languages (Norwegian Bokmal, Nynorsk, E
 1. Read the task prompt carefully. Extract ALL field values mentioned.
 2. Determine which Tripletex API calls are needed.
 3. Execute them using the tripletex_api tool. Plan before calling to minimize API calls.
-4. IMPORTANT: When you need to look up reference data (VAT types, currencies, countries, divisions), make ONE lookup call, then use the IDs in subsequent calls.
+4. When you need reference data (VAT types, currencies, countries, divisions, payment types), make ONE lookup call, then reuse the IDs.
 
-## MANDATORY DEFAULTS (always include these fields)
-- POST /customer: ALWAYS include "isCustomer": true. Without this, the entity is NOT a customer.
-- POST /employee: ALWAYS include "department": {{"id": X}} and "userType": "NO_ACCESS" (unless prompt specifies a role). If userType is "STANDARD" or "EXTENDED", an "email" field is REQUIRED (use a placeholder like "employee@company.no" if none given).
-- POST /order and inline orders: ALWAYS include "deliveryDate". Use orderDate or invoiceDate if not specified.
-- If the prompt says the person should be an administrator/kontoadministrator, set userType to "STANDARD" or "EXTENDED" (not "NO_ACCESS").
-- POST /project: ALWAYS include "projectManager": {{"id": X}}, "isInternal": true (unless external), "startDate": today's date if not specified. The prerequisite employee MUST be created with userType "STANDARD" (NOT "NO_ACCESS"). This overrides the default NO_ACCESS rule for employees when creating a project manager.
-- POST /travelExpense costs: paymentType MUST be {{"id": X}} (integer ID, NOT a string). Look up IDs with GET /travelExpense/paymentType first. Use "comments" for descriptions, NOT "description".
+## Sandbox Rules
+The sandbox is FRESH and EMPTY. Only system reference data exists (countries, currencies, vatTypes, divisions).
+- For CREATE tasks: do NOT search first. Create dependencies in order (e.g., department before employee, customer before invoice), then create the target entity.
+- For DELETE, UPDATE, or CORRECTION tasks: use GET to find the entity by name first, then DELETE/PUT it.
+- Do NOT make GET calls to verify entities you just created (wastes API calls and hurts efficiency score).
+- Every 4xx error hurts your efficiency score. Validate inputs before sending.
 
-## Critical Rules
-- NEVER guess IDs for referenced entities. Look them up first if needed.
-- Convert date format: DD.MM.YYYY in prompt -> YYYY-MM-DD for API.
-- Convert numbers: "1.000,50" in prompt -> 1000.50 for API.
-- Fresh sandbox: no pre-existing data except system reference data (countries, currencies, vatTypes, divisions).
-  You must create dependencies first (e.g., create department before employee, create customer before invoice).
-- Every 4xx error hurts your efficiency score. Validate before sending.
-- Do NOT make GET calls to verify entities you just created (wastes API calls).
-- The API uses Basic Auth. This is handled automatically.
-- IMPORTANT: Employee creation REQUIRES department {{id}} and userType. Always create department first if needed.
-- IMPORTANT: When creating orders (standalone or inline with invoices), deliveryDate is REQUIRED. Use the order date or invoice date if no delivery date is specified.
-- IMPORTANT: The sandbox is FRESH and EMPTY with NO business data. For CREATE tasks, do NOT search first. Just CREATE directly with POST.
-- EXCEPTION: For DELETE, UPDATE, or CORRECTION tasks that reference an existing entity by name, you MUST use GET to find the entity's ID first, then DELETE/PUT it. This is the only case where GET for business entities is valid.
-- For reference/system data lookups: GET /ledger/vatType, GET /currency, GET /country, GET /division, GET /product/unit, GET /travelExpense/paymentType, GET /travelExpense/costCategory.
-- If the prompt mentions employment details (job title, salary, start date), create the employee first, then create employment and employment details as separate calls.
-- For invoicing, follow this EXACT sequence:
-  1. Create customer (POST /customer with isCustomer: true)
-  2. Register company bank account: POST /ledger/account with EXACTLY this JSON body (copy verbatim, do NOT change the bank account number):
-     {{"name": "Bankkonto", "number": 1920, "isBankAccount": true, "bankAccountNumber": "19201234568", "bankAccountCountry": {{"id": 161}}, "currency": {{"id": 1}}}}
-  3. Look up vatType IDs (GET /ledger/vatType) once
-  4. Create invoice with inline orders and orderLines (POST /invoice)
-  The bank account step is REQUIRED or invoice creation will fail with 422.
-- For phone numbers: use "phoneNumberMobile" for 8-digit numbers starting with 4 or 9 (Norwegian mobile); use "phoneNumber" for all other numbers (landlines start with 2, 3, 5, 6, 7, or 8). If the prompt says "mobil" use phoneNumberMobile, if "telefon" use phoneNumber.
+## Mandatory Defaults
+These fields are required but easy to forget:
+- POST /customer: include "isCustomer": true (without this, the entity is NOT a customer).
+- POST /employee: include "department": {{"id": X}} and "userType": "NO_ACCESS" (unless prompt specifies a role). If userType is "STANDARD" or "EXTENDED", "email" is REQUIRED (use "employee@company.no" if none given). If the prompt says administrator/kontoadministrator, use "STANDARD" or "EXTENDED".
+- POST /order (standalone or inline): include "deliveryDate" in YYYY-MM-DD format. If not in the prompt, use the same date as orderDate or invoiceDate (already converted to YYYY-MM-DD).
+- POST /project: include "projectManager": {{"id": X}}, "isInternal": true (unless external), "startDate" (today if not specified). The project manager employee MUST have userType "STANDARD" (overrides the default NO_ACCESS rule).
+- POST /travelExpense costs: paymentType MUST be {{"id": X}} (integer, not string). Look up IDs with GET /travelExpense/paymentType first. Use "comments" for descriptions, NOT "description".
+
+## Data Format Conversion
+- Dates: DD.MM.YYYY in prompt -> YYYY-MM-DD for API.
+- Numbers: "1.000,50" in prompt -> 1000.50 for API.
+- Phone numbers: "phoneNumberMobile" for 8-digit numbers starting with 4 or 9 (or if prompt says "mobil"); "phoneNumber" for all other numbers (or if prompt says "telefon").
+
+## Invoicing Sequence (follow exactly)
+1. Create customer (POST /customer with isCustomer: true)
+2. Register bank account: POST /ledger/account. If the prompt specifies a bank account number, use that. Otherwise use this default body:
+   {{"name": "Bankkonto", "number": 1920, "isBankAccount": true, "bankAccountNumber": "19201234568", "bankAccountCountry": {{"id": 161}}, "currency": {{"id": 1}}}}
+3. Use these common vatType IDs (no lookup needed for standard rates): 25% standard VAT = id 3, 15% food VAT = id 31, 12% transport VAT = id 32, 0% exempt = id 5. Only call GET /ledger/vatType if you need an unusual rate.
+4. Create invoice with inline orders and orderLines (POST /invoice)
+Skipping step 2 causes a 422 error.
+
+## Employment Details
+If the prompt mentions job title, salary, or start date, create the employee first, then create employment and employment details as separate calls.
 
 ## Norwegian Accounting Conventions
 - VAT (MVA/moms): 25% standard, 15% food, 12% transport/hotels, 0% exempt
-- Currency: NOK (Norwegian krone)
-- Fiscal year: January 1 - December 31
-- Organization numbers: 9 digits
-- National identity numbers (personnummer): 11 digits (DDMMYY + 5 digits)
-- Bank account numbers: 11 digits (XXXX.XX.XXXXX format)
+- Currency: NOK | Fiscal year: Jan 1 - Dec 31
+- Organization numbers: 9 digits | National identity numbers: 11 digits (DDMMYY + 5)
+- Bank account numbers: 11 digits (XXXX.XX.XXXXX)
 
-## Language Handling
-Extract field values regardless of language. Key vocabulary:
+## Language Vocabulary
 - Ansatt/tilsett = Employee | Kunde = Customer | Produkt/vare = Product
 - Faktura = Invoice | Avdeling = Department | Prosjekt = Project
 - Reiseregning = Travel expense | Betaling = Payment
@@ -317,8 +324,8 @@ Extract field values regardless of language. Key vocabulary:
 {TRIPLETEX_API_REFERENCE}
 
 ## Response Format
-After completing all necessary API calls, respond with a brief summary of what was done.
-If you encounter an error that you cannot resolve, explain what went wrong.
+After completing all API calls, respond with a brief summary of what was done.
+If you encounter an unresolvable error, explain what went wrong.
 """
 
 TRIPLETEX_TOOL = types.Tool(
@@ -405,13 +412,13 @@ async def call_tripletex(
             json=json_body,
             params=params or None,
             auth=auth,
-            headers={"Content-Type": "application/json; charset=utf-8"},
+            headers={"Content-Type": "application/json; charset=utf-8"} if json_body is not None else {},
             timeout=30.0,
         )
 
         try:
             data = response.json()
-        except (json.JSONDecodeError, ValueError) as e:
+        except (json.JSONDecodeError, ValueError):
             log.warning(
                 "Non-JSON response from %s %s (status=%d): %s",
                 method, path, response.status_code, response.text[:200],
@@ -482,12 +489,7 @@ async def run_agent(
     errors_4xx = 0
 
     user_parts: list[types.Part] = []
-    task_text = (
-        f"Task prompt:\n{prompt}\n\n"
-        "Execute the required Tripletex API calls to complete this task. "
-        "Minimize the number of API calls. Do NOT verify entities you just created."
-    )
-    user_parts.append(types.Part.from_text(text=task_text))
+    user_parts.append(types.Part.from_text(text=f"Task prompt:\n{prompt}"))
 
     if files:
         for f in files:
@@ -565,11 +567,10 @@ async def run_agent(
                 break
 
             function_calls = [p for p in candidate.content.parts if p.function_call]
-            text_parts = [p for p in candidate.content.parts if p.text]
 
             if not function_calls:
-                final_text = " ".join(p.text for p in text_parts if p.text)
-                log.info("Agent completed: %s", final_text[:200])
+                text_parts = [p.text for p in candidate.content.parts if p.text]
+                log.info("Agent completed: %s", " ".join(text_parts)[:200])
                 agent_completed = True
                 break
 
@@ -595,8 +596,7 @@ async def run_agent(
                     )
                     continue
 
-                body_preview = (args.get("body") or "")[:200]
-                log.info("Calling: %s %s body=%s", method, path, body_preview)
+                log.info("Calling: %s %s body=%s", method, path, (args.get("body") or "")[:200])
 
                 result = await call_tripletex(
                     client=http_client,
@@ -613,11 +613,10 @@ async def run_agent(
                 if 400 <= status < 500:
                     errors_4xx += 1
 
-                result_str = truncate_result(result)
                 function_responses.append(
                     types.Part.from_function_response(
                         name=fc.name,
-                        response={"result": result_str},
+                        response={"result": truncate_result(result)},
                     )
                 )
 
