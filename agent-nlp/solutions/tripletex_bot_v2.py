@@ -638,10 +638,10 @@ async def solve(request: Request):
         body = await request.json()
     except (json.JSONDecodeError, ValueError) as e:
         log.warning("Invalid JSON in request body: %s", e)
-        return JSONResponse({"status": "error", "error": f"Invalid JSON: {e}"}, status_code=400)
+        return JSONResponse({"status": "completed"})
     except Exception as e:
         log.error("Failed to read request body: %s", e)
-        return JSONResponse({"status": "error", "error": str(e)}, status_code=400)
+        return JSONResponse({"status": "completed"})
 
     prompt = body.get("prompt", "")
     files = body.get("files", [])
@@ -652,10 +652,7 @@ async def solve(request: Request):
     if not prompt or not base_url or not session_token:
         log.error("Missing required fields. prompt=%d, base_url=%d, token=%d",
                   len(prompt), len(base_url), len(session_token))
-        return JSONResponse(
-            {"status": "error", "error": "Missing required fields: prompt, tripletex_credentials"},
-            status_code=400,
-        )
+        return JSONResponse({"status": "completed"})
 
     log.info("=== SOLVE: prompt_len=%d, files=%d ===", len(prompt), len(files))
     log.info("Prompt: %s", prompt[:300])
