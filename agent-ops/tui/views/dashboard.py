@@ -7,7 +7,7 @@ from textual.widgets import Static, Label
 from data import (
     time_remaining, format_countdown, load_leaderboard, find_our_team,
     load_all_agent_statuses, load_nlp_submissions, load_cv_results,
-    load_agent_context,
+    load_agent_context, load_score_history, render_sparkline,
 )
 
 
@@ -140,6 +140,45 @@ class MiniLeaderboard(Static):
         widget.update("\n".join(lines) if lines else "[dim]No data[/]")
 
 
+class ScoreProgression(Static):
+    """Score over time sparklines."""
+
+    def compose(self) -> ComposeResult:
+        yield Label("[bold]SCORE PROGRESSION[/]", classes="card-title")
+        yield Static(id="score-progression")
+
+    def refresh_data(self) -> None:
+        widget = self.query_one("#score-progression", Static)
+        history = load_score_history()
+        if len(history) < 2:
+            widget.update("[dim]Not enough data points yet[/]")
+            return
+
+        totals = [h["total"] for h in history]
+        nlp_scores = [h["tripletex"] for h in history]
+        ml_scores = [h["astar_island"] for h in history]
+        ranks = [h["rank"] for h in history if isinstance(h["rank"], int)]
+
+        lines = [
+            f"  Total:    [bold]{totals[-1]:.1f}[/]  {render_sparkline(totals, 40)}",
+            f"  ML:       [cyan]{ml_scores[-1]:.1f}[/]  {render_sparkline(ml_scores, 40)}",
+            f"  NLP:      [green]{nlp_scores[-1]:.1f}[/]  {render_sparkline(nlp_scores, 40)}",
+        ]
+        if ranks:
+            # Invert ranks for sparkline (lower=better, so show improvement as going up)
+            max_rank = max(ranks) if ranks else 1
+            inv_ranks = [max_rank - r for r in ranks]
+            lines.append(
+                f"  Rank:     [bold]#{ranks[-1]}[/]  {render_sparkline(inv_ranks, 40)}  [dim](lower=better)[/]"
+            )
+
+        ts_first = history[0].get("timestamp", "")[:16]
+        ts_last = history[-1].get("timestamp", "")[:16]
+        lines.append(f"  [dim]{ts_first} -> {ts_last} ({len(history)} snapshots)[/]")
+
+        widget.update("\n".join(lines))
+
+
 class DashboardView(Container):
     """Main dashboard tab."""
 
@@ -149,7 +188,9 @@ class DashboardView(Container):
             yield TrackCard("ml", classes="card")
             yield TrackCard("cv", classes="card")
             yield TrackCard("nlp", classes="card")
-        yield MiniLeaderboard(classes="card wide-card")
+        with Horizontal(classes="dashboard-bottom"):
+            yield MiniLeaderboard(classes="card")
+            yield ScoreProgression(classes="card")
 
     def refresh_data(self) -> None:
         for card in self.query(DeadlineCard):
@@ -157,4 +198,6 @@ class DashboardView(Container):
         for card in self.query(TrackCard):
             card.refresh_data()
         for card in self.query(MiniLeaderboard):
+            card.refresh_data()
+        for card in self.query(ScoreProgression):
             card.refresh_data()

@@ -80,7 +80,7 @@ def format_countdown(seconds: int) -> str:
 
 
 def load_leaderboard() -> list[dict]:
-    """Load leaderboard data (cached)."""
+    """Load leaderboard data (cached). Returns latest snapshot's rows."""
     data = _read_json_cached(DASHBOARD_DATA / "leaderboard.json")
     if not data:
         return []
@@ -90,6 +90,58 @@ def load_leaderboard() -> list[dict]:
     if isinstance(data, dict):
         return data.get("rows", [])
     return []
+
+
+def load_score_history() -> list[dict]:
+    """Load our team's score over time from leaderboard snapshots.
+
+    Returns list of {timestamp, total, tripletex, astar_island, norgesgruppen, rank}.
+    """
+    data = _read_json_cached(DASHBOARD_DATA / "leaderboard.json")
+    if not isinstance(data, list):
+        return []
+
+    history = []
+    for snap in data:
+        if not isinstance(snap, dict) or "rows" not in snap:
+            continue
+        ts = snap.get("timestamp", "")
+        rows = snap.get("rows", [])
+        us = next((r for r in rows if "kreativ" in r.get("team", "").lower()), None)
+        if us:
+            history.append({
+                "timestamp": ts,
+                "total": float(us.get("total", 0) or 0),
+                "tripletex": float(us.get("tripletex", 0) or 0),
+                "astar_island": float(us.get("astar_island", 0) or 0),
+                "norgesgruppen": float(us.get("norgesgruppen", 0) or 0),
+                "rank": us.get("rank", "?"),
+            })
+    return history
+
+
+def render_sparkline(values: list[float], width: int = 30) -> str:
+    """Render a sparkline string from a list of values using unicode blocks."""
+    if not values:
+        return "[dim]no data[/]"
+    blocks = " ▁▂▃▄▅▆▇█"
+    mn, mx = min(values), max(values)
+    rng = mx - mn if mx > mn else 1
+
+    # Sample to fit width
+    if len(values) > width:
+        step = len(values) / width
+        sampled = [values[int(i * step)] for i in range(width)]
+    else:
+        sampled = values
+
+    chars = []
+    for v in sampled:
+        idx = int(((v - mn) / rng) * 8)
+        idx = max(0, min(8, idx))
+        chars.append(blocks[idx])
+
+    return "".join(chars)
 
 
 def find_our_team(leaderboard: list[dict]) -> dict | None:

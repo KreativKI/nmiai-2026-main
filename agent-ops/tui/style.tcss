@@ -65,6 +65,15 @@ Tab:hover {
     width: 1fr;
 }
 
+.dashboard-bottom {
+    height: auto;
+    min-height: 14;
+}
+
+.dashboard-bottom > .card {
+    width: 1fr;
+}
+
 .agents-grid {
     height: auto;
     min-height: 12;
