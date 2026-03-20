@@ -24,6 +24,9 @@ YOLO_INPUT_SIZE = 1280
 DINO_INPUT_SIZE = 518
 CONF_THRESHOLD = 0.05
 IOU_THRESHOLD = 0.5
+SAHI_MIN_DIM = 2000        # Only slice images larger than this
+SAHI_OVERLAP = 0.2         # Tile overlap ratio
+SAHI_TILE_SIZE = 1280      # Tile size in original image pixels
 
 
 def letterbox(img, new_shape=1280):
@@ -104,6 +107,73 @@ def nms_per_class(boxes, scores, labels, iou_thresh=0.5):
     return boxes[keep_all], scores[keep_all], labels[keep_all]
 
 
+def generate_tiles(img_h, img_w, tile_size=1280, overlap=0.2):
+    """Generate tile coordinates (x1, y1, x2, y2) for sliced inference."""
+    step = int(tile_size * (1 - overlap))
+    tiles = []
+    for y in range(0, img_h, step):
+        for x in range(0, img_w, step):
+            x2 = min(x + tile_size, img_w)
+            y2 = min(y + tile_size, img_h)
+            x1 = max(0, x2 - tile_size)
+            y1 = max(0, y2 - tile_size)
+            tiles.append((x1, y1, x2, y2))
+    # Deduplicate tiles that end up identical (happens at image edges)
+    return list(dict.fromkeys(tiles))
+
+
+def detect_with_sahi(img, yolo_sess, yolo_input_name, orig_h, orig_w):
+    """Run YOLO on full image + overlapping tiles, merge with NMS."""
+    all_boxes = []
+    all_scores = []
+    all_labels = []
+
+    # Full-image detection
+    img_lb, scale, pad = letterbox(img, YOLO_INPUT_SIZE)
+    img_rgb = cv2.cvtColor(img_lb, cv2.COLOR_BGR2RGB)
+    img_norm = img_rgb.astype(np.float32) / 255.0
+    img_batch = np.transpose(img_norm, (2, 0, 1))[np.newaxis, ...]
+    yolo_out = yolo_sess.run(None, {yolo_input_name: img_batch})
+    boxes, scores, labels = decode_yolo(
+        yolo_out[0], scale, pad, orig_h, orig_w, CONF_THRESHOLD)
+    if len(boxes) > 0:
+        all_boxes.append(boxes)
+        all_scores.append(scores)
+        all_labels.append(labels)
+
+    # Tiled detection only for large images
+    if max(orig_h, orig_w) >= SAHI_MIN_DIM:
+        tiles = generate_tiles(orig_h, orig_w, SAHI_TILE_SIZE, SAHI_OVERLAP)
+        for tx1, ty1, tx2, ty2 in tiles:
+            tile = img[ty1:ty2, tx1:tx2]
+            tile_h, tile_w = tile.shape[:2]
+            t_lb, t_scale, t_pad = letterbox(tile, YOLO_INPUT_SIZE)
+            t_rgb = cv2.cvtColor(t_lb, cv2.COLOR_BGR2RGB)
+            t_norm = t_rgb.astype(np.float32) / 255.0
+            t_batch = np.transpose(t_norm, (2, 0, 1))[np.newaxis, ...]
+            t_out = yolo_sess.run(None, {yolo_input_name: t_batch})
+            t_boxes, t_scores, t_labels = decode_yolo(
+                t_out[0], t_scale, t_pad, tile_h, tile_w, CONF_THRESHOLD)
+            if len(t_boxes) > 0:
+                # Offset boxes to full image coordinates
+                t_boxes[:, 0] += tx1
+                t_boxes[:, 1] += ty1
+                t_boxes[:, 2] += tx1
+                t_boxes[:, 3] += ty1
+                all_boxes.append(t_boxes)
+                all_scores.append(t_scores)
+                all_labels.append(t_labels)
+
+    if len(all_boxes) == 0:
+        return np.zeros((0, 4)), np.array([]), np.array([])
+
+    merged_boxes = np.concatenate(all_boxes)
+    merged_scores = np.concatenate(all_scores)
+    merged_labels = np.concatenate(all_labels)
+
+    return nms_per_class(merged_boxes, merged_scores, merged_labels, IOU_THRESHOLD)
+
+
 def preprocess_crop_for_dino(crop_bgr, size=518):
     """Preprocess a crop for DINOv2: resize, normalize with ImageNet stats."""
     crop_rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
@@ -173,18 +243,9 @@ def main():
             continue
         orig_h, orig_w = img.shape[:2]
 
-        # Stage 1: YOLO detection
-        img_lb, scale, pad = letterbox(img, YOLO_INPUT_SIZE)
-        img_rgb = cv2.cvtColor(img_lb, cv2.COLOR_BGR2RGB)
-        img_norm = img_rgb.astype(np.float32) / 255.0
-        img_batch = np.transpose(img_norm, (2, 0, 1))[np.newaxis, ...]
-
-        yolo_out = yolo_sess.run(None, {yolo_input: img_batch})
-        boxes, det_scores, yolo_labels = decode_yolo(
-            yolo_out[0], scale, pad, orig_h, orig_w, CONF_THRESHOLD)
-
-        boxes, det_scores, yolo_labels = nms_per_class(
-            boxes, det_scores, yolo_labels, IOU_THRESHOLD)
+        # Stage 1: YOLO detection (full image + SAHI tiles for large images)
+        boxes, det_scores, yolo_labels = detect_with_sahi(
+            img, yolo_sess, yolo_input, orig_h, orig_w)
 
         if len(boxes) == 0:
             continue
