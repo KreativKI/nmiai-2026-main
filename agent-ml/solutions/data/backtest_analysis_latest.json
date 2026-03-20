@@ -1,0 +1,62 @@
+{
+  "timestamp": "2026-03-20T13:11:31Z",
+  "rounds_tested": 6,
+  "model_params": {
+    "prob_floor": 0.01,
+    "hist_blend": 0.1,
+    "obs_weight_settle": 0.95,
+    "obs_weight_forest": 0.4,
+    "obs_weight_empty": 0.35,
+    "near_dist": [0.8, 0.6, 0.3],
+    "forest_bonus_per_adj": 0.02,
+    "forest_bonus_cap": 0.08
+  },
+  "results_with_obs": {
+    "avg": 63.44,
+    "best": 76.69,
+    "per_round": [68.07, 71.61, 25.60, 76.69, 68.22, 70.43],
+    "round_numbers": [1, 2, 3, 4, 5, 6],
+    "note": "Rounds 1-3 had no saved observation data; rounds 4-6 used real obs from seeds 0-2"
+  },
+  "results_leave_one_out": {
+    "avg": 59.45,
+    "best": 75.49,
+    "per_round": [68.07, 71.61, 25.60, 75.49, 64.76, 51.19],
+    "round_numbers": [1, 2, 3, 4, 5, 6]
+  },
+  "results_oracle": {
+    "avg": 67.38,
+    "best": 78.30,
+    "per_round": [70.00, 76.04, 41.72, 78.30, 67.06, 71.24],
+    "round_numbers": [1, 2, 3, 4, 5, 6],
+    "note": "Upper bound: uses round ground truth as perfect observations"
+  },
+  "prob_floor_experiment": {
+    "floor_001": 63.44,
+    "floor_002": 61.44,
+    "delta": -2.00,
+    "per_round_delta": [-1.44, -1.61, -1.29, -3.87, -2.14, -1.66],
+    "verdict": "floor 0.02 is strictly worse across all 6 rounds; keep 0.01"
+  },
+  "observations_impact": {
+    "rounds_with_obs": [4, 5, 6],
+    "avg_boost_vs_loo": 8.56,
+    "r4_boost": 1.20,
+    "r5_boost": 3.46,
+    "r6_boost": 19.24,
+    "note": "Observations help most on rounds where hist-only transitions are a poor fit (round 6: +19.2 pts)"
+  },
+  "per_class_weaknesses": {
+    "settlement": "KL 0.44-1.00, score 4.9-27.5. Worst class by far. 5-7% entropy share but dominates error.",
+    "port": "KL 0.29-0.91, score 6.5-42.0. Few cells but high KL. Very volatile across rounds.",
+    "empty": "KL 0.05-0.23, score 50.9-85.2. Largest class (65-69% entropy). Acceptable but varies.",
+    "forest": "KL 0.05-0.28, score 43.5-84.1. Second largest class. Tracks empty pattern.",
+    "mountain": "KL 0.051, score 85.7. Static terrain, essentially solved."
+  },
+  "round3_anomaly": {
+    "score": 25.6,
+    "diagnosis": "Settlement KL=1.00 (score 4.9) and port KL=0.91 (score 6.5) destroyed round 3. Dynamics differ radically from other rounds. Even oracle only reaches 41.7.",
+    "implication": "Hidden parameters vary widely between rounds. Cross-round transition transfer has limits."
+  },
+  "top_insight": "Observations boost score by +8.6 pts avg (up to +19 on outlier rounds); settlement prediction (KL~0.5) remains the primary bottleneck: 5% of cells but drives most error. Floor 0.02 hurts uniformly (-2.0 pts). Next improvement should target settlement/port class modeling specifically."
+}
