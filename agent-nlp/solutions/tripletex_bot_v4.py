@@ -63,7 +63,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - create_project
 - create_invoice
 - register_payment (existing customer and invoice, register that payment was received)
-- create_credit_note (create credit note on existing invoice)
+- create_credit_note (create credit note on existing invoice, also use when payment was returned/reversed by bank)
 - create_travel_expense (use when prompt mentions reiseregning/travel expense/travel report, even if it also says to create an employee first)
 - delete_employee
 - delete_travel_expense
@@ -375,7 +375,30 @@ async def exec_create_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
     if f.get("dateOfBirth"): body["dateOfBirth"] = f["dateOfBirth"]
     if f.get("bankAccountNumber"): body["bankAccountNumber"] = f["bankAccountNumber"]
 
-    return await tx(c, base, tok, "POST", "/employee", body)
+    r = await tx(c, base, tok, "POST", "/employee", body)
+
+    # If startDate or salary present, also create employment details
+    if r.get("success") and (f.get("startDate") or f.get("salary")):
+        emp_id = r["data"]["id"]
+        start_date = f.get("startDate", time.strftime("%Y-%m-%d"))
+        emp_r = await tx(c, base, tok, "POST", "/employee/employment", {
+            "employee": {"id": emp_id},
+            "startDate": start_date,
+            "employmentType": "ORDINARY",
+        })
+        if emp_r.get("success"):
+            emp_id_empl = emp_r["data"]["id"]
+            details_body = {
+                "employment": {"id": emp_id_empl},
+                "date": start_date,
+                "employmentType": "ORDINARY",
+                "percentageOfFullTimeEquivalent": float(f.get("employmentPercentage", 100)),
+            }
+            if f.get("salary"):
+                details_body["annualSalary"] = float(f["salary"])
+            await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
+
+    return r
 
 
 async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
