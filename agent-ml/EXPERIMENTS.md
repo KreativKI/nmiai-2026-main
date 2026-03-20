@@ -145,3 +145,25 @@ Adaptive stacking + hindsight re-targeting should improve this.
 **Avg: 64.5 (+1.1 vs baseline)**
 **Applied to astar_v6.py for R9.**
 
+## SIM-001: Strategy tournament (V2 model + post-processing, 30 MC trials x 8 rounds)
+**Date:** 2026-03-20 18:36-19:15 UTC
+**Tool:** simulate.py --cached-only --trials 30 (ran on GCP VM ml-churn)
+**Config:** V2 model, leave-one-out, T=1.12, collapse=0.016, smooth=0.3
+
+### Results
+| Rank | Strategy | Avg | Best | Description |
+|------|----------|-----|------|-------------|
+| 1 | C: 8x5 | **64.9** | 80.3 | 9 overview + 8 batches of 5 with hindsight |
+| 1 | G: 5x8 | **64.9** | 80.3 | 9 overview + 5 batches of 8 (current) |
+| 3 | B: 4x10 | 64.7 | 80.3 | 9 overview + 4 batches of 10 |
+| 3 | H: no overview | 64.7 | 80.3 | Skip overview, 50 adaptive on hot zones |
+| 5 | F: 2x20 | 64.2 | 80.0 | 9 overview + 2 large batches |
+| 6 | E: multi-seed | 64.0 | 79.5 | Split across seeds 0+1 |
+| 7 | A: blind | 63.8 | 79.8 | 9 overview + 41 blind (no hindsight) |
+| 7 | D: settlement | 63.8 | 79.8 | 9 overview + 41 on settlements only |
+
+**Verdict:** C (8x5) and G (5x8) tied at 64.9. Current strategy G is already optimal.
+Adaptive hindsight adds +1.1 over blind. Batch size (5 vs 8 vs 10) barely matters.
+Multi-seed split hurts. Settlement-only targeting = same as blind.
+**No strategy change needed.**
+
