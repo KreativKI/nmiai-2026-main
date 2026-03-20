@@ -1,0 +1,14 @@
+{
+  "path": "(no ZIP validated yet)",
+  "valid": true,
+  "errors": [],
+  "warnings": ["Run ./tools/validate_cv_zip_to_json.sh path/to/submission.zip to validate"],
+  "files": [],
+  "stats": {
+    "total_files": 0,
+    "py_files": 0,
+    "weight_files": 0,
+    "total_size_mb": 0,
+    "weight_size_mb": 0
+  }
+}

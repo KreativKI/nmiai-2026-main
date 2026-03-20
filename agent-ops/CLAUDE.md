@@ -58,6 +58,12 @@ Review and improve tools used by other agents. Check the reusable tools archive,
 
 ---
 
+## Rules
+- **NEVER stop to ask questions. Just build.** Make best judgment, ship fast, iterate later. If unsure between two options, pick the simpler one. Done beats perfect.
+- NEVER make submissions directly or automate UI clicks on app.ainm.no
+- Commit after EVERY phase. Update status.json after every phase.
+- Drop shared tools in `shared/tools/` and notify agents via their intelligence folders
+
 ## Core Principle: Explore Before You Build
 We solve real problems that no existing solution covers yet. Before building anything:
 1. Check what exists in the resources below

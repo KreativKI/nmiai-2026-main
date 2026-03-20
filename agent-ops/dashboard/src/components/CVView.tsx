@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { MetricCard } from "./MetricCard";
 import { CVDetectionViewer } from "./CVDetectionViewer";
+import { CVSubmissionViewer } from "./CVSubmissionViewer";
 import {
   LineChart,
   Line,
@@ -203,6 +204,10 @@ export function CVView() {
           </div>
         ) : null}
       </div>
+
+      {/* Detection viewer */}
+      {/* ZIP Submission Validator */}
+      <CVSubmissionViewer />
 
       {/* Detection viewer */}
       <CVDetectionViewer />
