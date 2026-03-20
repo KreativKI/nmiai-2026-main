@@ -18,7 +18,8 @@ import onnxruntime as ort
 # --- Configuration ---
 YOLO_MODEL = "best.onnx"
 DINO_MODEL = "dinov2_vits.onnx"
-GALLERY_FILE = "gallery_enhanced.npz"
+GALLERY_EMB_FILE = "gallery.npy"
+GALLERY_LABELS_FILE = "gallery_labels.json"
 YOLO_INPUT_SIZE = 1280
 DINO_INPUT_SIZE = 518
 CONF_THRESHOLD = 0.05
@@ -161,9 +162,9 @@ def main():
     dino_input = dino_sess.get_inputs()[0].name
 
     # Load gallery
-    gallery_data = np.load(str(model_dir / GALLERY_FILE))
-    gallery = gallery_data["embeddings"]
-    gallery_labels = gallery_data["labels"]
+    gallery = np.load(str(model_dir / GALLERY_EMB_FILE))
+    with open(model_dir / GALLERY_LABELS_FILE) as f:
+        gallery_labels = np.array(json.load(f), dtype=np.int32)
 
     predictions = []
     image_files = sorted(input_dir.glob("*.jpg"))

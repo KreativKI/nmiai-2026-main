@@ -23,7 +23,8 @@ BLOCKED_MODULES = [
 MAX_ZIP_MB = 420
 MAX_PY_FILES = 10
 MAX_WEIGHT_FILES = 3
-WEIGHT_EXTS = {".onnx", ".pt", ".pth", ".bin", ".safetensors", ".data"}
+WEIGHT_EXTS = {".onnx", ".pt", ".pth", ".safetensors", ".npy"}
+ALLOWED_EXTS = {".py", ".json", ".yaml", ".yml", ".cfg", ".pt", ".pth", ".onnx", ".safetensors", ".npy"}
 
 
 def check_blocked_imports(py_path: Path) -> list[str]:
@@ -80,6 +81,19 @@ def main():
             errors.append("run.py not found at ZIP root")
         else:
             print("OK: run.py at root")
+
+        # DISALLOWED FILE TYPES CHECK (critical: .npz, .bin, .data, etc. are NOT allowed)
+        disallowed = []
+        for n in names:
+            ext = Path(n).suffix.lower()
+            if ext and ext not in ALLOWED_EXTS:
+                disallowed.append(f"{n} ({ext})")
+        if disallowed:
+            errors.append(f"DISALLOWED file types found (allowed: {', '.join(sorted(ALLOWED_EXTS))})")
+            for d in disallowed:
+                errors.append(f"  DISALLOWED: {d}")
+        else:
+            print("OK: All file types allowed")
 
         # Count .py files
         py_files = [n for n in names if n.endswith(".py") and "/" not in n]

@@ -15,8 +15,11 @@
 - run.py must be at ZIP root (NOT in a subfolder)
 - Max 10 submissions per day (resets midnight UTC = 01:00 CET). Infrastructure errors don't count (up to 2/day).
 - Max 420 MB total weight files
-- Max 3 weight files
+- Max 3 weight files (.pt, .pth, .onnx, .safetensors, .npy)
 - Max 10 .py files
+- **ALLOWED file types ONLY:** .py, .json, .yaml, .yml, .cfg, .pt, .pth, .onnx, .safetensors, .npy
+- **DISALLOWED (will reject submission):** .npz, .bin, .data, .h5, .pkl, .npc, executables, symlinks, anything not in allowed list
+- 2026-03-20 15:00: BURNED SUBMISSION because .npz not in allowed list. ALWAYS check file extensions.
 
 ## Input/Output
 - **CLI:** `python run.py --images /data/images/ --output /tmp/predictions.json`
