@@ -1,0 +1,350 @@
+{
+  "4": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_004_gemini_v1.png",
+      "size": "1504x704",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_004_gemini_v2.png",
+      "size": "1504x704",
+      "status": "OK"
+    }
+  },
+  "6": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_006_gemini_v1.png",
+      "size": "1652x624",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_006_gemini_v2.png",
+      "size": "1408x768",
+      "status": "OK"
+    }
+  },
+  "10": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_010_gemini_v1.png",
+      "size": "1839x560",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_010_gemini_v2.png",
+      "size": "1839x560",
+      "status": "OK"
+    }
+  },
+  "36": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_036_gemini_v1.png",
+      "size": "896x1185",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_036_gemini_v2.png",
+      "size": "896x1185",
+      "status": "OK"
+    }
+  },
+  "51": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_051_gemini_v1.png",
+      "size": "1456x730",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_051_gemini_v2.png",
+      "size": "1456x730",
+      "status": "OK"
+    }
+  },
+  "76": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_076_gemini_v1.png",
+      "size": "864x1237",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_076_gemini_v2.png",
+      "size": "864x1237",
+      "status": "OK"
+    }
+  },
+  "127": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_127_gemini_v1.png",
+      "size": "816x1280",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_127_gemini_v2.png",
+      "size": "816x1280",
+      "status": "OK"
+    }
+  },
+  "129": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_129_gemini_v1.png",
+      "size": "784x1372",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_129_gemini_v2.png",
+      "size": "784x1372",
+      "status": "OK"
+    }
+  },
+  "138": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_138_gemini_v1.png",
+      "size": "1969x544",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_138_gemini_v2.png",
+      "size": "1969x544",
+      "status": "OK"
+    }
+  },
+  "144": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_144_gemini_v1.png",
+      "size": "800x1302",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_144_gemini_v2.png",
+      "size": "1408x768",
+      "status": "OK"
+    }
+  },
+  "150": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_150_gemini_v1.png",
+      "size": "976x1092",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_150_gemini_v2.png",
+      "size": "976x1092",
+      "status": "OK"
+    }
+  },
+  "153": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_153_gemini_v1.png",
+      "size": "784x1342",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_153_gemini_v2.png",
+      "size": "784x1342",
+      "status": "OK"
+    }
+  },
+  "155": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_155_gemini_v1.png",
+      "size": "688x1527",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_155_gemini_v2.png",
+      "size": "688x1527",
+      "status": "OK"
+    }
+  },
+  "159": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_159_gemini_v1.png",
+      "size": "1651x640",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_159_gemini_v2.png",
+      "size": "1651x640",
+      "status": "OK"
+    }
+  },
+  "163": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_163_gemini_v1.png",
+      "size": "1373x784",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_163_gemini_v2.png",
+      "size": "1373x784",
+      "status": "OK"
+    }
+  },
+  "182": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_182_gemini_v1.png",
+      "size": "848x1263",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_182_gemini_v2.png",
+      "size": "848x1263",
+      "status": "OK"
+    }
+  },
+  "185": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_185_gemini_v1.png",
+      "size": "832x1271",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_185_gemini_v2.png",
+      "size": "832x1271",
+      "status": "OK"
+    }
+  },
+  "195": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_195_gemini_v1.png",
+      "size": "1702x608",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_195_gemini_v2.png",
+      "size": "1702x608",
+      "status": "OK"
+    }
+  },
+  "216": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_216_gemini_v1.png",
+      "size": "1901x544",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_216_gemini_v2.png",
+      "size": "1901x544",
+      "status": "OK"
+    }
+  },
+  "254": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_254_gemini_v1.png",
+      "size": "1422x736",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_254_gemini_v2.png",
+      "size": "1422x736",
+      "status": "OK"
+    }
+  },
+  "269": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_269_gemini_v1.png",
+      "size": "1658x624",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_269_gemini_v2.png",
+      "size": "1658x624",
+      "status": "OK"
+    }
+  },
+  "277": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_277_gemini_v1.png",
+      "size": "944x1109",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_277_gemini_v2.png",
+      "size": "944x1109",
+      "status": "OK"
+    }
+  },
+  "285": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_285_gemini_v1.png",
+      "size": "1665x624",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_285_gemini_v2.png",
+      "size": "1665x624",
+      "status": "OK"
+    }
+  },
+  "286": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_286_gemini_v1.png",
+      "size": "1803x592",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_286_gemini_v2.png",
+      "size": "1803x592",
+      "status": "OK"
+    }
+  },
+  "288": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_288_gemini_v1.png",
+      "size": "1803x592",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_288_gemini_v2.png",
+      "size": "1803x592",
+      "status": "OK"
+    }
+  },
+  "301": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_301_gemini_v1.png",
+      "size": "1871x560",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_301_gemini_v2.png",
+      "size": "1871x560",
+      "status": "OK"
+    }
+  },
+  "312": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_312_gemini_v1.png",
+      "size": "1653x624",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_312_gemini_v2.png",
+      "size": "1653x624",
+      "status": "OK"
+    }
+  },
+  "335": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_335_gemini_v1.png",
+      "size": "400x2653",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_335_gemini_v2.png",
+      "size": "400x2653",
+      "status": "OK"
+    }
+  },
+  "348": {
+    "v1": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_348_gemini_v1.png",
+      "size": "976x1095",
+      "status": "OK"
+    },
+    "v2": {
+      "path": "/Volumes/devdrive/github_dev/nmiai-worktree-nlp/agent-cv/synthetic_test/cat_348_gemini_v2.png",
+      "size": "976x1095",
+      "status": "OK"
+    }
+  }
+}
