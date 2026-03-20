@@ -1,77 +1,68 @@
 # NorgesGruppen Object Detection — Plan
 
 **Track:** CV | **Task:** Grocery Shelf Detection | **Weight:** 33.33%
-**Last updated:** 2026-03-19 22:55 CET
+**Last updated:** 2026-03-20 05:00 CET
 
 ## The Problem
 Detect and classify grocery products on store shelves. 248 training images, 356 categories, COCO format. Score = 70% detection mAP + 30% classification mAP. Runs offline on L4 GPU in sandbox (ultralytics 8.1.0, onnxruntime-gpu 1.20.0).
 
-## READ FIRST: intelligence/for-cv-agent/SOTA-UPDATE-2026.md
+## Current State
+- **YOLO11m v2 SUBMITTED** at 04:56 CET. Score pending.
+  - mAP50=0.945 (val), mAP50-95=0.727. ONNX 78MB.
+  - v1 failed exit code 2 (argparse). v2 fixed with parse_known_args + --input alias.
+- **YOLO26m training:** cv-train-1, epoch 73/100, mAP50=0.890. Below YOLO11m.
+- **RF-DETR training:** cv-train-2, epoch 24/80, mAP50=0.425. Slow convergence, not competitive.
 
-## Approach A (Primary): YOLO26 Fine-tune → ONNX Export
+## Phased Work Plan
 
-**Why YOLO26 over YOLOv8:** Released Jan 2026. NMS-free inference, Small-Target-Aware Label Assignment (STAL) — critical for dense shelf scenes with overlapping products. Better accuracy than YOLOv8/v11/v12/v13 on COCO benchmarks.
+### Phase 1: Monitor Training + Score (NOW)
+- Monitor YOLO26m on cv-train-1 (should finish in ~30 min)
+- Monitor RF-DETR on cv-train-2 (will take ~1 hour more)
+- Check leaderboard for v2 submission score
+- **Commit:** status.json + MEMORY.md updates
 
-1. Install latest ultralytics locally (NOT 8.1.0)
-2. Fine-tune YOLO26m on NorgesGruppen COCO dataset (nc=357)
-3. Heavy augmentation: mosaic, mixup, scale jitter (NO vertical flip)
-4. Export to ONNX (opset ≤ 20, FP16 quantization)
-5. Write run.py using onnxruntime with CUDAExecutionProvider
-6. **Time:** 3-4 hours (including export + testing)
-7. **Expected:** 55-75% combined mAP
+### Phase 2: Export Best Alternative Model
+- When YOLO26m finishes: export to ONNX, Docker-validate, prepare ZIP
+- When RF-DETR finishes: export to ONNX, write run_rfdetr.py, Docker-validate
+- Compare all three: YOLO11m vs YOLO26m vs RF-DETR
+- **Commit:** export scripts + submission ZIPs
 
-## Approach B (Alternative): RF-DETR Fine-tune → ONNX
+### Phase 3: Submit Best Model (requires JC)
+- If YOLO26m or RF-DETR beats v2 score, prepare submission
+- JC uploads manually
+- **Commit:** status update
 
-**Why consider:** DINOv2 backbone excels at few-shot transfer learning. We have only 248 images across 356 categories — this is textbook few-shot. May converge faster and score higher than YOLO.
+### Phase 4: Ensemble (if time permits)
+- If YOLO11m + YOLO26m both produce decent predictions
+- Average predictions from both models (ensemble-boxes library is in sandbox)
+- Write ensemble run.py that loads both ONNX models
+- Must fit in 420MB total (78MB + ~80MB = ~160MB, fits)
+- **Commit:** ensemble code + submission ZIP
 
-1. Install RF-DETR from Roboflow
-2. Fine-tune on NorgesGruppen data
-3. Export to ONNX
-4. **Time:** 3-4 hours
-5. **Expected:** 60-80% combined mAP (potentially better than YOLO26 in few-shot)
+### Phase 5: TTA (Test-Time Augmentation)
+- Add horizontal flip + multi-scale inference to run.py
+- Free accuracy boost, no retraining needed
+- Must stay under 300s timeout
+- **Commit:** TTA-enhanced run.py
 
-## Approach C (Baseline — SHIP FIRST): Detection-Only with Pretrained YOLO
+## GCP VMs
+| VM | Zone | Purpose | Status |
+|----|------|---------|--------|
+| cv-train-1 | europe-west1-c | YOLO26m training | Running, epoch 73 |
+| cv-train-2 | europe-west3-a | RF-DETR training | Running, epoch 24 |
 
-1. Use pretrained YOLO (COCO weights) — detects generic objects
-2. Set category_id=0 for all predictions (skip classification)
-3. Max score: 70% (detection component only)
-4. **Time:** 1 hour
-5. **Expected:** 30-45% detection mAP × 0.7 = 21-32% total
+**DELETE VMs when training done to avoid charges.**
 
-## Approach D (Classification Boost): Detect + CLIP/SigLIP Classify
-
-If detection is good but classification is weak:
-1. Use YOLO26 for detection (find bounding boxes)
-2. Crop detected products
-3. Match crops against 327 product reference images using CLIP/SigLIP embeddings
-4. No training needed for classification — reference images ARE the classifier
-5. **Time:** 2-3 hours on top of Approach A
-6. **Expected:** +10-15% on classification mAP
-
-## Local Validation (MANDATORY before every submission)
-
-Before uploading ANY zip, validate it in a Docker container that mirrors the competition sandbox. Create a Dockerfile matching the sandbox environment (Python 3.11, exact package versions, no network). Then:
-
-1. Build: `docker build -t ng-sandbox .`
-2. Unzip your submission into a test directory
-3. Run: `docker run --rm -v ./test_images:/data/images -v ./output:/output ng-sandbox python run.py --input /data/images --output /output/predictions.json`
-4. Verify: exit code 0, predictions.json exists, valid JSON array, correct fields
-
-This catches blocked imports, version mismatches, and format errors BEFORE burning a submission slot. No excuses — every submission must pass local validation first.
-
-## Submission Strategy (3/day limit!)
-1. **Sub 1:** Baseline (Approach C) — verify pipeline works
-2. **Sub 2:** YOLO26 or RF-DETR fine-tuned — real score
-3. **Sub 3:** Improved model with classification boost
+## Submission Log
+| # | Time | ZIP | Score | Notes |
+|---|------|-----|-------|-------|
+| 1 | 04:30 CET | submission_yolo11m_v1.zip | FAILED (exit 2) | argparse rejected unknown args |
+| 2 | 04:56 CET | submission_yolo11m_v2.zip | PENDING | parse_known_args fix |
 
 ## Critical Constraints
-- `os`, `subprocess`, `pickle`, `yaml` BLOCKED — use `pathlib` + `json`
-- Pin ONNX opset ≤ 20
-- Max 420MB weights, max 3 weight files, max 10 .py files
-- run.py at ZIP root (most common submission error)
-- FP16 quantization recommended (smaller + faster on L4)
-
-## Data
-- Download from competition site (login required):
-  - NM_NGD_coco_dataset.zip (~864 MB) — training images + annotations
-  - NM_NGD_product_images.zip (~60 MB) — reference photos per product
+- `--images` and `--input` both accepted (sandbox may use either)
+- `parse_known_args()` to accept any extra sandbox flags
+- No blocked imports (os, sys, subprocess, etc.)
+- Max 420MB weights, 3 weight files, 10 .py files
+- 5 submissions/day (resets 01:00 CET)
+- Docker-validate EVERY submission (QC-LOOP-RULE)

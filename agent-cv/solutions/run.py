@@ -133,11 +133,12 @@ def postprocess(output: np.ndarray, scale: float, pad: tuple,
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--images", type=str, required=True,
+    parser.add_argument("--images", "--input", type=str, required=True,
                         help="Path to directory with input images")
     parser.add_argument("--output", type=str, default="/tmp/predictions.json",
                         help="Path to output predictions JSON file")
-    args = parser.parse_args()
+    # Use parse_known_args to accept any extra arguments the sandbox may pass
+    args, _ = parser.parse_known_args()
 
     input_dir = Path(args.images)
     output_path = Path(args.output)
