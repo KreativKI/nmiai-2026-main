@@ -25,8 +25,48 @@ from backtest import (
     PredictionModel, load_cached_rounds, score_prediction,
     TERRAIN_TO_CLASS, STATIC_TERRAIN, NUM_CLASSES, CLASS_NAMES, PROB_FLOOR,
 )
+from churn import NeighborhoodModelV2
+from scipy.ndimage import gaussian_filter
 
 DATA_DIR = Path(__file__).parent / "data"
+
+# Post-processing constants (from PP-001 backtest search)
+TEMPERATURE = 1.12
+COLLAPSE_THRESH = 0.016
+SMOOTH_SIGMA = 0.3
+
+
+def apply_postprocessing(pred, grid, h, w):
+    """Apply temperature scaling, collapse thresholding, and spatial smoothing."""
+    # Temperature scaling
+    pred = pred ** (1.0 / TEMPERATURE)
+
+    # Collapse thresholding
+    for y in range(h):
+        for x in range(w):
+            if grid[y][x] in STATIC_TERRAIN:
+                continue
+            probs = pred[y, x]
+            mask = probs < COLLAPSE_THRESH
+            if mask.any() and not mask.all():
+                probs[mask] = 0.0
+                probs[:] = np.maximum(probs, PROB_FLOOR)
+                pred[y, x] = probs / probs.sum()
+
+    # Spatial smoothing
+    smoothed = np.copy(pred)
+    for cls in range(NUM_CLASSES):
+        smoothed[:, :, cls] = gaussian_filter(pred[:, :, cls], sigma=SMOOTH_SIGMA)
+    for y in range(h):
+        for x in range(w):
+            if grid[y][x] in STATIC_TERRAIN:
+                smoothed[y, x] = pred[y, x]
+    pred = smoothed
+
+    # Floor and renormalize
+    pred = np.maximum(pred, PROB_FLOOR)
+    pred = pred / pred.sum(axis=-1, keepdims=True)
+    return pred
 
 
 def log(msg: str) -> None:
@@ -148,13 +188,16 @@ def build_initial_heat(grid, h, w):
     return heat
 
 
-def execute_strategy(strategy, sim, seed_idx, model, hist_trans, round_trans):
+def execute_strategy(strategy, sim, seed_idx, model, hist_trans, round_trans,
+                     v2_model=None):
     """Execute a query strategy and return the final prediction + score.
 
     strategy: dict with "batches" list, each batch has:
         queries: int (0 = analysis step, >0 = observation step)
         target: "overview" | "heat" | "surprise" | "settlement_only"
         seed: int (which seed to observe)
+
+    If v2_model is provided, uses V2 model for final prediction (ignores old model).
     """
     rd = sim.round_data
     h, w = rd["map_height"], rd["map_width"]
@@ -241,8 +284,16 @@ def execute_strategy(strategy, sim, seed_idx, model, hist_trans, round_trans):
             total_queries_used += 1
 
     # Build prediction
-    pred = model.predict_seed(rd, seed_idx, hist_trans, round_trans,
-                               obs_counts=obs_counts, obs_total=obs_total)
+    if v2_model is not None:
+        pred = v2_model.predict_grid_with_obs(
+            rd, seed_idx, obs_counts=obs_counts, obs_total=obs_total,
+            obs_weight_max=0.70)
+    else:
+        pred = model.predict_seed(rd, seed_idx, hist_trans, round_trans,
+                                   obs_counts=obs_counts, obs_total=obs_total)
+
+    # Apply post-processing (temperature, collapse, smoothing)
+    pred = apply_postprocessing(pred, grid, h, w)
 
     # Score against ground truth
     gt = np.array(rd["seeds"][str(seed_idx)]["ground_truth"])
@@ -367,11 +418,12 @@ STRATEGIES = {
 # ──────────────────────────────────────────────
 
 def monte_carlo_strategy(strategy, round_data, model, hist_trans, round_trans,
-                          n_trials=50, seeds_to_test=None):
+                          n_trials=50, seeds_to_test=None, v2_model=None):
     """Run a strategy n_trials times on a round, return score statistics.
 
     Tests on seed 0 by default (our primary observed seed).
     Cross-seed transfer applied to all seeds for final scoring.
+    If v2_model provided, uses V2 NeighborhoodModel for predictions.
     """
     if seeds_to_test is None:
         seeds_to_test = [0]
@@ -387,17 +439,24 @@ def monte_carlo_strategy(strategy, round_data, model, hist_trans, round_trans,
             if str(seed_idx) not in round_data["seeds"]:
                 continue
             score, queries_used = execute_strategy(
-                strategy, sim, seed_idx, model, hist_trans, round_trans
+                strategy, sim, seed_idx, model, hist_trans, round_trans,
+                v2_model=v2_model
             )
             trial_scores.append(score)
 
-        # For unobserved seeds, use model-only prediction
+        # For unobserved seeds, use model-only prediction + post-processing
         for seed_idx in range(round_data.get("seeds_count", 5)):
             if seed_idx in seeds_to_test:
                 continue
             if str(seed_idx) not in round_data["seeds"]:
                 continue
-            pred = model.predict_seed(round_data, seed_idx, hist_trans, round_trans)
+            h, w = round_data["map_height"], round_data["map_width"]
+            grid = round_data["initial_states"][seed_idx]["grid"]
+            if v2_model is not None:
+                pred = v2_model.predict_grid(round_data, seed_idx)
+            else:
+                pred = model.predict_seed(round_data, seed_idx, hist_trans, round_trans)
+            pred = apply_postprocessing(pred, grid, h, w)
             gt = np.array(round_data["seeds"][str(seed_idx)]["ground_truth"])
             ig = round_data["initial_states"][seed_idx]["grid"]
             result = score_prediction(gt, pred, initial_grid=ig)
@@ -526,14 +585,17 @@ def main():
                         help="Test specific strategy only (e.g., B_adaptive_4x10)")
     args = parser.parse_args()
 
-    rounds_data = load_cached_rounds()
-    if not rounds_data:
+    all_rounds = load_cached_rounds()
+    if not all_rounds:
         log("No cached data. Run backtest.py --cache first.")
         return
 
     if args.round:
-        rounds_data = [rd for rd in rounds_data if rd["round_number"] == args.round]
+        rounds_data = [rd for rd in all_rounds if rd["round_number"] == args.round]
+    else:
+        rounds_data = all_rounds
 
+    # Old model kept for strategy logic (heat maps, viewport selection)
     model = PredictionModel({
         "near_dist_1": 0.6, "near_dist_3": 0.4, "near_dist_5": 0.2,
         "forest_bonus_per_adj": 0.0, "forest_bonus_cap": 0.0,
@@ -582,11 +644,18 @@ def main():
             if not rd.get("seeds"):
                 continue
 
-            hist_trans = model.build_transitions(rounds_data, exclude_round=rn)
+            hist_trans = model.build_transitions(all_rounds, exclude_round=rn)
+
+            # Build V2 model for this round (leave-one-out, uses ALL rounds)
+            v2 = NeighborhoodModelV2()
+            for other_rd in all_rounds:
+                if other_rd["round_number"] != rn and other_rd.get("seeds"):
+                    v2.add_training_data(other_rd)
+            v2.finalize()
 
             mc = monte_carlo_strategy(
                 strategy, rd, model, hist_trans, hist_trans,
-                n_trials=args.trials, seeds_to_test=[0]
+                n_trials=args.trials, seeds_to_test=[0], v2_model=v2
             )
             strat_results.append({
                 "round": rn,

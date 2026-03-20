@@ -212,6 +212,11 @@ Empty->Settlement at 19.3% (highest ever). Forest->Settlement at 26.3%.
 3. Consider: pair approximation (spatial correlation correction), information-directed queries
 4. GCP VM: verify churn loop is running, redeploy if needed
 
+### JC Reminder for next round
+Consider more weighting on positive and negative enforcement in the model.
+Positive: reward correct predictions more strongly. Negative: penalize wrong predictions more.
+This could apply to observation blending, transition model training, or post-processing.
+
 ### API Discovery: simulate returns settlement STATS
 - The /simulate endpoint returns NOT just the grid but also settlement objects with:
   population, food, wealth, defense, has_port, alive, owner_id
