@@ -222,7 +222,7 @@ def split_name(f: dict) -> tuple[str, str]:
     if len(parts) >= 2:
         return parts[0], " ".join(parts[1:])
     elif len(parts) == 1:
-        return parts[0], parts[0]  # Duplicate as last resort
+        return parts[0], ""
     return first or "Unknown", last or "Unknown"
 
 
@@ -452,6 +452,23 @@ async def exec_create_product(c: httpx.AsyncClient, base: str, tok: str, f: dict
 
 
 async def exec_create_department(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    # Handle multi-department: LLM may extract {"departments": [{...}, {...}]}
+    depts = f.get("departments")
+    if depts and isinstance(depts, list):
+        last_r = {"success": False, "error": "No departments to create"}
+        for i, dept in enumerate(depts):
+            name = dept.get("departmentName") or dept.get("name", "")
+            if not name:
+                continue
+            body = {"name": name}
+            num = dept.get("departmentNumber")
+            if num is not None:
+                body["departmentNumber"] = int(num)
+            else:
+                body["departmentNumber"] = i + 1
+            last_r = await tx(c, base, tok, "POST", "/department", body)
+        return last_r
+    # Single department
     body = {"name": f.get("departmentName") or f.get("name", "")}
     if f.get("departmentNumber") is not None:
         body["departmentNumber"] = int(f["departmentNumber"])
@@ -462,6 +479,8 @@ async def exec_create_project(c: httpx.AsyncClient, base: str, tok: str, f: dict
     # Get admin employee for projectManager
     whoami = await tx(c, base, tok, "GET", "/token/session/>whoAmI")
     pm_id = whoami.get("data", {}).get("employee", {}).get("id")
+    if not pm_id:
+        return {"success": False, "error": "Could not get project manager from whoAmI"}
 
     body = {
         "name": f.get("projectName") or f.get("name", ""),
@@ -489,13 +508,18 @@ async def exec_create_project(c: httpx.AsyncClient, base: str, tok: str, f: dict
 async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
     vat_map = await lookup_vat_map(c, base, tok)
 
-    # Step 1: Create customer
-    cust_body = {"name": f.get("customerName", ""), "isCustomer": True}
-    if f.get("customerOrgNumber"): cust_body["organizationNumber"] = f["customerOrgNumber"]
-    cust_r = await tx(c, base, tok, "POST", "/customer", cust_body)
-    if not cust_r.get("success"):
-        return cust_r
-    cust_id = cust_r["data"]["id"]
+    # Step 1: Find existing customer or create new
+    cust_name = f.get("customerName", "")
+    existing = await find_customer(c, base, tok, cust_name, f.get("customerOrgNumber"))
+    if existing["success"]:
+        cust_id = existing["id"]
+    else:
+        cust_body = {"name": cust_name, "isCustomer": True}
+        if f.get("customerOrgNumber"): cust_body["organizationNumber"] = f["customerOrgNumber"]
+        cust_r = await tx(c, base, tok, "POST", "/customer", cust_body)
+        if not cust_r.get("success"):
+            return cust_r
+        cust_id = cust_r["data"]["id"]
 
     # Step 2: Register bank account on account 1920
     acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
@@ -661,24 +685,27 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
 
 
 async def exec_delete_employee(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    # Find employee
-    params = {}
-    if f.get("firstName"): params["firstName"] = f["firstName"]
-    if f.get("lastName"): params["lastName"] = f["lastName"]
-    params["count"] = 5
+    first, last = split_name(f)
+    params = {"count": 10}
+    if first: params["firstName"] = first
+    if last: params["lastName"] = last
     emp_r = await tx(c, base, tok, "GET", "/employee", params=params)
     if not emp_r.get("success") or not emp_r.get("data"):
         return {"success": False, "error": "Employee not found"}
     emps = as_list(emp_r["data"])
-    emp_id = emps[0]["id"]
-    return await tx(c, base, tok, "DELETE", f"/employee/{emp_id}")
+    # Match by name to avoid deleting wrong employee
+    for e in emps:
+        if e.get("firstName") == first and e.get("lastName") == last:
+            return await tx(c, base, tok, "DELETE", f"/employee/{e['id']}")
+    # Fallback to first result if no exact match
+    return await tx(c, base, tok, "DELETE", f"/employee/{emps[0]['id']}")
 
 
 async def exec_delete_travel_expense(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    # Find travel expense (might need to find employee first)
-    if f.get("firstName"):
+    first, last = split_name(f)
+    if first:
         emp_r = await tx(c, base, tok, "GET", "/employee", params={
-            "firstName": f["firstName"], "lastName": f.get("lastName", ""), "count": 5
+            "firstName": first, "lastName": last, "count": 5
         })
         if emp_r.get("success") and emp_r.get("data"):
             emps = as_list(emp_r["data"])

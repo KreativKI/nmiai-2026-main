@@ -1,7 +1,7 @@
 # Tripletex AI Accounting Agent -- Execution Plan
 
 **Track:** NLP | **Weight:** 33.33%
-**Last updated:** 2026-03-20 21:45 CET
+**Last updated:** 2026-03-20 22:10 CET
 **Approach:** Structured workflows (LLM extracts fields, Python executes API calls)
 **Bot version:** tripletex_bot_v4.py (deployed, rev 37, QC 8/8 PASS)
 
@@ -11,44 +11,59 @@
 |-----------|-------|-----|-------|
 | Create customer (fr) | 8/8 | 100% | Locked in |
 | Unknown task (8/8) | 8/8 | 100% | Locked in |
-| Register payment | 2/7 | 29% | Fixed, needs re-test |
-| 6/7 task (from auto-submit) | 6/7 | 86% | From session 5 auto-submit |
-| 4/8 task (from auto-submit) | 4/8 | 50% | From session 5 auto-submit |
+| Register payment | 2/7 | 29% | v4 fixes customer search, should improve |
+| 6/7 task (from auto-submit) | 6/7 | 86% | From session 5 |
+| 4/8 task (from auto-submit) | 4/8 | 50% | From session 5 |
+| ~25 task types | 0 | 0% | Never attempted |
 
-## Current Phase: 5 (Tier 2 Submission)
+## Current Phase: Iteration Loop (ACTIVE)
 
-## Phase 0: Local Test Infrastructure (DONE)
-Docker + QC workflow established. qc-verify.py tests 8 Tier 1 + 5 Tier 2 task types.
+### The Loop
 
-## Phase 1: Audit All Task Types (DONE)
-Completed session 3. All 7 categories tested.
+```
+SUBMIT (10 runs, auto-submitter)
+    |
+    v
+ANALYZE (score breakdown, Cloud Run logs, group by perfect/partial/broken)
+    |
+    v
+FIX (biggest point gaps first, deploy, syntax check)
+    |
+    v
+SMOKE TEST (health check, 10 sec)
+    |
+    v
+[repeat]
+```
 
-## Phase 2: Fix Failures (DONE)
-All critical fixes applied: isCustomer, bank account, payment types, travel expense costs.
+### Submission rules
+- Small runs (up to 10): I decide, just do it
+- Bulk runs (>10): JC approval first
+- After each batch: analyze before the next one
+- Log everything in EXPERIMENTS.md
 
-## Phase 3: Gemini Reliability Investigation (DONE)
-**Finding:** Gemini 2.5 Flash function calling is unreliable (~30-40% MALFORMED errors on complex tasks). Neither prompt engineering nor model fallback (gemini-2.5-pro) fully solves this. Claude not available on this GCP project.
+### Tools in the loop
 
-**Decision (JC approved):** Switch to structured workflows. LLM extracts fields only, Python executes deterministic API sequences. This eliminates function calling failures.
+| Tool | When | Command |
+|------|------|---------|
+| Auto-submitter | Submit | `python3 /Volumes/devdrive/github_dev/nmiai-worktree-ops/shared/tools/nlp_auto_submit.py --auto --max 10` |
+| Cloud Run logs | Analyze | `gcloud run services logs read tripletex-agent --region europe-west4 --project ai-nm26osl-1779 --limit 50` |
+| QC script | Fix (optional) | `python3 agent-nlp/scripts/qc-verify.py [endpoint]` |
+| Pre-submit | Smoke test | `bash agent-nlp/scripts/pre-submit.sh` |
+| Leaderboard | Track progress | `python3 shared/tools/scrape_leaderboard.py` |
 
-## Phase 4: Build tripletex_bot_v4 (DONE)
+### Fix priority
+Whichever task types have the most points left on the table:
+- Tier 3 (3x) > Tier 2 (2x) > Tier 1 (1x)
+- Broken tasks (0%) > partial tasks > efficiency on perfect tasks
 
-**Architecture:** LLM extracts {task_type, fields} -> Python executes API sequence -> {"status": "completed"}
+## Completed Phases
 
-**Result:** 16 task types implemented. QC 8/8 PASS on Tier 1. Deployed rev 37. Zero MALFORMED errors.
+### Phase 0-3: Infrastructure + Investigation (DONE)
+Local Docker, QC pipeline, Gemini reliability testing, structured workflow decision.
 
-**Key fixes during validation:**
-- vatType retry: .lower() case mismatch prevented fallback
-- Product vatType: omit for 25% (sandbox default), only send non-standard
-- Customer search: exact match + org number fallback + full list scan
-- Pre-submit pipeline: `bash agent-nlp/scripts/pre-submit.sh`
-
-## Phase 5: Tier 2 Submission (after v4 validated)
-Submit via interactive auto-submitter. JC controls each submission.
-Target: 100% field correctness on all task types before submitting.
-
-## Phase 6: Tier 3 Preparation (Saturday)
-Tier 3 opens with 3.0x multiplier. Complex scenarios. Extend v4 with Tier 3 task types.
+### Phase 4: Build v4 (DONE)
+16 task types implemented. QC 8/8 PASS. Deployed rev 37. Zero MALFORMED errors.
 
 ## Key Dates
 
@@ -61,7 +76,8 @@ Tier 3 opens with 3.0x multiplier. Complex scenarios. Extend v4 with Tier 3 task
 | Sunday 15:00 | Competition ends |
 
 ## Key Constraints
-- 5 submissions per task type per day (resets 01:00 CET)
-- ~150 total submissions per day (30 types x 5)
-- Bad runs never lower score, but waste daily rate limit
-- 100% correctness target before submitting (JC directive)
+- 10 submissions per task type per day (resets 01:00 CET)
+- 300 total submissions per day
+- Bad runs never lower score
+- Same task types return (random selection from pool)
+- Competition sandbox != dev sandbox (e.g. VAT codes)
