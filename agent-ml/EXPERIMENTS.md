@@ -43,3 +43,25 @@ The model's structural approach to settlements (uniform transition by class + ad
 - R4 actual: 71.8, backtest with-obs: 76.6 (delta from param differences in v6 vs default)
 - R5 seed 0 actual: 72.6, backtest: 72.6 (exact match)
 
+## BT-002: New params (near 0.6/0.4/0.2, no forest bonus) with 6 rounds
+**Date:** 2026-03-20 12:54 UTC
+**Config:** near_dist 0.6/0.4/0.2, forest_bonus=0, 6 rounds including R6
+
+| Mode | R1 | R2 | R3 | R4 | R5 | R6 | Avg | Best |
+|------|-----|-----|-----|-----|-----|-----|------|------|
+| Leave-one-out | 67.5 | 70.0 | 33.1 | 79.5 | 65.2 | 47.9 | 60.5 | 79.5 |
+| With real obs | 67.5 | 70.0 | 33.1 | 77.9 | 68.1 | 69.9 | 64.4 | 77.9 |
+
+### Key finding
+R6 observations boost: 47.9 -> 69.9 (+22 points). Largest observation effect seen.
+This confirms adaptive query targeting (hindsight stacking) has highest ROI.
+
+## EXP-003: Adaptive stacking (hindsight-based query targeting)
+**Date:** 2026-03-20 12:30 UTC
+**Change:** Replace static stacking with adaptive batching (8 queries per batch,
+compute per-cell surprise between batches, re-target next batch at high-surprise areas)
+**Hypothesis:** Targeting queries where model is MOST wrong should improve observed-seed scores
+**Cannot backtest offline:** Depends on live API responses (stochastic observations)
+**Will test live:** Round 8 (weight ~1.48)
+**Verdict:** Pending live results
+
