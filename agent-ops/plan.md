@@ -58,7 +58,7 @@ Tasks:
 - UI polish: loading states, error states, responsive layout
 - Commit: "Phase 4: Auto-refresh and visual polish"
 
-### Phase 5: Sleep Report — Status: pending
+### Phase 5: Sleep Report — Status: done
 Write summary to intelligence/for-overseer/.
 
 Tasks:
