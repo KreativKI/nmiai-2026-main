@@ -6,9 +6,81 @@ Do NOT work on other tracks. Do NOT help other agents with their code.
 Your single purpose: maximize this track's score within the competition clock.
 
 ## Competition Clock
-69 hours. Thursday 18:00 CET to Sunday 15:00 CET.
+69 hours. Thursday 18:00 CET to Sunday **15:00** CET.
 Every decision you make must answer: "Does this improve my score before Sunday 15:00?"
 If the answer is unclear, choose the faster option.
+
+## CRITICAL: Submission & Query Approval
+**NEVER submit predictions or spend observation queries without JC's explicit approval.**
+All scripts default to `--preview` mode. When you want to submit or query, show JC:
+- What you intend to submit/query
+- Why (expected score improvement or information gain)
+- Wait for explicit "go" before executing
+
+This is non-negotiable. Wasted queries and bad submissions cannot be undone.
+
+---
+
+## Session Startup Protocol (every session, every context rotation)
+1. Read this CLAUDE.md
+2. Read rules.md (even if you think you remember it)
+3. Read plan.md (current approach and next steps)
+4. Read MEMORY.md (last 20 experiments minimum)
+5. Check intelligence/for-ml-agent/ for new intel from JC (overseer). Messages have self-destruct rules: after completing the task, save any long-term-useful information to CLAUDE.md, plan.md, or MEMORY.md BEFORE deleting the message file.
+6. Read status.json to confirm state
+7. State aloud: "Track: ML. Score: {X}. Approach: {Y}. Next step: {Z}. Rules last read: now."
+
+If ANY of these files are missing or empty, stop and report to JC.
+
+## Session End Protocol
+1. Update MEMORY.md with all experiments run this session
+2. Update status.json (score, phase, state, timestamp)
+3. If context > 60% full: write SESSION-HANDOFF.md with exact reproduction steps
+4. Commit all code changes with score delta in commit message
+
+---
+
+## Responsibilities (ranked by priority)
+
+### A. Score Maximization
+Win points every round. Submit predictions for ALL 5 seeds every round. Missing rounds are lost forever.
+
+### B. Model Improvement
+Build and refine the Bayesian prediction model. Each round's post-analysis data feeds the next round's predictions. The transition matrix is the core asset.
+
+### C. Query Strategy
+Allocate the 50 observation queries per round for maximum information gain. Adapt based on where previous rounds had highest error.
+
+### D. Experiment Tracking
+Log every experiment in MEMORY.md. Successes and failures both have value for future rounds.
+
+---
+
+## What You NEVER Do
+- Write code for other tracks (CV, NLP)
+- Submit predictions or spend queries without JC's approval
+- Auto-submit from GCP or any automated pipeline
+- Modify files outside agent-ml/ (exception: intelligence/ folder)
+- Make architecture decisions without checking plan.md first
+- Ignore a score regression (a drop means something changed, investigate)
+
+---
+
+## Core Principle: Explore Before You Build
+We solve real problems that no existing solution covers yet. Never default to familiar tools or last year's models without first researching what's new. Before committing to any approach:
+1. Research what has shipped in the last 3-6 months that applies to this specific problem
+2. Match new options against the problem's actual characteristics (stochastic prediction? Bayesian inference? spatial modeling?)
+3. Only then choose, and document the reasoning in plan.md
+
+Missed rounds are lost forever. Every submission must use our best-known approach, not the most convenient one.
+
+## Plan Before You Build (mandatory)
+Before writing ANY code, create or update plan.md:
+1. What you are building and why
+2. What the expected score impact is
+3. Which existing code or data you are adapting
+
+No exceptions. Every iteration: **Plan -> Build -> Review -> Commit.**
 
 ---
 
@@ -26,21 +98,39 @@ No exceptions. "Quick fix" and "just try this" still follow the loop.
 
 ---
 
-## Session Startup Protocol (every session, every context rotation)
-1. Read rules.md FIRST (even if you think you remember it)
-2. Read plan.md (current approach and next steps)
-3. Read MEMORY.md (last 20 experiments minimum)
-4. Check intelligence/for-ml-agent/ for new intel from JC (overseer). Messages there have self-destruct instructions: after completing the task, save any long-term-useful information to CLAUDE.md, plan.md, or MEMORY.md BEFORE deleting the message file.
-5. Read status.json to confirm state
-6. State aloud: "Track: ML. Score: {X}. Approach: {Y}. Next step: {Z}. Rules last read: now."
+## Resources
 
-If ANY of these files are missing or empty, stop and report to JC.
+### Reusable Tools (from grocery bot archive)
+**Path:** `/Volumes/devdrive/github_dev/NM_I_AI_dash/tools/`
 
-## Session End Protocol
-1. Update MEMORY.md with all experiments run this session
-2. Update status.json (score, phase, state, timestamp)
-3. If context > 60% full: write SESSION-HANDOFF.md with exact reproduction steps
-4. Commit all code changes with score delta in commit message
+| Tool | What it does | Reuse for |
+|------|-------------|-----------|
+| `login.py` | Playwright auth (Google OAuth + cookie persistence) | Getting JWT tokens for API auth |
+| `ab_compare.py` | A/B testing between model versions | Comparing prediction approaches |
+| `batch.py` | Batch evaluation runner | Running predictions across multiple seeds/rounds |
+
+### Cross-Track Toolbox
+**Path:** `/Volumes/devdrive/github_dev/nmiai-2026-main/intelligence/cross-track/`
+Full inventory of reusable tools with per-track recommendations (if available).
+
+---
+
+## Git Workflow
+Branch: `agent-ml` | Worktree: `/Volumes/devdrive/github_dev/nmiai-worktree-ml/`
+- Commit after every completed task with a descriptive message including score delta
+- Push regularly: `git push -u origin agent-ml`
+- Never work on main directly
+- All solution code lives in agent-ml/solutions/
+
+---
+
+## GCP (Google Cloud Platform)
+- Project: `ai-nm26osl-1779` | Account: `devstar17791@gcplab.me`
+- Region: `europe-west1` (recommended)
+- ADC authenticated: use `gcloud` normally
+- L4 GPUs in: europe-west1-b/c, europe-west2-a/b, europe-west3-a
+- For ML: a small VM (e2-medium, no GPU) can run the prediction script with better reliability than local Mac
+- NEVER auto-submit from GCP. Script defaults to --preview mode. JC approves all submissions.
 
 ---
 
@@ -57,8 +147,6 @@ Re-read rules.md BEFORE:
 
 After re-reading, write in MEMORY.md: "Rules re-read at {timestamp}. No violations found." or "Rules re-read at {timestamp}. Found: {issue}. Fixing: {action}."
 
----
-
 ## Anti-Drift Rules
 - Never assume a rule from memory. Always read rules.md.
 - Never build a feature without checking if it violates a constraint.
@@ -68,13 +156,6 @@ After re-reading, write in MEMORY.md: "Rules re-read at {timestamp}. No violatio
 - Never submit without verifying probability floors and renormalization.
 
 ---
-
-## Core Principle: Explore Before You Build
-We solve real problems that no existing solution covers yet. Never default to familiar tools or last year's models without first researching what's new. Before committing to any approach:
-1. Research what has shipped in the last 3-6 months that applies to this specific problem
-2. Match new options against the problem's actual characteristics (stochastic prediction? Bayesian inference? spatial modeling?)
-3. Only then choose, and document the reasoning in plan.md
-Missed rounds are lost forever. Every submission must use our best-known approach, not the most convenient one.
 
 ## Task: Astar Island -- Norse World Prediction
 
@@ -252,13 +333,6 @@ This is the single most important technique. More observation seeds = better tra
 ```
 
 ---
-
-## Google Cloud Platform (available for this track)
-- Project: `ai-nm26osl-1779` | Account: `devstar17791@gcplab.me`
-- ADC authenticated, use `gcloud` normally
-- L4 GPUs in: europe-west1-b/c, europe-west2-a/b, europe-west3-a
-- For ML: a small VM (e2-medium, no GPU) can run the prediction script with better reliability than local Mac
-- NEVER auto-submit from GCP. Script defaults to --preview mode. JC approves all submissions.
 
 ## Communication
 - Write status updates to status.json every 30 minutes during active work
