@@ -110,11 +110,16 @@ costExcludingVatCurrency (number), vatType {id}, productUnit {id},
 isStockItem (bool), currency {id}, account {id}, department {id}.
 Common vatType IDs: check with GET /ledger/vatType.
 
-### POST /ledger/account
-Create a ledger account. Use this to register a company bank account (required before invoicing).
-For bank accounts: name, number (use 1920), isBankAccount (true),
-bankAccountNumber (11-digit Norwegian bank account, e.g. "19201234568"),
-bankAccountCountry {id} (Norway = 161), currency {id} (NOK = 1, REQUIRED for bank accounts).
+### PUT /ledger/account/{id}
+Update a ledger account. Use this to register the company bank account (required before invoicing).
+Account 1920 "Bankinnskudd" already exists in every sandbox but has no bank number.
+Steps: 1) GET /ledger/account?number=1920 to find its id. 2) PUT /ledger/account/{id} with:
+bankAccountNumber (valid 11-digit, use "19201234568" as default), bankAccountCountry {id} (161),
+currency {id} (1 for NOK). Do NOT try POST (account 1920 already exists, POST will 422).
+
+### GET /token/session/>whoAmI
+Get the logged-in user info. Response: {"value": {"employee": {"id": <int>}, "companyId": <int>}}.
+Use value.employee.id as projectManager when creating projects (this user has full access).
 
 ### POST /department
 Create department. Fields: name, departmentNumber, departmentManager {id}.
@@ -141,8 +146,8 @@ count (number), unitPriceExcludingVatCurrency (number), vatType {id}.
 
 ### POST /project
 Create project. REQUIRED: name, projectManager {id}, isInternal (bool), startDate (YYYY-MM-DD).
-The projectManager must be an employee with userType STANDARD or EXTENDED (NOT NO_ACCESS).
-So: create department first, then create employee with userType STANDARD, then create project with that employee as projectManager.
+The projectManager MUST be the sandbox admin employee. Get the id via GET /token/session/>whoAmI.
+Do NOT create a new employee as projectManager (sandbox permissions will deny it).
 Other fields: number, description, department {id}, endDate, customer {id},
 isFixedPrice (bool), projectCategory {id}.
 
@@ -277,7 +282,7 @@ You receive accounting task prompts in 7 languages (Norwegian Bokmal, Nynorsk, E
 
 ## Sandbox Rules
 The sandbox is FRESH and EMPTY. Only system reference data exists (countries, currencies, vatTypes, divisions).
-- For CREATE tasks: do NOT search first. Create dependencies in order (e.g., department before employee, customer before invoice), then create the target entity.
+- For CREATE tasks: do NOT search for business entities first. Create dependencies in order (e.g., department before employee, customer before invoice). Exception: pre-existing system entities (account 1920, the admin employee via whoAmI) must be looked up with GET before use.
 - For DELETE, UPDATE, or CORRECTION tasks: use GET to find the entity by name first, then DELETE/PUT it.
 - Do NOT make GET calls to verify entities you just created (wastes API calls and hurts efficiency score).
 - Every 4xx error hurts your efficiency score. Validate inputs before sending.
@@ -287,7 +292,7 @@ These fields are required but easy to forget:
 - POST /customer: include "isCustomer": true (without this, the entity is NOT a customer).
 - POST /employee: include "department": {{"id": X}} and "userType": "NO_ACCESS" (unless prompt specifies a role). If userType is "STANDARD" or "EXTENDED", "email" is REQUIRED (use "employee@company.no" if none given). If the prompt says administrator/kontoadministrator, use "STANDARD" or "EXTENDED".
 - POST /order (standalone or inline): include "deliveryDate" in YYYY-MM-DD format. If not in the prompt, use the same date as orderDate or invoiceDate (already converted to YYYY-MM-DD).
-- POST /project: include "projectManager": {{"id": X}}, "isInternal": true (unless external), "startDate" (today if not specified). The project manager employee MUST have userType "STANDARD" (overrides the default NO_ACCESS rule).
+- POST /project: include "projectManager": {{"id": X}}, "isInternal": true (unless external), "startDate" (today if not specified). For the projectManager, use the sandbox admin employee: call GET /token/session/>whoAmI to get the employee id. Do NOT create a new employee as project manager (they won't have the right access).
 - POST /travelExpense costs: paymentType MUST be {{"id": X}} (integer, not string). Look up IDs with GET /travelExpense/paymentType first. Use "comments" for descriptions, NOT "description".
 
 ## Data Format Conversion
@@ -297,9 +302,8 @@ These fields are required but easy to forget:
 
 ## Invoicing Sequence (follow exactly)
 1. Create customer (POST /customer with isCustomer: true)
-2. Register bank account: POST /ledger/account. If the prompt specifies a bank account number, use that. Otherwise use this default body:
-   {{"name": "Bankkonto", "number": 1920, "isBankAccount": true, "bankAccountNumber": "19201234568", "bankAccountCountry": {{"id": 161}}, "currency": {{"id": 1}}}}
-3. Use these common vatType IDs (no lookup needed for standard rates): 25% standard VAT = id 3, 15% food VAT = id 31, 12% transport VAT = id 32, 0% exempt = id 5. Only call GET /ledger/vatType if you need an unusual rate.
+2. Register bank account: GET /ledger/account?number=1920 to find the account id, then PUT /ledger/account/{{id}} with bankAccountNumber "19201234568" (or prompt value if given), bankAccountCountry {{"id": 161}}, currency {{"id": 1}}. Do NOT use POST (account 1920 already exists).
+3. Use these common vatType IDs (no lookup needed): 25% standard = id 3, 15% food = id 31, 12% transport = id 32, 0% exempt = id 5. Only call GET /ledger/vatType if you need an unusual rate.
 4. Create invoice with inline orders and orderLines (POST /invoice)
 Skipping step 2 causes a 422 error.
 
