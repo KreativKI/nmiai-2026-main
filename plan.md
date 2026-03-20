@@ -86,7 +86,8 @@ JC sleeping starting ~06:35 CET. All 4 agents have phased standing orders + EXPE
 | Saturday 12:00 | CUT-LOSS: any track with no submission = baseline NOW |
 | Saturday morning | Tier 3 tasks unlock (NLP 3x multiplier) |
 | Sunday 09:00 | FEATURE FREEZE |
-| Sunday 14:45 | Repo goes public |
+| Sunday 12:00 | Set up git-lfs for large files, add MIT LICENSE, prepare to go public |
+| Sunday 14:45 | MANDATORY: Repo goes public + MIT LICENSE file (PRIZE ELIGIBILITY) |
 | Sunday 15:00 | COMPETITION ENDS |
 
 ## When JC Wakes Up (priority order)
