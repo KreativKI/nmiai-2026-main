@@ -6,6 +6,7 @@
 **Change log:** (append here when rules change)
 - 2026-03-20 00:00: Initial rules populated from competition docs
 - 2026-03-20 00:30: Added UTC rate limit reset time (midnight UTC = 01:00 CET)
+- 2026-03-20: CRITICAL FIX: Corrected request format. Field is `prompt` not `task_prompt`, files in `files` not `attachments`, credentials nested under `tripletex_credentials` not at root. No `task_type` field exists.
 
 ## Submission
 - Submit your HTTPS endpoint URL on the platform
@@ -14,17 +15,28 @@
 - Rate limit: 5 submissions per task type per day (verified), 2/day (unverified). Resets midnight UTC = 01:00 CET.
 - Each submission gets a RANDOM task type (weighted toward less-attempted ones)
 
-## What the Platform Sends
+## What the Platform Sends (ACTUAL format from competition docs)
 ```json
 POST /solve
 {
-  "task_prompt": "Create an employee named...",
-  "task_type": "create_employee",
-  "attachments": [{"filename": "...", "data": "base64..."}],
-  "base_url": "https://xxx.tripletex.dev/v2",
-  "session_token": "abc123..."
+  "prompt": "Opprett en ansatt med navn Ola Nordmann...",
+  "files": [
+    {
+      "filename": "faktura.pdf",
+      "content_base64": "JVBERi0xLjQg...",
+      "mime_type": "application/pdf"
+    }
+  ],
+  "tripletex_credentials": {
+    "base_url": "https://tx-proxy.ainm.no/v2",
+    "session_token": "abc123..."
+  }
 }
 ```
+- Field `prompt` (NOT `task_prompt`): the task in natural language
+- Field `files` (NOT `attachments`): array of base64-encoded attachments, may be empty
+- Field `tripletex_credentials.base_url` and `tripletex_credentials.session_token` (nested, NOT at root level)
+- There is NO `task_type` field. Your agent must infer the task type from the prompt.
 - 7 languages: Norwegian, English, Spanish, Portuguese, Nynorsk, German, French
 - Some tasks include PDF or image attachments with critical data
 
