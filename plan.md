@@ -1,17 +1,25 @@
 # Overseer Plan — NM i AI 2026
-**Last updated:** 2026-03-20 04:30 CET (T+10.5h)
+**Last updated:** 2026-03-20 04:50 CET (T+10.8h)
 
 ## Current State
 
 | Track | Score | Status | Next Action |
 |-------|-------|--------|-------------|
-| **ML** | 39.72 (Round 3, rank 33) | Round 4 active, full autonomy | Submitting every round autonomously |
-| **CV** | Failed (exit code 2) | YOLO11m mAP50=0.945, YOLO26m training | Debug exit code 2, fix ZIP, prepare for resubmission |
-| **NLP** | 8/8 PERFECT (last submission) | Endpoint live on Cloud Run | Improve agent, test more task types |
-| **Butler** | Dashboard built | 4-tab dashboard with grid viewer, training monitor | Fix loading issues, add CV submission viewer |
+| **ML** | 45.98 (Round 4, rank #114/187) | Waiting for Round 5, auto-submitting | Keep submitting every round, close 10pt gap to top |
+| **CV** | 0 (v1 failed) | v2 ZIP FIXED and ready (65MB), 2 VMs training | JC uploads submission_yolo11m_v2.zip when awake |
+| **NLP** | 8/8 PERFECT (create_customer) | tripletex_bot_v2 deployed, 3/5 submissions used today | JC submits via web UI to cover more task types |
+| **Butler** | Dashboard live, CORS fixed | Building CV submission viewer + validation tools | New standing orders delivered |
 
 ## Sleep Mode Active
-JC sleeping ~7 hours starting ~04:30 CET. All agents have standing orders in intelligence/ folders.
+JC sleeping starting ~04:50 CET. All 4 agents confirmed alive and have standing orders.
+
+### Agent Health Check (04:50 CET)
+| Agent | Last Commit | Alive | Notes |
+|-------|------------|-------|-------|
+| ML | 04:42 | YES | Waiting for Round 5, polling every 60s |
+| CV | 04:50 (reported) | YES | v2 ZIP fixed, 2 VMs training (YOLO26m epoch ~48, RF-DETR from epoch 12) |
+| NLP | 04:04 | YES | Bot ready, cannot submit without JC |
+| Butler | 04:17 | YES | Got new standing orders at 04:45, working on them |
 
 ### Staggered Communication Schedule
 | Agent | Reads inbox | Writes status |
@@ -25,40 +33,43 @@ JC sleeping ~7 hours starting ~04:30 CET. All agents have standing orders in int
 ## Active Tasks
 
 ### 1. ML: Autonomous Round Submissions
-- Full autonomy to submit every round
-- Experiment with new approaches, log everything to MEMORY.md
-- Explore: spatial modeling, Gaussian processes, better parameter inference
-- Standing orders in intelligence/for-ml-agent/STANDING-ORDERS-SLEEP.md
+- Rank #114/187, score 45.98 (cumulative)
+- Round 3: 39.7, Round 4: submitted v6 with improved observation weights
+- Top teams: ~100 with 2-3 rounds (per-round scores ~45-50)
+- Gap to top: ~10 points per round. Need better spatial modeling.
+- Full autonomy to submit every round. Standing orders active.
 
-### 2. CV: Debug Exit Code 2 (URGENT)
-- YOLO11m ZIP failed with exit code 2 on competition sandbox
-- Docker validation must use REAL images and EXACT competition command
-- QC loop rule sent: intelligence/for-cv-agent/QC-LOOP-RULE.md
-- YOLO26m still training on cv-train-1
-- RF-DETR NOT started (second VM not created despite 3 requests)
-- When fixed: prepare ZIP but do NOT upload (JC does manually)
+### 2. CV: Upload Fixed ZIP (JC action required)
+- **v2 ZIP ready:** agent-cv/submissions/submission_yolo11m_v2.zip (65MB)
+- v1 bug: argparse rejected unknown CLI args (exit code 2)
+- v2 fix: parse_known_args() + accepts both --images and --input flags
+- Docker validated: exit code 0, 107 predictions, all fields valid
+- YOLO26m: epoch ~48, mAP50=0.815 (still training on cv-train-1)
+- RF-DETR: resumed from epoch 12 on cv-train-2, running stable
+- If YOLO26m or RF-DETR beat 0.945, CV agent will have those ZIPs ready
 
-### 3. NLP: Improve Agent
-- 8/8 perfect on last submission
-- Cannot submit while JC sleeps (requires web UI click)
-- Focus: test more task types locally, improve error handling, prepare for Tier 2
-- HTTP 400 early-exit guard still needs fixing
+### 3. NLP: Submit More Task Types (JC action required)
+- tripletex_bot_v2 deployed, handles customers + bank accounts + departments
+- Score: 8/8 (100%) on create_customer
+- 3/5 submissions used today, rate limits reset 01:00 CET
+- Cannot submit without JC clicking web UI
+- When JC wakes: submit repeatedly at app.ainm.no/submit/tripletex
 
-### 4. Butler: Dashboard & Tools
-- Fix loading issues, Playwright-validate all views
-- Add CV submission viewer (inspect ZIPs, view detections)
-- Build pre-submission validation tools
-- Review and improve existing tools from grocery bot archive
+### 4. Butler: Dashboard & Validation Tools
+- Dashboard live with CORS fix and real CV training data
+- New standing orders: CV submission viewer, pre-submission validation, leaderboard tracking
+- Desktop launcher updated and working
 
 ## Completed This Session
 - All 5 CLAUDE.md files improved to butler quality standard
 - Git worktrees created and synced (4 branches + main)
 - Desktop shortcuts for all 5 agents
 - Two-way intelligence comms with staggered schedule
-- 10-min monitoring loop
-- GCP training for CV (YOLO11m complete, YOLO26m running)
+- GCP training for CV (YOLO11m complete, YOLO26m + RF-DETR running)
 - NLP deployed to Cloud Run, scored 8/8 perfect
-- ML first submission: 39.72 (Round 3)
+- ML submitted Rounds 3-4, rank #114/187
+- CV exit code 2 diagnosed and fixed (v2 ZIP ready)
+- Butler dashboard: CORS fix, real training data, model selector
 - Credentials saved to .env (gitignored)
 - Competition docs snapshots and rule tracking
 
@@ -73,9 +84,10 @@ JC sleeping ~7 hours starting ~04:30 CET. All agents have standing orders in int
 | Sunday 14:45 | Repo goes public |
 | Sunday 15:00 | COMPETITION ENDS |
 
-## Pending (when JC wakes up)
-- Upload fixed CV ZIP manually
-- Submit NLP via web UI (multiple times to cover more task types)
-- Review ML overnight scores and experiments
-- Check Slack for auto-submission ruling
-- Review agent sleep reports in intelligence/for-overseer/
+## When JC Wakes Up (priority order)
+1. Upload agent-cv/submissions/submission_yolo11m_v2.zip at app.ainm.no
+2. Submit NLP repeatedly at app.ainm.no/submit/tripletex (each click = random task type)
+3. Report NLP scores back to NLP agent so it can fix failures
+4. Review ML overnight scores (check intelligence/for-overseer/ for reports)
+5. Check if YOLO26m or RF-DETR beat 0.945, upload if so
+6. Check Slack for auto-submission ruling
