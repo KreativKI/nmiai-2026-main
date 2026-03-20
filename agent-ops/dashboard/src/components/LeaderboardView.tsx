@@ -42,7 +42,7 @@ export function LeaderboardView() {
         .catch((e) => setError(String(e)));
 
     load();
-    const interval = setInterval(load, 5 * 60 * 1000); // Refresh every 5 min
+    const interval = setInterval(load, 60 * 1000); // Refresh every 60s
     return () => clearInterval(interval);
   }, []);
 
@@ -157,15 +157,7 @@ export function LeaderboardView() {
                       ))}
                       {previous && (
                         <td className="py-1 pl-2 text-right">
-                          {delta === null ? (
-                            <span className="text-sky-300">-</span>
-                          ) : delta > 0 ? (
-                            <span className="text-green-600 font-semibold">+{delta.toFixed(1)}</span>
-                          ) : delta < 0 ? (
-                            <span className="text-red-500 font-semibold">{delta.toFixed(1)}</span>
-                          ) : (
-                            <span className="text-sky-300">-</span>
-                          )}
+                          <DeltaBadge delta={delta} />
                         </td>
                       )}
                     </tr>
@@ -243,4 +235,14 @@ export function LeaderboardView() {
       )}
     </div>
   );
+}
+
+function DeltaBadge({ delta }: { delta: number | null }) {
+  if (delta === null || delta === 0) {
+    return <span className="text-sky-300">-</span>;
+  }
+  if (delta > 0) {
+    return <span className="text-green-600 font-semibold">+{delta.toFixed(1)}</span>;
+  }
+  return <span className="text-red-500 font-semibold">{delta.toFixed(1)}</span>;
 }

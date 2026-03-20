@@ -36,11 +36,16 @@ const DOT_COLORS: Record<AgentState, string> = {
   unknown: "#9ca3af",
 };
 
-// --- Audio ---
+// --- Audio (shared context to avoid exhausting browser limit of ~6) ---
+
+let sharedAudioCtx: AudioContext | null = null;
 
 function playIdleChime(): void {
   try {
-    const ctx = new AudioContext();
+    if (!sharedAudioCtx || sharedAudioCtx.state === "closed") {
+      sharedAudioCtx = new AudioContext();
+    }
+    const ctx = sharedAudioCtx;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -161,19 +166,13 @@ export function AgentStatusStrip() {
     setAgents(results);
   }, []);
 
-  // Request notification permission on mount + initial fetch
+  // Request notification permission, initial fetch, and polling
   useEffect(() => {
     if ("Notification" in window) {
       void Notification.requestPermission();
     }
     void refreshAll();
-  }, [refreshAll]);
-
-  // Polling
-  useEffect(() => {
-    const interval = setInterval(() => {
-      void refreshAll();
-    }, POLL_INTERVAL_MS);
+    const interval = setInterval(() => void refreshAll(), POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [refreshAll]);
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useUIStore } from "../stores/uiStore";
+import type { RoundData, VizData } from "../types/dashboard";
 import { AgentStatusStrip } from "./AgentStatusStrip";
 import { NLPSubmissionFeed } from "./NLPSubmissionFeed";
 import { LeaderboardView } from "./LeaderboardView";
@@ -44,21 +45,6 @@ interface LeaderboardSnapshot {
   rows: Record<string, string | number>[];
 }
 
-interface VizSeed {
-  grid: number[][];
-}
-
-interface VizRound {
-  round_number: number;
-  width: number;
-  height: number;
-  seeds: VizSeed[];
-}
-
-interface VizData {
-  [key: string]: VizRound | unknown;
-}
-
 // --- Competition Clock ---
 
 function getDeadlines(): DeadlineInfo[] {
@@ -85,24 +71,23 @@ function getDeadlines(): DeadlineInfo[] {
   });
 }
 
-function timeUntilDeadline(): string {
-  const deadline = new Date("2026-03-22T14:00:00Z"); // 15:00 CET = 14:00 UTC
-  const now = new Date();
-  const diff = deadline.getTime() - now.getTime();
-  if (diff <= 0) return "ENDED";
-  const hours = Math.floor(diff / 3600000);
-  const minutes = Math.floor((diff % 3600000) / 60000);
-  return `${hours}h ${minutes}m`;
-}
-
 // --- Countdown helpers ---
+
+const COMPETITION_END = new Date("2026-03-22T14:00:00Z"); // 15:00 CET = 14:00 UTC
 
 function formatCountdown(diffMs: number): string {
   if (diffMs <= 0) return "NOW";
   const h = Math.floor(diffMs / 3600000);
   const m = Math.floor((diffMs % 3600000) / 60000);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  const s = Math.floor((diffMs % 60000) / 1000);
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
+  return `${m}m ${String(s).padStart(2, "0")}s`;
+}
+
+function timeUntilDeadline(): string {
+  const diff = COMPETITION_END.getTime() - Date.now();
+  if (diff <= 0) return "ENDED";
+  return formatCountdown(diff);
 }
 
 function getNextMidnightUTC(): Date {
@@ -124,6 +109,12 @@ async function fetchJSON<T>(url: string): Promise<T | null> {
   }
 }
 
+function budgetBarColor(ratio: number): string {
+  if (ratio > 0.8) return "#ef4444";
+  if (ratio > 0.5) return "#f59e0b";
+  return "#22c55e";
+}
+
 // --- Component ---
 
 export function OverviewView() {
@@ -135,8 +126,7 @@ export function OverviewView() {
 
   // Per-track countdowns
   const [mlCloses, setMlCloses] = useState<string | null>(null);
-  const [nlpResets, setNlpResets] = useState("");
-  const [cvResets, setCvResets] = useState("");
+  const [rateResets, setRateResets] = useState("");
 
   // Track data
   const [mlData, setMlData] = useState<MLRoundsData | null>(null);
@@ -170,7 +160,7 @@ export function OverviewView() {
         });
       const latestKey = roundKeys[0];
       if (latestKey) {
-        const round = viz[latestKey] as VizRound | undefined;
+        const round = viz[latestKey] as RoundData | undefined;
         if (round?.seeds?.[0]?.grid) {
           setTerrainGrid(round.seeds[0].grid);
           setTerrainLabel(`Round ${round.round_number} - Seed 0`);
@@ -200,15 +190,13 @@ export function OverviewView() {
         setMlCloses(null);
       }
 
-      // NLP + CV: countdown to midnight UTC (01:00 CET)
+      // NLP + CV share the same reset: midnight UTC (01:00 CET)
       const resetDiff = getNextMidnightUTC().getTime() - Date.now();
-      const resetStr = formatCountdown(resetDiff);
-      setNlpResets(resetStr);
-      setCvResets(resetStr);
+      setRateResets(formatCountdown(resetDiff));
     }
 
     updateCountdowns();
-    const interval = setInterval(updateCountdowns, 30000);
+    const interval = setInterval(updateCountdowns, 1000);
     return () => clearInterval(interval);
   }, [mlData]);
 
@@ -289,15 +277,15 @@ export function OverviewView() {
         />
         <CountdownPill
           label="NLP Rate Limit Resets"
-          value={nlpResets}
+          value={rateResets}
           subtitle="01:00 CET"
-          color={nlpResets === "NOW" ? "text-green-500" : "text-sky-800"}
+          color={rateResets === "NOW" ? "text-green-500" : "text-sky-800"}
         />
         <CountdownPill
           label="CV Submissions Reset"
-          value={cvResets}
+          value={rateResets}
           subtitle="01:00 CET"
-          color={cvResets === "NOW" ? "text-green-500" : "text-sky-800"}
+          color={rateResets === "NOW" ? "text-green-500" : "text-sky-800"}
         />
       </div>
 
@@ -343,12 +331,7 @@ export function OverviewView() {
                   className="h-full rounded-full transition-all duration-500"
                   style={{
                     width: `${Math.min((nlpDailyUsed / Math.max(nlpDailyLimit, 1)) * 100, 100)}%`,
-                    backgroundColor:
-                      nlpDailyUsed / Math.max(nlpDailyLimit, 1) > 0.8
-                        ? "#ef4444"
-                        : nlpDailyUsed / Math.max(nlpDailyLimit, 1) > 0.5
-                          ? "#f59e0b"
-                          : "#22c55e",
+                    backgroundColor: budgetBarColor(nlpDailyUsed / Math.max(nlpDailyLimit, 1)),
                   }}
                 />
               </div>

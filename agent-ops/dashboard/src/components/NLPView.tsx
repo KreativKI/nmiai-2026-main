@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { MetricCard } from "./MetricCard";
+import { NLPSubmissionFeed } from "./NLPSubmissionFeed";
 
-const ENDPOINT_DISPLAY = "https://tripletex-agent-795548831221.europe-west4.run.app/solve";
+const ENDPOINT_URL = "https://tripletex-agent-795548831221.europe-west4.run.app/solve";
 const ENDPOINT_PROXY = "/api/nlp-health";
 
 const TASK_TYPES: { name: string; tier: number }[] = [
@@ -25,13 +26,12 @@ const TASK_TYPES: { name: string; tier: number }[] = [
   { name: "vat_report", tier: 3 }, { name: "general_query", tier: 3 },
 ];
 
-interface TaskLog {
-  timestamp: string;
-  status: string;
-  api_calls: number;
-  errors_4xx: number;
-  elapsed_s: number;
-  summary?: string;
+interface TaskScore {
+  task_type: string;
+  best_checks: number;
+  total_checks: number;
+  best_percentage: number;
+  attempts: number;
 }
 
 interface EndpointStatus {
@@ -44,8 +44,9 @@ export function NLPView() {
   const [endpointStatus, setEndpointStatus] = useState<EndpointStatus>({
     status: "checking", latencyMs: null, lastChecked: null,
   });
-  const [taskLogs, setTaskLogs] = useState<TaskLog[]>([]);
-  const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [taskScores, setTaskScores] = useState<Map<string, TaskScore>>(new Map());
+  const [totalScore, setTotalScore] = useState<number | null>(null);
+  const [tasksSolved, setTasksSolved] = useState<string | null>(null);
 
   const checkEndpoint = useCallback(async () => {
     setEndpointStatus((prev) => ({ ...prev, status: "checking" }));
@@ -71,12 +72,25 @@ export function NLPView() {
     }
   }, []);
 
-  // Load task logs
+  // Load per-task scores from nlp_task_scores.json (scraped from competition page)
   useEffect(() => {
-    fetch("/data/nlp_task_log.json")
-      .then((r) => r.ok ? r.json() : [])
-      .then((d) => setTaskLogs(d as TaskLog[]))
-      .catch(() => setTaskLogs([]));
+    const load = () => {
+      fetch("/data/nlp_task_scores.json", { cache: "no-store" })
+        .then((r) => r.ok ? r.json() : null)
+        .then((d: { tasks?: TaskScore[]; total_score?: number; tasks_solved?: string } | null) => {
+          if (d?.tasks) {
+            const m = new Map<string, TaskScore>();
+            for (const t of d.tasks) m.set(t.task_type, t);
+            setTaskScores(m);
+          }
+          if (d?.total_score != null) setTotalScore(d.total_score);
+          if (d?.tasks_solved) setTasksSolved(d.tasks_solved);
+        })
+        .catch(() => { /* no per-task data yet */ });
+    };
+    load();
+    const interval = setInterval(load, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -85,22 +99,16 @@ export function NLPView() {
     return () => clearInterval(interval);
   }, [checkEndpoint]);
 
-  const statusDot = endpointStatus.status === "up" ? "bg-green-400"
-    : endpointStatus.status === "down" ? "bg-red-400"
-    : "bg-amber-400 animate-pulse";
+  const STATUS_STYLES: Record<EndpointStatus["status"], { dot: string; text: string }> = {
+    up: { dot: "bg-green-400", text: "text-green-600" },
+    down: { dot: "bg-red-400", text: "text-red-600" },
+    checking: { dot: "bg-amber-400 animate-pulse", text: "text-amber-500" },
+  };
+  const { dot: statusDot, text: statusColor } = STATUS_STYLES[endpointStatus.status];
 
-  const statusColor = endpointStatus.status === "up" ? "text-green-600"
-    : endpointStatus.status === "down" ? "text-red-600"
-    : "text-amber-500";
-
-  // Stats
-  const completedTasks = taskLogs.filter((t) => t.status === "completed").length;
-  const totalAPICalls = taskLogs.reduce((s, t) => s + (t.api_calls || 0), 0);
-  const totalErrors = taskLogs.reduce((s, t) => s + (t.errors_4xx || 0), 0);
-  const avgElapsed = taskLogs.length > 0
-    ? (taskLogs.reduce((s, t) => s + (t.elapsed_s || 0), 0) / taskLogs.length).toFixed(1)
-    : "-";
-
+  // Count scored tasks
+  const scoredCount = taskScores.size;
+  const perfectCount = Array.from(taskScores.values()).filter((t) => t.best_percentage === 100).length;
 
   return (
     <div className="flex-1 flex flex-col overflow-auto p-6 gap-4">
@@ -111,7 +119,7 @@ export function NLPView() {
             Tripletex - AI Accounting Agent
           </h2>
           <p className="text-xs text-sky-500">
-            30 task types, 3 tiers, 5 submissions/task/day
+            30 task types, 3 tiers, 10 submissions/task/day
           </p>
         </div>
         <button
@@ -138,86 +146,95 @@ export function NLPView() {
             </p>
           )}
         </div>
-        <MetricCard label="Tasks Run" value={completedTasks} subtitle={`${totalAPICalls} API calls`} />
-        <MetricCard label="4xx Errors" value={totalErrors} color={totalErrors > 0 ? "text-red-600" : "text-green-700"} />
-        <MetricCard label="Avg Time" value={`${avgElapsed}s`} subtitle="per task" />
+        <MetricCard
+          label="Total Score"
+          value={totalScore != null ? totalScore.toFixed(1) : "-"}
+          subtitle="sum of best per task"
+        />
+        <MetricCard
+          label="Tasks Scored"
+          value={tasksSolved ?? `${scoredCount}/30`}
+          subtitle={`${perfectCount} perfect`}
+        />
+        <MetricCard
+          label="Perfect"
+          value={perfectCount}
+          subtitle="100% score"
+          color={perfectCount > 0 ? "text-green-600" : "text-sky-600"}
+        />
       </div>
 
-      {/* Task type grid - clickable */}
+      {/* Task type grid with live scores */}
       <div className="rounded-2xl bg-white/50 backdrop-blur-sm border border-white/30 p-4">
         <h3 className="text-sm font-bold text-sky-700 font-[Fredoka] mb-3">
-          Task Types - Click for details
+          Task Types - 30 tasks across 3 tiers
         </h3>
         <div className="grid grid-cols-5 gap-2">
           {TASK_TYPES.map(({ name, tier }) => {
-            const isSelected = selectedTask === name;
-            const tierColor = tier === 1 ? "border-green-300 text-green-800"
-              : tier === 2 ? "border-amber-300 text-amber-800"
-              : "border-red-300 text-red-800";
-            const tierBg = tier === 1 ? "bg-green-50" : tier === 2 ? "bg-amber-50" : "bg-red-50";
+            const score = taskScores.get(name);
+            const hasData = score != null;
+            const isPerfect = score?.best_percentage === 100;
+            const hasPartial = hasData && !isPerfect && score.best_percentage > 0;
+
+            // Colors: grey/dull for untried, colored for attempted, gold star for perfect
+            let cardStyle = "border-slate-200 bg-slate-100/40 text-slate-400 opacity-50";
+            if (isPerfect) {
+              cardStyle = "border-green-400 bg-green-50 text-green-800 shadow-md ring-1 ring-green-300";
+            } else if (hasPartial) {
+              cardStyle = "border-amber-300 bg-amber-50/80 text-amber-800";
+            } else if (hasData) {
+              cardStyle = "border-red-300 bg-red-50/80 text-red-800";
+            }
 
             return (
-              <button
+              <div
                 key={name}
-                onClick={() => setSelectedTask(isSelected ? null : name)}
-                className={`rounded-lg border px-3 py-2 text-left transition-all hover:shadow-md ${tierColor} ${
-                  isSelected ? "ring-2 ring-sky-500 shadow-lg " + tierBg : tierBg + "/60"
-                }`}
+                className={`rounded-lg border px-3 py-2 text-left transition-all ${cardStyle}`}
               >
-                <p className="text-xs font-semibold truncate">{name.replace(/_/g, " ")}</p>
-                <p className="text-[10px] opacity-60">Tier {tier} ({tier}x)</p>
-              </button>
+                <div className="flex items-center gap-1">
+                  {isPerfect && <span className="text-sm" title="Perfect score!">&#9733;</span>}
+                  <p className="text-xs font-semibold truncate flex-1">
+                    {name.replace(/_/g, " ")}
+                  </p>
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-[10px] opacity-60">
+                    T{tier} ({tier}x)
+                  </p>
+                  {hasData ? (
+                    <p className={`text-[10px] font-bold ${
+                      isPerfect ? "text-green-700" : hasPartial ? "text-amber-700" : "text-red-600"
+                    }`}>
+                      {score.best_checks}/{score.total_checks}
+                      {score.attempts > 1 && (
+                        <span className="text-[9px] opacity-60 ml-0.5">
+                          ({score.attempts}x)
+                        </span>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-slate-300">--</p>
+                  )}
+                </div>
+                {/* Score bar */}
+                {hasData && (
+                  <div className="mt-1 h-1 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        isPerfect ? "bg-green-500" : hasPartial ? "bg-amber-500" : "bg-red-400"
+                      }`}
+                      style={{ width: `${score.best_percentage}%` }}
+                    />
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
       </div>
 
-      {/* Selected task detail / Execution log */}
-      {selectedTask && (
-        <div className="rounded-2xl bg-white/60 backdrop-blur-sm border border-white/30 p-4">
-          <h3 className="text-sm font-bold text-sky-700 font-[Fredoka] mb-2">
-            {selectedTask.replace(/_/g, " ")}
-          </h3>
-          <p className="text-xs text-sky-500 mb-3">
-            Click Submit on app.ainm.no to test this task type. Results appear after the competition evaluates your endpoint.
-          </p>
-          <p className="text-xs text-sky-400">
-            Task-specific scores are only visible on the competition leaderboard.
-            The logs below show all endpoint calls (not filtered by task type since the competition assigns tasks randomly).
-          </p>
-        </div>
-      )}
-
-      {/* Execution log */}
-      <div className="rounded-2xl bg-white/50 backdrop-blur-sm border border-white/30 p-4">
-        <h3 className="text-sm font-bold text-sky-700 font-[Fredoka] mb-3">
-          Recent Executions ({taskLogs.length})
-        </h3>
-        {taskLogs.length === 0 ? (
-          <div className="text-xs text-sky-400">
-            No task logs yet. Run: <code className="bg-white/60 px-1 rounded">python3 tools/fetch_nlp_logs.py</code>
-          </div>
-        ) : (
-          <div className="space-y-2 max-h-[300px] overflow-y-auto">
-            {[...taskLogs].reverse().map((task, i) => (
-              <div key={i} className="flex items-start gap-3 text-xs border-b border-sky-100/30 pb-2">
-                <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${
-                  task.status === "completed" ? "bg-green-400" : "bg-red-400"
-                }`} />
-                <div className="flex-1 min-w-0">
-                  {task.summary && (
-                    <p className="text-sky-700 truncate">{task.summary.split("\t")[0]}</p>
-                  )}
-                  <p className="text-sky-400">
-                    {task.api_calls} calls, {task.errors_4xx} errors, {task.elapsed_s}s
-                    <span className="ml-2 text-sky-300">{task.timestamp}</span>
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Live Submission Feed */}
+      <NLPSubmissionFeed />
 
       {/* Endpoint URL */}
       <div className="rounded-2xl bg-white/30 backdrop-blur-sm border border-white/20 p-3">

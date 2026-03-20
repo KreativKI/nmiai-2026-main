@@ -109,7 +109,8 @@ def is_authenticated(page) -> bool:
     page.goto(SUBMIT_URL, wait_until="networkidle", timeout=20000)
     text = page.inner_text("body")
     # Authenticated page shows submission stats, not "Sign in" or "Missing token"
-    if "Missing token" in text or "Sign in" in text.split("Dashboard")[0] if "Dashboard" in text else "Sign in" in text:
+    before_dashboard = text.split("Dashboard")[0] if "Dashboard" in text else text
+    if "Missing token" in text or "Sign in" in before_dashboard:
         return False
     # Check for submission form elements that only appear when logged in
     # "Total Score" with a number (not "—") indicates logged in
