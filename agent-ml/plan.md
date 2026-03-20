@@ -1,7 +1,7 @@
 # Astar Island — Plan
 
 **Track:** ML | **Task:** Norse World Prediction | **Weight:** 33.33%
-**Last updated:** 2026-03-19 22:55 CET
+**Last updated:** 2026-03-20 02:15 UTC
 
 ## The Problem
 Predict terrain probability distributions on a 40×40 grid after 50 years of stochastic simulation. Limited to 50 observation queries across 5 seeds per round. Scored by entropy-weighted KL divergence (0–100).
@@ -45,10 +45,30 @@ Predict terrain probability distributions on a 40×40 grid after 50 years of sto
 - Calculate per-cell KL divergence to find where model is weakest
 - Focus next round's queries on high-error regions
 
-## Baseline script ready
-`solutions/astar_baseline.py` — needs JWT token, supports --dry-run
+## Current Script
+`solutions/astar_v5.py` — production script for round 4+
+
+## What We've Learned (rounds 1-3)
+- Only 10-40/1600 cells change dominant class per round (97-99% static)
+- Round 2: mass settlement die-off on some seeds (23 settlements -> empty)
+- Hidden parameters vary significantly between rounds
+- Neighborhood context matters: cells near settlements have different transitions
+- Cookie auth required for API (not Bearer header)
+- Broadcasting bug: always test with synthetic observations before real queries
+
+## Round 4 Plan (NEXT)
+1. When round 4 opens: learn from round 3 ground truth first
+2. Use ALL 50 queries:
+   - Seed 0: 20 queries (stacked for multi-sample estimates on dynamic areas)
+   - Seed 1: 15 queries
+   - Seed 2: 10 queries
+   - Seeds 3-4: 5 total (rely on cross-seed transfer)
+3. Build round-4-specific transition model from observations
+4. Blend 60/40 with historical transitions
+5. Submit all 5 seeds
 
 ## Open Research Questions
-- How much do hidden parameters vary between rounds?
+- How much do hidden parameters vary between rounds? (answer: significantly)
 - What's the actual dynamics model? (CA-like? Global interactions?)
 - Can we infer hidden parameters from cross-seed observations?
+- Does stacking observations (multiple queries on same area) actually improve score?

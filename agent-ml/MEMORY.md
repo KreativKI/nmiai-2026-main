@@ -54,5 +54,13 @@
 
 ### Rules re-read at 2026-03-20T02:00:00Z. No violations found.
 
+### Ground Truth Analysis (rounds 1-2)
+- Only 10-40 out of 1600 cells change dominant class (97-99% stay same)
+- Round 1: 18-40 changes per seed (avg ~29)
+- Round 2: 10-28 changes per seed (avg ~21)
+- Most changes: settlements dying (-> empty), settlements growing (empty -> settlement)
+- Scoring is on probability distributions, not argmax. Must match distribution shape.
+- High-entropy (uncertain) cells weighted more in scoring.
+
 ## Auth Note
 API uses cookie auth: `access_token` cookie. Bearer header returns "Missing token" in curl.
