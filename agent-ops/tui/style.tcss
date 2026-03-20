@@ -78,6 +78,23 @@ Tab:hover {
     height: 100%;
 }
 
+/* ML Explorer 3-column layout */
+.ml-left-panel {
+    width: 40;
+    min-width: 35;
+}
+
+.ml-center-panel {
+    width: 1fr;
+    min-width: 90;
+    overflow-y: auto;
+}
+
+.ml-right-panel {
+    width: 32;
+    min-width: 28;
+}
+
 .side-panel {
     width: 35;
     min-width: 30;
@@ -85,6 +102,17 @@ Tab:hover {
 
 .main-panel {
     width: 1fr;
+}
+
+/* Seed selector styling */
+SeedSelector {
+    height: 1;
+    margin-bottom: 1;
+}
+
+RoundInfo {
+    height: auto;
+    margin-bottom: 1;
 }
 
 .cv-layout {
