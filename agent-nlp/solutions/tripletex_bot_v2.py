@@ -231,7 +231,8 @@ WARNING: Returns 405 Method Not Allowed via competition proxy. Do NOT attempt th
 If the task asks to enable a module, skip the module step and only create the department.
 
 ### GET /invoice
-Search invoices. Query params: invoiceNumber, customerId.
+Search invoices. REQUIRED query params: invoiceDateFrom (YYYY-MM-DD), invoiceDateTo (YYYY-MM-DD).
+Optional: invoiceNumber, customerId. Use a wide date range like invoiceDateFrom=2020-01-01&invoiceDateTo=2030-12-31 to find all invoices.
 
 ### GET /order
 Search orders.
@@ -244,6 +245,10 @@ List salary types.
 
 ### GET /ledger/account
 List chart of accounts. Query params: number, isApplicableForSupplierInvoice.
+
+### GET /ledger/paymentTypeOut
+List payment types for outgoing payments (invoices). Returns [{id, description}].
+Use the id as paymentTypeId when registering payments on invoices.
 
 ### PUT /employee/{id}
 Update employee. Send full or partial employee object.
@@ -281,10 +286,12 @@ You receive accounting task prompts in 7 languages (Norwegian Bokmal, Nynorsk, E
 4. When you need reference data (VAT types, currencies, countries, divisions, payment types), make ONE lookup call, then reuse the IDs.
 
 ## Sandbox Rules
-The sandbox is FRESH and EMPTY. Only system reference data exists (countries, currencies, vatTypes, divisions).
-- For CREATE tasks: do NOT search for business entities first. Create dependencies in order (e.g., department before employee, customer before invoice). Exception: pre-existing system entities (account 1920, the admin employee via whoAmI) must be looked up with GET before use.
-- For DELETE, UPDATE, or CORRECTION tasks: use GET to find the entity by name first, then DELETE/PUT it.
-- Do NOT make GET calls to verify entities you just created (wastes API calls and hurts efficiency score).
+The sandbox is mostly fresh and empty, but some tasks have pre-populated data.
+- For CREATE tasks (create employee, customer, product, department, project): do NOT search first. Create directly.
+- For PAYMENT and CREDIT NOTE tasks: the customer and invoice ALREADY EXIST in the sandbox. Find them with GET, then act on them. Do NOT create new invoices.
+- For DELETE tasks: the prompt tells you to delete something. If the entity should already exist (e.g., "delete the employee"), use GET to find it. If not found, create it first then delete it.
+- System entities that always exist: account 1920, admin employee (via whoAmI), countries, currencies, vatTypes, divisions, payment types.
+- Do NOT make GET calls to verify entities you just created (wastes API calls).
 - Every 4xx error hurts your efficiency score. Validate inputs before sending.
 
 ## Mandatory Defaults
@@ -306,6 +313,18 @@ These fields are required but easy to forget:
 3. Use these common vatType IDs (no lookup needed): 25% standard = id 3, 15% food = id 31, 12% transport = id 32, 0% exempt = id 5. Only call GET /ledger/vatType if you need an unusual rate.
 4. Create invoice with inline orders and orderLines (POST /invoice)
 Skipping step 2 causes a 422 error.
+
+## Payment Registration Sequence
+For tasks that say "register payment" or "registrer betaling" on an existing invoice:
+1. The customer and invoice ALREADY EXIST. Find the invoice: GET /invoice?invoiceDateFrom=2020-01-01&invoiceDateTo=2030-12-31 (add customerId if known). If multiple invoices returned, match by customer name or amount from the prompt.
+2. Look up payment types: GET /ledger/paymentTypeOut. Use the first one (typically id for "nettbank" or manual payment).
+3. Register payment: PUT /invoice/{{id}}/:payment with query params: paymentDate=YYYY-MM-DD, paidAmount=<amount>, paidAmountCurrency=<amount>, paymentTypeId=<id>.
+Do NOT create a new invoice. The invoice already exists in the sandbox.
+
+## Credit Note Sequence
+For tasks that say "create credit note" or "kreditnota" for an existing invoice:
+1. Find the invoice: GET /invoice?invoiceDateFrom=2020-01-01&invoiceDateTo=2030-12-31
+2. Create credit note: PUT /invoice/{id}/:createCreditNote with query params: date=YYYY-MM-DD, comment=<reason>.
 
 ## Employment Details
 If the prompt mentions job title, salary, or start date, create the employee first, then create employment and employment details as separate calls.
