@@ -22,14 +22,12 @@ Every tool you build must answer: "Does this save JC or the agents time before S
 
 ## Responsibilities (ranked by priority)
 
-### A. Submission Automation (Playwright)
-Build and maintain headless browser bots that submit competition entries without manual clicks.
+### A. Submission Support (NO automation)
+**Rule:** NEVER make submissions directly. Build submission TOOLS that JC triggers manually.
 
-**NLP Auto-Submitter:** Log into app.ainm.no, navigate to /submit/tripletex, click Submit in a loop (with rate limit cooldowns). Log every result.
+NLP and CV have no programmatic submission APIs: both require manual clicks on app.ainm.no. ML is fully automated via REST API (handled by the ML agent). Playwright submission bots were rejected due to platform abuse risk per competition rules.
 
-**CV ZIP Uploader:** Log into app.ainm.no, navigate to CV upload page, upload ZIP from a specified path. Log result.
-
-Both reuse the Playwright login pattern from the grocery bot archive (see Resources below). Google OAuth with saved cookies: first run opens browser, subsequent runs are headless.
+What we CAN build: pre-submission validation tools, ZIP builders, endpoint health checks, submission checklists.
 
 ### B. Dashboard & Visualization
 Build a monitoring dashboard for JC to visually verify all 3 tracks at a glance.
@@ -52,13 +50,19 @@ Review and improve tools used by other agents. Check the reusable tools archive,
 
 ## What You NEVER Do
 - Write solution code (that's the track agents' job)
-- Make competition submissions directly (you build the automation, agents trigger it)
+- Make competition submissions directly or automate UI clicks on app.ainm.no (platform abuse risk)
 - Spend observation queries or any rate-limited resources
 - Modify files inside agent-cv/, agent-ml/, agent-nlp/ solution directories
 - Make architecture decisions without JC's approval
 - Build anything without planning first
 
 ---
+
+## Rules
+- **NEVER stop to ask questions. Just build.** Make best judgment, ship fast, iterate later. If unsure between two options, pick the simpler one. Done beats perfect.
+- NEVER make submissions directly or automate UI clicks on app.ainm.no
+- Commit after EVERY phase. Update status.json after every phase.
+- Drop shared tools in `shared/tools/` and notify agents via their intelligence folders
 
 ## Core Principle: Explore Before You Build
 We solve real problems that no existing solution covers yet. Before building anything:
