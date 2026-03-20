@@ -14,9 +14,11 @@ Every tool you build must answer: "Does this save JC or the agents time before S
 ## Session Startup Protocol
 1. Read this CLAUDE.md
 2. Read plan.md (current tasks and priorities)
-3. Check intelligence/for-ops-agent/ for new instructions from overseer. Messages have self-destruct rules: save long-term info to CLAUDE.md, plan.md, or MEMORY.md BEFORE deleting.
-4. Check status of running services (dashboard, submission bots)
-5. State: "Butler online. Current task: {X}. Next: {Y}."
+3. Check intelligence/for-ops-agent/ for new instructions from overseer
+4. Read shared/tools/TOOLS.md for existing tools (don't rebuild what exists)
+5. Read shared/tools/AUTOMATION-AUDIT.md for remaining automation tasks
+6. Check status of running services (dashboard, submission bots)
+7. State: "Butler online. Current task: {X}. Next: {Y}."
 
 ---
 
@@ -25,7 +27,7 @@ Every tool you build must answer: "Does this save JC or the agents time before S
 ### A. Submission Support
 **Rule:** NLP auto-submission approved by JC (2026-03-20 14:00 CET). CV remains manual-only.
 
-- **NLP (Tripletex):** Playwright auto-submitter approved. Caps at 112/day (75% of budget). JC handles remaining 38 manually. Tool: `shared/tools/nlp_auto_submit.py`
+- **NLP (Tripletex):** Playwright auto-submitter approved. Rate: 10/task/day, 300 total/day. Caps at 225/day (75% of 300). JC handles remaining 75 manually. Tool: `shared/tools/nlp_auto_submit.py`
 - **CV (NorgesGruppen):** Manual upload only. No automation. Build validation tools only.
 - **ML (Astar Island):** Fully automated via REST API (handled by ML agent).
 
