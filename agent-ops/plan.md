@@ -1,6 +1,6 @@
 # Operations Agent — Phased Plan
 
-## Current Phase: 3
+## Current Phase: 4
 
 ## Completed Work
 - Dashboard scaffold (React 19 + Vite + Tailwind v4, Convex stripped)
@@ -40,7 +40,7 @@ Tasks:
 - Dashboard "Validate" buttons per track
 - Commit: "Phase 2: Shared validation tools for all tracks"
 
-### Phase 3: Leaderboard Tracking — Status: pending
+### Phase 3: Leaderboard Tracking — Status: done
 Improve leaderboard with 3-track column breakdown and auto-snapshot.
 
 Tasks:

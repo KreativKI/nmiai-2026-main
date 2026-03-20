@@ -104,7 +104,7 @@ export function LeaderboardView() {
               : "Loading..."}
           </p>
           <p className="text-[10px] text-sky-300 mt-1">
-            Run: <code className="bg-white/60 px-1 rounded">python3 tools/scrape_leaderboard.py</code>
+            Enter scores: <code className="bg-white/60 px-1 rounded">python3 tools/add_leaderboard_entry.py</code>
           </p>
         </div>
       ) : (
