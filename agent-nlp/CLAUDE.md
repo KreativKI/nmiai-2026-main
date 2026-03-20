@@ -81,6 +81,34 @@ Rules:
 
 ---
 
+## Parallel Agent Architecture
+
+Three specialized agents work in parallel during submission windows:
+
+| Agent | Prompt | Owns | Reads |
+|-------|--------|------|-------|
+| **Submitter** | `agents/submitter-agent.md` | auto-submitter, EXPERIMENTS.md | Cloud Run logs |
+| **Fixer** | `agents/fixer-agent.md` | tripletex_bot_v4.py, deploys | FIELD-FIXES.md |
+| **Builder** | `agents/builder-agent.md` | new_executors_v2.py | FIELD-FIXES.md (unknown tasks) |
+
+Shared context in `agents/shared-context.md`.
+
+**Coordination flow:**
+```
+Submitter -> writes FIELD-FIXES.md -> Fixer reads -> fixes code -> deploys -> Submitter submits again
+Builder -> writes new_executors_v2.py -> Fixer merges -> deploys
+```
+
+**Why specialized:** Each agent has different tools and files. No file conflicts. Submitter never writes Python. Builder never deploys. Fixer never reads logs.
+
+## Iteration Loop (replaces old "100% before submitting" approach)
+```
+SUBMIT 10 -> ANALYZE logs -> FIX field misses -> DEPLOY -> repeat
+```
+Bad runs never lower score. Competition feedback drives what to fix, not dev sandbox guesses. QC is a dev tool, not a submission gate.
+
+---
+
 ## Core Principle: Explore Before You Build
 We solve real problems that no existing solution covers yet. Never default to familiar tools or last year's models without first researching what's new. Before committing to any approach:
 1. Research what has shipped in the last 3-6 months that applies to this specific problem

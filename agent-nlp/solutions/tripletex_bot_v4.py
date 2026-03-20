@@ -74,6 +74,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - process_salary (use when prompt mentions payroll/lonn/lonnskjoring/salary payment/Gehaltsabrechnung, running payroll for an employee)
 - register_supplier_invoice (use when prompt mentions supplier invoice/leverandorfaktura/incoming invoice from a vendor/supplier, registering a received bill)
 - create_dimension (use when prompt mentions accounting dimension/dimensjon, custom dimensions, creating dimension values, or posting with dimensions)
+- create_supplier (use when prompt says to register/create a supplier/leverandor entity, NOT a supplier invoice)
 - unknown (if none of the above match)
 
 ## Data format rules:
@@ -625,6 +626,15 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             "unitPriceExcludingVatCurrency": float(item.get("unitPrice", 0)),
             "vatType": {"id": vat_id_sync(item.get("vatRate"), vat_map)},
         }
+        # Create product if productNumber given (competition may check product existence)
+        prod_num = item.get("productNumber")
+        if prod_num:
+            prod_body = {"name": item.get("description", "Produkt"), "number": prod_num}
+            if item.get("unitPrice") is not None:
+                prod_body["priceExcludingVatCurrency"] = float(item["unitPrice"])
+            prod_r = await tx(c, base, tok, "POST", "/product", prod_body)
+            if prod_r.get("success") and prod_r.get("data"):
+                line["product"] = {"id": prod_r["data"]["id"]}
         order_lines.append(line)
 
     # Step 4: Create invoice with inline order
@@ -1033,6 +1043,27 @@ async def exec_create_dimension(c: httpx.AsyncClient, base: str, tok: str, f: di
     return {"success": False, "error": "Could not create dimension"}
 
 
+async def exec_create_supplier(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    """Register a supplier entity."""
+    name = f.get("supplierName") or f.get("name", "")
+    body = {"name": name, "isCustomer": False, "isSupplier": True}
+    if f.get("orgNumber") or f.get("supplierOrgNumber"):
+        body["organizationNumber"] = str(f.get("orgNumber") or f["supplierOrgNumber"])
+    if f.get("email"): body["email"] = f["email"]
+    if f.get("phone"): body["phoneNumber"] = f["phone"]
+    if f.get("address"):
+        body["postalAddress"] = {
+            "addressLine1": f.get("address", ""),
+            "postalCode": f.get("postalCode", ""),
+            "city": f.get("city", ""),
+        }
+    # Try /supplier first, fall back to /customer with isSupplier
+    sup_r = await tx(c, base, tok, "POST", "/supplier", body)
+    if sup_r.get("success"):
+        return sup_r
+    return await tx(c, base, tok, "POST", "/customer", body)
+
+
 # ---------------------------------------------------------------------------
 # Task router
 # ---------------------------------------------------------------------------
@@ -1056,6 +1087,7 @@ TASK_EXECUTORS = {
     "process_salary": exec_process_salary,
     "register_supplier_invoice": exec_register_supplier_invoice,
     "create_dimension": exec_create_dimension,
+    "create_supplier": exec_create_supplier,
 }
 
 
