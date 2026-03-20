@@ -1,98 +1,80 @@
 # Astar Island — Plan
 
 **Track:** ML | **Task:** Norse World Prediction | **Weight:** 33.33%
-**Last updated:** 2026-03-20 02:15 UTC
+**Last updated:** 2026-03-20 03:58 UTC
+
+## Current State
+- **Best score:** 39.72 (round 3, rank #33/187)
+- **Rounds submitted:** 3 (scored), 4 (pending)
+- **Script:** `solutions/astar_v6.py` (phased observation)
+- **Top teams:** ~50 per round, ~100+ cumulative with 2-3 rounds
 
 ## The Problem
-Predict terrain probability distributions on a 40×40 grid after 50 years of stochastic simulation. Limited to 50 observation queries across 5 seeds per round. Scored by entropy-weighted KL divergence (0–100).
+Predict terrain probability distributions on a 40x40 grid after 50 years of stochastic simulation. 50 observation queries per round across 5 seeds. Scored by entropy-weighted KL divergence (0-100). Leaderboard uses weighted cumulative score.
 
-## Approach A (Primary): Bayesian Prior + Strategic Observation + Cross-Seed Learning
+## Key Learnings (rounds 1-4)
+- Settlement/Port cells dominate scoring (high entropy, high weight) despite being few
+- Round 3: settlements -> empty(70%)/forest(30%) but we predicted settlement(40%) = #1 error
+- Hidden params vary hugely between rounds (round 4 had 249 changes vs 37 in round 3)
+- Each query returns ONE stochastic realization (different each time)
+- Multi-sample stacking on same area gives empirical probability estimates
+- 9 queries = full 40x40 coverage on one seed (3x3 tiling with 15x15 viewports)
+- Scores are cumulative: submitting every round is critical even with mediocre scores
 
-1. **Build strong prior from initial terrain** — mountains and ocean are static (near-certain predictions for free). Forests mostly static. Focus uncertainty on settlement/port/ruin dynamics.
-2. **Query strategy (50 budget):** 
-   - Seeds 0-1: 15 queries each (deep coverage, ~80% of map with 15×15 viewports)
-   - Seed 2: 10 queries (validation)
-   - Seeds 3-4: 5 queries each (spot checks)
-3. **Cross-seed learning:** All seeds share hidden parameters. Observations from seed 0 teach us about dynamics that apply to ALL seeds.
-4. **Prediction:** Blend terrain prior + empirical observations + distance-weighted interpolation. Calibrate uncertainty — never overconfident.
-5. **Time:** 2-3 hours for baseline, then iterate each round
-6. **Expected:** 40-60 (baseline), 65-80 (with model)
+---
 
-## Approach B (Fallback): Transition Matrix + Markov Chain
-1. Estimate terrain transition probabilities from observations
-2. Build 6×6 transition matrix
-3. Apply Markov chain forward 50 steps
-4. Spatial interpolation for unobserved cells
-5. **Time:** 2-3 hours
-6. **Expected:** 35-50
+## Phased Work Plan
 
-## Approach C (Baseline — SHIP FIRST): Initial Terrain Prior Only
-1. Static cells (mountain, ocean) → near-certain predictions
-2. Dynamic cells → spread probability based on terrain type
-3. Floor at 0.01, renormalize
-4. Zero queries needed — submit immediately
-5. **Time:** 30 minutes
-6. **Expected:** 15-30
+### Phase A: Score Analysis (when round 4 completes)
+**Goal:** Learn from round 4 results, compare with round 3
+**Boris:** EXPLORE
+- Fetch round 4 ground truth via /analysis endpoint for all 5 seeds
+- Compute per-cell-type KL divergence breakdown
+- Compare round 4 dynamics with round 3 (was our phased approach better?)
+- Check leaderboard position change
+- Log all findings in MEMORY.md
+**Commit after this phase**
 
-## Round Strategy
-- Rounds repeat every ~3h 5m, weights increase 5% each round
-- Early rounds: submit baseline, learn from analysis endpoint after scoring
-- Later rounds (higher weight): apply learned model, use queries strategically
-- **Always submit all 5 seeds** — even bad predictions beat 0
+### Phase B: Model Improvement (between rounds)
+**Goal:** Fix the #1 error source: settlement/port predictions
+**Boris:** PLAN -> CODE -> REVIEW -> VALIDATE
+- If round 4 score improved: the phased observation approach works, keep it
+- If not: investigate why, adjust blend weights or query strategy
+- Potential improvements:
+  - Better settlement neighborhood model (distance-weighted, not just binary near/far)
+  - Use per-round ground truth to calibrate transition model adaptively
+  - Investigate what top teams (~50 score) do differently
+**Commit after this phase**
 
-## Validation
-- After round completes: use `/analysis/{round_id}/{seed_index}` to compare prediction vs ground truth
-- Calculate per-cell KL divergence to find where model is weakest
-- Focus next round's queries on high-error regions
+### Phase C: Round 5 Execution (when round opens)
+**Goal:** Submit all 5 seeds with best available model
+**Boris:** Full workflow per phase
+1. `astar_v6.py --phase overview` (9 queries, seed 0 full map)
+2. `astar_v6.py --phase analyze` (identify dynamics, 0 queries)
+3. `astar_v6.py --phase stack` (22 queries on dynamic zones)
+4. `astar_v6.py --phase secondary` (19 queries on seeds 1-2)
+5. Dry-run validation
+6. `astar_v6.py --phase submit`
+**Commit after this phase**
 
-## Current Script
-`solutions/astar_v5.py` — production script for round 4+
+### Phase D: Repeat for rounds 6, 7, 8...
+**Goal:** Submit every round, accumulate weighted score
+- Same v6 phased approach
+- After each round: analyze, log, adjust if needed
+- Later rounds have higher weights: +5% compounding
+- Feature freeze Sunday 09:00 CET (per overseer CLAUDE.md)
 
-## What We've Learned (rounds 1-3)
-- Only 10-40/1600 cells change dominant class per round (97-99% static)
-- Round 2: mass settlement die-off on some seeds (23 settlements -> empty)
-- Hidden parameters vary significantly between rounds
-- Neighborhood context matters: cells near settlements have different transitions
-- Cookie auth required for API (not Bearer header)
-- Broadcasting bug: always test with synthetic observations before real queries
+---
 
-## Round 4 Plan (ACTIVE)
-**Score to beat:** 39.7 (round 3 avg)
-**Main error source:** Forest MAE 0.23, Empty MAE 0.19
+## Standing Autonomous Rules (JC sleeping)
+- Submit every round using v6 phased approach
+- Commit after each completed phase
+- Push to origin/agent-ml after every 2-3 commits
+- Log all experiments in MEMORY.md
+- Do NOT modify files outside agent-ml/ (except intelligence/)
+- If something breaks: revert to last known good, don't experiment with live rounds
 
-### Phase 1: Overview (9 queries on seed 0)
-- Tile seed 0 fully with 3x3 viewports (9 queries, 15x15 each)
-- This gives us ONE stochastic realization of the full map for seed 0
-- Compare with initial terrain to see what changed
-- Identify: which settlements survived? Which forests were cleared? Any new ports?
-
-### Phase 2: Analyze (0 queries)
-- Build round-4-specific transition counts from phase 1 data
-- Compare with rounds 1-3 transition rates: is this round more/less destructive?
-- Identify high-uncertainty zones: cells where initial terrain != observed terrain
-- Decide: where to stack queries for multi-sample probability estimates?
-
-### Phase 3: Targeted stacking (20-25 queries on seed 0)
-- Stack 2-3 queries on each high-uncertainty zone
-- Multiple observations of same cell -> empirical probability distribution
-- Focus on settlement frontiers (forest/empty adjacent to settlements)
-
-### Phase 4: Secondary seed coverage (16 queries on seeds 1-2)
-- Seed 1: 9 queries (full coverage)
-- Seed 2: 7 queries (partial coverage, focus on dynamic areas)
-- Seeds 3-4: rely entirely on cross-seed transfer
-
-### Phase 5: Build & Submit
-- Build round-4-specific transitions from all observations
-- Blend 70/30 with historical (3 rounds of ground truth)
-- For observed cells: use empirical distribution directly (weighted by sample count)
-- Floor at 0.01, renormalize, validate
-- Submit all 5 seeds
-
-**Total budget:** 9 + 0 + ~22 + ~16 = ~47 queries (3 spare)
-
-## Open Research Questions
-- How much do hidden parameters vary between rounds? (answer: significantly)
-- What's the actual dynamics model? (CA-like? Global interactions?)
-- Can we infer hidden parameters from cross-seed observations?
-- Does stacking observations (multiple queries on same area) actually improve score?
+## Open Questions
+- Does stacking (multi-sample) actually improve score vs single-coverage?
+- Can we infer hidden parameters from cross-seed patterns?
+- What's the scoring formula exactly? (check MCP docs)
