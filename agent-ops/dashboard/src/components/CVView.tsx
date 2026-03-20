@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { MetricCard } from "./MetricCard";
+import { CVDetectionViewer } from "./CVDetectionViewer";
 import {
   LineChart,
   Line,
@@ -155,6 +156,9 @@ export function CVView() {
           </div>
         ) : null}
       </div>
+
+      {/* Detection viewer */}
+      <CVDetectionViewer />
 
       {/* Submission info */}
       <div className="rounded-2xl bg-white/30 backdrop-blur-sm border border-white/20 p-3">

@@ -83,8 +83,44 @@ A competition dashboard forked from `/Volumes/devdrive/github_dev/NM_I_AI_dash/`
 2. Leaderboard tracker with score progression chart (adapt ScoreProgressionChart)
 3. Timeline of submissions
 
+## Priority B: Dashboard Enhancements
+
+### B1. Leaderboard Tracker with Score Progression Chart
+- Leaderboard data source: Playwright scraper (adapt leaderboard.py from old dash) saves to `public/data/leaderboard.json`
+- Dashboard reads JSON, shows top 10 + our position
+- Score progression chart using Recharts (adapt ScoreProgressionChart)
+- Columns: Rank, Team, Tripletex, Astar, NorgesGruppen, Total, Delta
+- Run scraper manually: `python3 tools/scrape_leaderboard.py` (not automated, JC triggers)
+
+### B2. CV Detection Visualizer
+- Load sample images + prediction JSON
+- Render bounding boxes on canvas overlay
+- Color by confidence, label with category name
+- Source: agent-cv outputs predictions.json
+
+### B3. Cross-Track Score Overview
+- Combined score card on Overview tab
+- Our rank + score per track
+- Populated from leaderboard.json
+
+## Status
+
+### Done (Priority A)
+- [x] A1: Dashboard scaffold (React 19 + Vite + Tailwind v4)
+- [x] A2: Astar Island grid viewer (40x40, color-coded, pan/zoom)
+- [x] A3: CV training monitor (Recharts curves from JSON)
+- [x] A4: NLP task tracker (endpoint health, 30 task types)
+- [x] Overview tab with competition clock
+- [x] Code review: 6 issues found and fixed
+- [x] Submission investigation: no APIs exist, manual only
+
+### In Progress (Priority B)
+- [ ] B1: Leaderboard tracker
+- [ ] B2: CV detection visualizer
+- [ ] B3: Cross-track score overview
+
 ## What JC Will See
-A local React dashboard at localhost:5173 with 4 tabs. Open it in browser, see competition status at a glance. No deployment needed during competition — runs locally.
+A local React dashboard at localhost:5174 with 4 tabs. Open it in browser, see competition status at a glance. No deployment needed during competition — runs locally.
 
 ## Component Reuse Map
 

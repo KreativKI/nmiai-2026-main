@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { MetricCard } from "./MetricCard";
+import { LeaderboardView } from "./LeaderboardView";
 
 interface DeadlineInfo {
   label: string;
@@ -171,6 +172,9 @@ export function OverviewView() {
           ))}
         </div>
       </div>
+
+      {/* Leaderboard */}
+      <LeaderboardView />
 
       {/* Metric cards row */}
       <div className="flex gap-3">
