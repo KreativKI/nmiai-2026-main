@@ -1,25 +1,34 @@
-## CV Status — Overnight Complete, 3 ZIPs Ready
-**Timestamp:** 2026-03-21 05:40 CET
+## CV Status — Revised Plan: Human-in-the-Loop Labeling
+**Timestamp:** 2026-03-21 08:15 CET
 
-**LEADERBOARD: 0.6475** | **Best Val: 0.816** (maxdata)
+**LEADERBOARD: 0.6584** | **Deadline: Sunday 15:00 CET (~31h)**
 
-**3 Validated ZIPs for JC (all pipeline + canary PASS):**
+**Key lesson:** More low-quality synthetic data barely helped (+0.011). Quality matters.
 
-| Priority | ZIP | Model | Val mAP50 |
-|----------|-----|-------|-----------|
-| 1 | `submission_maxdata.zip` | YOLO11m, 854 imgs, 200ep | **0.816** |
-| 2 | `submission_yolo11l.zip` | YOLO11l, 348 imgs, 120ep | 0.780 |
-| 3 | `submission_aggressive_v2_final.zip` | YOLO11m, 348 imgs, 120ep | 0.767 |
+**Revised strategy with JC as human labeler:**
 
-**GCP VMs:**
-- cv-train-1: DONE (maxdata model complete)
-- cv-train-3: DONE (YOLO11l complete)
-- cv-train-4: DONE (YOLO26m complete, 0.485, not competitive)
+### Phase 1: Generate ~2150 realistic shelf images (~10h, 2 VMs parallel)
+- Gemini 3.1 Flash ("Nano Banana") with multi-reference product photos
+- Confirmed working: 36s/image, 5 reference images per product, photorealistic output
+- All 356 categories covered, weighted toward 134 weak products
+- cv-train-1 + cv-train-3 running in parallel
 
-**Overnight summary:**
-- Ran 3 parallel training experiments on free GCP GPUs
-- Best model: YOLO11m on 854 images (208 real + 140 synth v1 + 175 synth v2 + 331 Gemini)
-- More data = less overfitting: val gap shrank from 0.38 to ~0.05
-- YOLO26m was not competitive (0.485), YOLO11 family wins on this dataset
+### Phase 2: JC labels bounding boxes (~3-4h, manual)
+- Butler agent building a web labeling GUI (assignment sent to agent-ops)
+- JC draws one bounding box per image (product is pre-identified from filename)
+- Tool saves in YOLO format, tracks progress
+- This gives us HUMAN-QUALITY labels, not pseudo-labels
 
-**6 Saturday submission slots available.** Submit maxdata first.
+### Phase 3: Retrain YOLO11m (~4h, GPU)
+- Real images + human-labeled Gemini shelf images
+- 200 epochs, aggressive augmentation
+- Proper train/val split
+
+### Phase 4: Submit Saturday evening / Sunday morning
+- Only the last submission matters
+- 4 slots left today, 6 fresh Sunday
+
+**Butler assignment:** `intelligence/for-ops-agent/CV-LABELING-TOOL.md`
+Tool needed by ~12:00 CET when images are ready.
+
+**GCP VMs:** cv-train-1, cv-train-3 for generation. cv-train-4 available. ml-churn is ML agent's.
