@@ -564,8 +564,11 @@ async def exec_create_project(c: httpx.AsyncClient, base: str, tok: str, f: dict
         }
         pm_r = await tx(c, base, tok, "POST", "/employee", pm_body)
         if not pm_r.get("success") and "e-post" in str(pm_r.get("error", "")).lower():
-            # Email conflict: the admin probably has this email. Use admin as PM.
+            # Email conflict: admin has this email. Use admin as PM and update name.
             pm_id = admin_id
+            await tx(c, base, tok, "PUT", f"/employee/{admin_id}", {
+                "firstName": pm_first, "lastName": pm_last,
+            })
         elif pm_r.get("success") and pm_r.get("data"):
             pm_id = pm_r["data"]["id"]
 
@@ -1211,7 +1214,11 @@ async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str,
         }
         emp_r = await tx(c, base, tok, "POST", "/employee", emp_body)
         if not emp_r.get("success") and "e-post" in str(emp_r.get("error", "")).lower():
-            pm_id = admin_id  # Email conflict = admin IS this person
+            # Email conflict: admin has this email. Use admin and update name.
+            pm_id = admin_id
+            await tx(c, base, tok, "PUT", f"/employee/{admin_id}", {
+                "firstName": emp_first, "lastName": emp_last,
+            })
         elif emp_r.get("success"):
             pm_id = emp_r["data"]["id"]
 
