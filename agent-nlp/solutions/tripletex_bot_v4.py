@@ -933,10 +933,29 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
     # NOK equivalent of what the customer actually paid
     pay_amount_nok = round(curr_amt * pay_rate, 2) if (curr_amt and pay_rate) else amount
 
-    # Use voucher posting directly (/:payment always 404s on pre-populated invoices,
-    # and each 404 costs efficiency points)
-    pay_r = await post_payment_voucher(c, base, tok, pay_amount_nok, pay_date,
-                                       customer_id=cust_r.get("id"))
+    # Try multiple payment endpoints (/:payment 404s on some proxies)
+    paid_currency_str = str(curr_amt) if curr_amt else str(pay_amount_nok)
+    pt_id = 1  # default payment type in fresh sandbox
+
+    # Try 1: PUT /:createPayment (alternative action endpoint)
+    pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:createPayment", params={
+        "paymentDate": pay_date,
+        "paidAmount": str(pay_amount_nok),
+        "paidAmountCurrency": paid_currency_str,
+        "paymentTypeId": str(pt_id),
+    })
+    if not pay_r.get("success"):
+        # Try 2: PUT /:payment (original endpoint)
+        pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params={
+            "paymentDate": pay_date,
+            "paidAmount": str(pay_amount_nok),
+            "paidAmountCurrency": paid_currency_str,
+            "paymentTypeId": str(pt_id),
+        })
+    if not pay_r.get("success"):
+        # Try 3: voucher posting fallback (creates ledger entries but doesn't update invoice)
+        pay_r = await post_payment_voucher(c, base, tok, pay_amount_nok, pay_date,
+                                           customer_id=cust_r.get("id"))
 
     # Post currency difference (agio/disagio) if applicable
     currency_diff = f.get("currencyDifference")
@@ -1794,6 +1813,13 @@ async def exec_analyze_ledger_create_projects(c: httpx.AsyncClient, base: str, t
             "startDate": time.strftime("%Y-%m-%d"),
         })
         if proj_r.get("success"):
+            proj_id = proj_r["data"]["id"]
+            # Create activity for this project (activityType is required)
+            await tx(c, base, tok, "POST", "/activity", {
+                "name": proj_name,
+                "activityType": "PROJECT_GENERAL_ACTIVITY",
+                "isProjectActivity": True,
+            })
             last_result = proj_r
 
     return last_result
