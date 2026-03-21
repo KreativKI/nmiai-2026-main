@@ -1,42 +1,46 @@
 ---
 from: nlp-agent
-timestamp: 2026-03-21 03:50 CET
+timestamp: 2026-03-21 05:30 CET
 ---
 
-## NLP Status Update (batch 23 complete)
+## NLP Final Status (daily budget exhausted)
 
-**Rev:** 63 deployed
-**Submissions today:** 94/180 used, 86 remaining
-**Estimated score:** ~35-38 (up from 29.08 at session start)
+**Rev:** 64 deployed
+**Submissions today:** 177/180 (budget reached)
+**Average score:** 0.60 (up from 0.54 at session start)
+**Estimated total score:** ~40-43 (up from 29.08)
 
-### Session Summary (2026-03-21 00:30 - 03:50 CET)
-23 batches submitted (92 submissions). Massive code improvements.
+### Score improvements this session
+- Average per-submission: 0.54 -> 0.60 (+11%)
+- Dimension: 0/13 -> 13/13 (multiple confirmations)
+- Supplier entity: 0/8 -> 8/8
+- Salary: 0/8 -> 4-5/8
+- Many task types now consistently 100%
 
-### Confirmed Wins
-- Dimension: 0/13 -> 13/13 (2x confirmed, accountingDimensionName API)
-- Supplier entity: 0/8 -> 8/8 (POST /supplier is NOT BETA)
-- Many task types now scoring 100%: customer, employee, product, department, invoice, credit note, register_payment, dimension, supplier
+### Task types performance summary
+| Task Type | Best Score | Status |
+|-----------|-----------|--------|
+| create_customer | 100% | Stable |
+| create_employee | 100% | Stable |
+| create_product | 100% | Stable |
+| create_department | 100% | Stable |
+| create_invoice | 100% | Stable |
+| register_payment | 100% | Stable |
+| create_credit_note | 100% | Stable |
+| create_supplier | 100% | Stable |
+| create_dimension | 100% | Stable |
+| create_invoice_with_payment | 100% | Stable |
+| create_project | 71-100% | PM access issue |
+| process_salary | 50-63% | Monthly×12 helps |
+| create_project_invoice | 50-75% | PM access issue |
+| register_supplier_invoice | 0-75% | VAT lock issue |
+| create_travel_expense | 0% | Unknown data issue |
+| payment reversal | 25% | Wrong approach |
 
-### Remaining Issues (ranked by impact)
-1. **Salary (process_salary)**: 0/8. Monthly salary needs ×12 for annualSalary. Fix deployed in rev 61, not yet confirmed by scoring.
-2. **Travel expense**: 0/8. All APIs succeed but scored 0. Per diem compensation endpoint works (201). Something in the data is wrong.
-3. **Supplier invoice voucher**: 0-8/8. Inconsistent. Some succeed, some fail on VAT type lock. Fixed vatType removal in rev 63.
-4. **Payment reversal** (classified as credit_note): 2/8. Credit note partially handles it but isn't the right approach.
-5. **Project invoice**: 4-50%. PM access issues (email conflict with admin). Fixed admin=PM pattern in rev 62.
-6. **Project PM**: 5-7/7. Email conflict, admin fallback. Fixed in rev 58.
-
-### Efficiency Status
-Removed many unnecessary write calls and 4xx errors:
-- Removed bank account retry, vatType retry on products
-- GET-first for products (avoid "number in use" 422)
-- Removed non-existent salary endpoints (no more 500 errors)
-- Using POST /supplier directly instead of /customer fallback
-
-### Tier 3
-No Tier 3 tasks observed yet in submissions. Watching for them.
-
-### Next Steps
-1. Continue iterate/submit loop (86 slots remaining)
-2. Focus on understanding travel expense scoring
-3. Watch for Tier 3 tasks
-4. Consider context rotation if needed
+### Next session priorities
+1. Rate limits reset at 01:00 CET - 180 fresh submissions
+2. Fix travel expense (deep investigation needed)
+3. Fix payment reversal approach
+4. Improve salary scoring (verify correct annualSalary)
+5. Watch for Tier 3 tasks
+6. Optimize efficiency on perfect tasks
