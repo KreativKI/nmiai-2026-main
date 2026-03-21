@@ -1,89 +1,60 @@
 # Astar Island -- Plan
 
-**Track:** ML | **Last updated:** 2026-03-21 10:50 UTC
-**Best:** 82.6 (R9) | **Rank:** ~100/238 | **Deadline:** Sunday 15:00 CET (~27h left)
+**Track:** ML | **Last updated:** 2026-03-21 14:40 UTC
+**Best weighted:** 134.2 (R14) | **Rank:** 162 | **Top 3:** 177 | **Deadline:** Sunday 15:00 CET
 
 ## Current State
-- R14 active, closes ~12:59 CET, growth regime, all 5 seeds observed + submitted
-- 13 rounds of ground truth cached (R1-R13, 104K cells)
-- Brain V3 backtest: 72.86 (calibrated estimate: ~66)
-- **GCP upgraded to v3:** overnight_v3 + churn_v3 running on ml-churn VM
-- Three improvements deployed: dual V2+V3 blend, settlement stats, calibrated scoring
+- R15 submitted with Brain V4 (LightGBM) + calibrated alpha=20 + deep stack seed 0
+- 14 rounds ground truth cached (R1-R14, 95K training cells)
+- Brain V4 backtests +6.2 points over V3 on R14 real data
+- GCP: churn_v3 running on ml-churn, overnight_v3 paused (manual control)
+
+## Pipeline Rules (mandatory every round)
+
+### Rule 1: Test Before Submit
+Before every submission or resubmission:
+1. Generate predictions with ALL variant models
+2. Score each variant against most recent completed round using REAL observations
+3. Pick the winner based on actual scored data, not estimates
+4. Submit the winner
+
+### Rule 2: Rotate Deep Stack Seed
+Cycle which seed gets all 50 queries:
+- R15: seed 0 (done)
+- R16: seed 1
+- R17: seed 2
+- R18: seed 3
+- R19: seed 4
+- R20: seed 0 (restart cycle)
+
+### Rule 3: Calibrate Weights
+Test Dirichlet alpha values (2, 4, 8, 12, 16, 20, 30, 50) against real data before each round. Currently alpha=20 is optimal for V4.
+
+## Models
+
+| Model | Type | Avg Backtest | Status |
+|-------|------|-------------|--------|
+| Brain V4 | LightGBM (13 features, 95K cells) | 74.0 | **Active. Primary model.** |
+| Brain V3 | Regime lookup table | 69.2 | Retired. V4 beats it 12/14 rounds. |
+| Brain V2 | Global lookup table | 65.6 | Available for blend if needed. |
 
 ## Score History
-| Round | Score | Rank | Regime | Chef | Notes |
-|-------|-------|------|--------|------|-------|
-| R3 | 39.7 | 33/100 | death | v3 | No observations |
-| R4 | 71.8 | 49/86 | death | v6 | Deep stack seed 0 |
-| R5 | 67.6 | 69/144 | stable | v6 | |
-| R6 | 70.4 | 52/186 | growth | v6 | |
-| R7 | 55.1 | 112/199 | growth | v6 | Hard round |
-| R8 | 61.8 | 126/214 | death | v6 | |
-| R9 | **82.6** | 93/221 | death | **v6** | **Best. Deep stack. V2 model.** |
-| R10 | 50.2 | 166/238 | death | v7 | Wrong regime detected |
-| R11 | 69.0 | 92/171 | growth | v8 | V3 regime model |
-| R12 | 49.7 | 72/146 | growth | v8 | |
-| R13 | 63.3 | 141/186 | death | v8 | |
-| R14 | pending | - | growth | v8 (overnight) | V3+obs, submitted by overnight_v2 |
+| Round | Score | Rank | Weight | Weighted | Model |
+|-------|-------|------|--------|----------|-------|
+| R14 | 67.8 | 95 | 1.980 | **134.2** | V3+V2 blend |
+| R9 | 82.6 | 93 | 1.551 | 128.1 | V2 deep stack |
+| R15 | pending | - | 2.079 | - | **V4 + alpha=20** |
 
-## V2 vs V3 Backtest (3-round LOO)
-| Round | Regime | V2 | V3 | Winner |
-|-------|--------|-----|-----|--------|
-| R7 | growth | 53.2 | 62.5 | V3 |
-| R8 | death | 62.2 | 83.9 | V3 |
-| R9 | death | 81.4 | 61.3 | V2 |
-| **Avg** | | **65.6** | **69.2** | **V3** |
+## Targets (leaderboard = best round_score x weight)
+| Target | R16 (2.18) | R17 (2.29) | R18 (2.41) |
+|--------|-----------|-----------|-----------|
+| Top 50 (166) | 76.1 | 72.5 | 69.0 |
+| Top 20 (173) | 79.3 | 75.5 | 71.9 |
+| Top 3 (177) | 80.9 | 77.1 | 73.4 |
 
-Blend weights: V3=51% V2=49%. Neither model dominates. Blending hedges volatility.
-
-## Key Lessons
-A. R9 (best) used V2 global model + deep stack seed 0. Simple won.
-B. V3 regime model wins on average (+3.6) but destroyed R9 (-29).
-C. Backtest overshoots by +7. Death: +20. Growth: -5.
-D. Observations are the #1 scoring lever, not model architecture.
-E. Settlement stats (population, food, wealth, defense) available from /simulate but untapped.
-
----
-
-## What's Running on GCP
-
-### overnight_v3.py (PID 33715)
-- Dual-track: generates BOTH V2 and V3 predictions, blends by model_weights.json
-- Settlement stats: captures population/food/wealth/defense from /simulate
-- Self-improvement: compares V2 vs V3 after each round, updates blend weights
-- Calibrated scoring: regime-specific offsets in V2/V3 comparison
-
-### churn_v3.py (PID 33755)
-- Calibration-aware: optimizes for estimated real score (backtest - regime offset)
-- Growth rounds weighted favorably (backtest undershoots by 5)
-- Updates model_weights.json every 5 batches
-- 1400+ experiments already run by v2, v3 continues from best params
-
-### Cron (every 15 min)
-- Restarts overnight_v3 if crashed
-- Restarts churn_v3 if crashed
-
----
-
-## Phase 1: DONE -- V3 Deployment
-All three improvements deployed to GCP:
-1. Dual V2+V3 blend (weighted prediction submission)
-2. Settlement stats collection (regime detection enhancement)
-3. Calibrated churn (regime-weighted optimization)
-
-## Phase 2: Monitor R14 Score
-After R14 closes (~12:59 CET):
-1. overnight_v3 caches R14 ground truth
-2. Self-improvement runs: retrains brain, compares V2 vs V3, sets blend weights
-3. model_weights.json created with data-driven blend ratios
-4. R15 starts with blended predictions
-
-## Phase 3: Overnight Strategy (Saturday night -> Sunday)
-- Both models run in blend mode
-- Self-improvement updates weights after each round
-- Settlement stats accumulate and improve regime detection
-- Feature freeze Sunday 09:00 CET
-
-## Phase 4: Final Submission (Sunday 15:00 CET)
-- Submit with best calibrated blend
-- Repo public at 14:45
+## Next Steps
+1. Wait for R15 score (closes ~15:52 CET)
+2. Cache R15 ground truth
+3. Recalibrate V4 alpha with R15 real data
+4. R16: deep stack seed 1, test variants, submit best
+5. Before sleep: integrate V4 into overnight_v3, re-enable autonomous mode
