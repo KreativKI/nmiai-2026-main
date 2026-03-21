@@ -569,14 +569,42 @@ async def exec_create_project(c: httpx.AsyncClient, base: str, tok: str, f: dict
     admin_id = admin_emp.get("id")
 
     if pm_name and admin_id:
-        # Check if admin matches PM name
+        # Check if admin matches PM name OR email (common competition pattern)
         admin_name = f"{admin_emp.get('firstName', '')} {admin_emp.get('lastName', '')}".strip()
+        admin_email = admin_emp.get("email", "")
+        desired_email = pm_email or ""
         if pm_name.lower() == admin_name.lower():
             pm_id = admin_id
-            log.info("Admin IS the project manager: %s", pm_name)
+            log.info("Admin IS the project manager (name match): %s", pm_name)
+        elif desired_email and admin_email and desired_email.lower() == admin_email.lower():
+            # Admin has the same email, use admin and update name
+            pm_id = admin_id
+            pm_parts = pm_name.strip().split()
+            pm_first = pm_parts[0] if pm_parts else "PM"
+            pm_last = " ".join(pm_parts[1:]) if len(pm_parts) > 1 else ""
+            await tx(c, base, tok, "PUT", f"/employee/{admin_id}", {
+                "firstName": pm_first, "lastName": pm_last,
+            })
+            log.info("Admin has PM email (%s), updated name to %s", desired_email, pm_name)
 
     if not pm_id and pm_name:
-        # Try to create the PM as EXTENDED user (needs PM access)
+        # Try to find existing employee by name first (GET is free)
+        pm_parts = pm_name.strip().split()
+        pm_first = pm_parts[0] if pm_parts else "PM"
+        pm_last = " ".join(pm_parts[1:]) if len(pm_parts) > 1 else ""
+        existing_r = await tx(c, base, tok, "GET", "/employee", params={
+            "firstName": pm_first, "lastName": pm_last, "count": 5
+        })
+        if existing_r.get("success") and existing_r.get("data"):
+            existing_emps = as_list(existing_r["data"])
+            for ee in existing_emps:
+                if ee.get("firstName") == pm_first and ee.get("lastName") == pm_last:
+                    pm_id = ee["id"]
+                    log.info("Found existing employee for PM: %s (id=%d)", pm_name, pm_id)
+                    break
+
+    if not pm_id and pm_name:
+        # Create the PM as EXTENDED user (needs PM access)
         pm_parts = pm_name.strip().split()
         pm_first = pm_parts[0] if pm_parts else "PM"
         pm_last = " ".join(pm_parts[1:]) if len(pm_parts) > 1 else ""
@@ -785,17 +813,51 @@ async def exec_create_credit_note(c: httpx.AsyncClient, base: str, tok: str, f: 
 
 
 async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    # Step 1: Create employee (pass full fields dict so split_name can find name/employeeName)
+    # Step 1: Find or create employee (GET first to avoid 422 email conflicts)
     first, last = split_name(f)
-    emp_r = await exec_create_employee(c, base, tok, {
-        "firstName": first,
-        "lastName": last,
-        "email": f.get("email"),
-        "mobile": f.get("mobile"),
+    emp_id = None
+
+    # Check if employee already exists (GET is free)
+    existing_r = await tx(c, base, tok, "GET", "/employee", params={
+        "firstName": first, "lastName": last, "count": 5
     })
-    if not emp_r.get("success"):
-        return emp_r
-    emp_id = emp_r["data"]["id"]
+    if existing_r.get("success") and existing_r.get("data"):
+        existing_emps = as_list(existing_r["data"])
+        for ee in existing_emps:
+            if ee.get("firstName") == first and ee.get("lastName") == last:
+                emp_id = ee["id"]
+                log.info("Travel expense: found existing employee %s %s (id=%d)", first, last, emp_id)
+                break
+
+    if not emp_id:
+        # Also check if whoAmI admin matches the employee name or email
+        whoami = await tx(c, base, tok, "GET", "/token/session/>whoAmI")
+        admin_emp = whoami.get("data", {}).get("employee", {})
+        admin_id = admin_emp.get("id")
+        admin_name = f"{admin_emp.get('firstName', '')} {admin_emp.get('lastName', '')}".strip()
+        admin_email = (admin_emp.get("email") or "").lower()
+        desired_email = (f.get("email") or "").lower()
+
+        if admin_id and (f"{first} {last}".lower() == admin_name.lower()
+                         or (desired_email and admin_email and desired_email == admin_email)):
+            emp_id = admin_id
+            # Update admin name if different
+            if f"{first} {last}".lower() != admin_name.lower():
+                await tx(c, base, tok, "PUT", f"/employee/{admin_id}", {
+                    "firstName": first, "lastName": last,
+                })
+            log.info("Travel expense: using admin as employee (id=%d)", emp_id)
+
+    if not emp_id:
+        emp_r = await exec_create_employee(c, base, tok, {
+            "firstName": first,
+            "lastName": last,
+            "email": f.get("email"),
+            "mobile": f.get("mobile"),
+        })
+        if not emp_r.get("success"):
+            return emp_r
+        emp_id = emp_r["data"]["id"]
 
     # Step 2: Get payment types
     pt_r = await tx(c, base, tok, "GET", "/travelExpense/paymentType")
@@ -997,19 +1059,51 @@ async def exec_process_salary(c: httpx.AsyncClient, base: str, tok: str, f: dict
                 break
         if not emp_id and emps:
             emp_id = emps[0]["id"]
+    # Track the matched employee record so we can check dateOfBirth
+    matched_emp = None
+    if emp_r.get("success") and emp_r.get("data"):
+        emps_list = as_list(emp_r["data"])
+        for e in emps_list:
+            if e.get("id") == emp_id:
+                matched_emp = e
+                break
+
     if not emp_id:
-        dept_id = await ensure_department(c, base, tok)
-        emp_body = {"firstName": first, "lastName": last, "department": {"id": dept_id or 1},
-                    "userType": "NO_ACCESS", "dateOfBirth": f.get("dateOfBirth", "1990-01-15")}
-        if f.get("email"): emp_body["email"] = f["email"]
-        create_r = await tx(c, base, tok, "POST", "/employee", emp_body)
-        if not create_r.get("success"): return create_r
-        emp_id = create_r["data"]["id"]
+        # Check if whoAmI admin matches the employee (avoid email conflict on POST)
+        whoami = await tx(c, base, tok, "GET", "/token/session/>whoAmI")
+        admin_emp = whoami.get("data", {}).get("employee", {})
+        admin_id = admin_emp.get("id")
+        admin_name = f"{admin_emp.get('firstName', '')} {admin_emp.get('lastName', '')}".strip()
+        admin_email = (admin_emp.get("email") or "").lower()
+        desired_email = (f.get("email") or "").lower()
+
+        if admin_id and (f"{first} {last}".lower() == admin_name.lower()
+                         or (desired_email and admin_email and desired_email == admin_email)):
+            emp_id = admin_id
+            # Update admin name if different
+            if f"{first} {last}".lower() != admin_name.lower():
+                await tx(c, base, tok, "PUT", f"/employee/{admin_id}", {
+                    "firstName": first, "lastName": last,
+                })
+            log.info("Process salary: using admin as employee (id=%d)", emp_id)
+        else:
+            dept_id = await ensure_department(c, base, tok)
+            emp_body = {"firstName": first, "lastName": last, "department": {"id": dept_id or 1},
+                        "userType": "NO_ACCESS", "dateOfBirth": f.get("dateOfBirth", "1990-01-15")}
+            if f.get("email"): emp_body["email"] = f["email"]
+            create_r = await tx(c, base, tok, "POST", "/employee", emp_body)
+            if not create_r.get("success"): return create_r
+            emp_id = create_r["data"]["id"]
     else:
-        # Existing employee: ensure dateOfBirth is set (required for employment creation)
-        await tx(c, base, tok, "PUT", f"/employee/{emp_id}", {
-            "dateOfBirth": f.get("dateOfBirth", "1990-01-15"),
-        })
+        # Existing employee: only PUT dateOfBirth if it's actually null/empty (Fix 2)
+        existing_dob = matched_emp.get("dateOfBirth") if matched_emp else None
+        if not existing_dob:
+            await tx(c, base, tok, "PUT", f"/employee/{emp_id}", {
+                "dateOfBirth": f.get("dateOfBirth", "1990-01-15"),
+            })
+            log.info("Process salary: set dateOfBirth on employee %d (was empty)", emp_id)
+        else:
+            log.info("Process salary: employee %d already has dateOfBirth=%s, skipping PUT", emp_id, existing_dob)
 
     empl_r = await tx(c, base, tok, "GET", "/employee/employment", params={"employeeId": emp_id, "count": 5})
     employment_id = None
@@ -1229,8 +1323,37 @@ async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str,
 
     if emp_name and admin_id:
         admin_name = f"{admin_emp.get('firstName', '')} {admin_emp.get('lastName', '')}".strip()
+        admin_email = admin_emp.get("email", "")
+        desired_email = emp_email or ""
         if emp_name.lower() == admin_name.lower():
             pm_id = admin_id
+            log.info("Admin IS the employee/PM (name match): %s", emp_name)
+        elif desired_email and admin_email and desired_email.lower() == admin_email.lower():
+            # Admin has the same email, use admin and update name
+            pm_id = admin_id
+            parts = emp_name.strip().split()
+            emp_first = parts[0]
+            emp_last = " ".join(parts[1:]) if len(parts) > 1 else ""
+            await tx(c, base, tok, "PUT", f"/employee/{admin_id}", {
+                "firstName": emp_first, "lastName": emp_last,
+            })
+            log.info("Admin has employee email (%s), updated name to %s", desired_email, emp_name)
+
+    if not pm_id and emp_name:
+        # Try to find existing employee by name first (GET is free)
+        parts = emp_name.strip().split()
+        emp_first = parts[0]
+        emp_last = " ".join(parts[1:]) if len(parts) > 1 else ""
+        existing_r = await tx(c, base, tok, "GET", "/employee", params={
+            "firstName": emp_first, "lastName": emp_last, "count": 5
+        })
+        if existing_r.get("success") and existing_r.get("data"):
+            existing_emps = as_list(existing_r["data"])
+            for ee in existing_emps:
+                if ee.get("firstName") == emp_first and ee.get("lastName") == emp_last:
+                    pm_id = ee["id"]
+                    log.info("Found existing employee for PM: %s (id=%d)", emp_name, pm_id)
+                    break
 
     if not pm_id and emp_name:
         parts = emp_name.strip().split()
