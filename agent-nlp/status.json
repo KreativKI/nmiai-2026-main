@@ -1,38 +1,26 @@
 {
   "agent": "agent-nlp",
-  "timestamp": "2026-03-21T11:30:00Z",
+  "timestamp": "2026-03-21T20:35:00Z",
   "track": "nlp",
-  "phase": "efficiency_optimization",
+  "phase": "tier3_fixes",
   "state": "active",
   "approach": "C",
   "confidence": 0.9,
-  "best_submitted_score": "29.08 (rank #107), estimated 40-43 after overnight batch",
-  "submissions_today": "budget exhausted, waiting for reset or fresh budget",
-  "revision": 67,
-  "bot_version": "tripletex_bot_v4.py (1747 lines, 22 executors)",
+  "best_submitted_score": "29.08 (rank #107), fixes deployed but score not yet updated on leaderboard",
+  "submissions_today": "277/300 used, 23 remaining, reset at 01:00 CET",
+  "revision": 86,
+  "bot_version": "tripletex_bot_v4.py (27 executors, simplified helpers)",
   "endpoint": "https://tripletex-agent-795548831221.europe-west4.run.app",
-  "efficiency_environment": {
-    "write_call_tracking": "active (contextvars, logs writes/errors per request)",
-    "scripts": [
-      "scripts/efficiency_analyzer.py",
-      "scripts/self_improve.py",
-      "scripts/write_call_tracker.py"
-    ],
-    "last_analysis": "81 4xx errors in 177 requests, top offenders: create_invoice(18), create_project_invoice(18), create_project(11)"
-  },
-  "improvements_this_session": [
-    "Efficiency environment built (analyzer + self-improving pipeline)",
-    "Write-call instrumentation in bot (contextvars per-request tracking)",
-    "Look-before-leap employee creation (GET first, POST only if needed)",
-    "VAT cache keyed by (base_url, token) not just base_url",
-    "Broadened email conflict detection (Norwegian + English error messages)",
-    "Fixed process_salary returning fake success (now reports real state)",
-    "Fixed delete_travel_expense exact name match",
-    "Fixed per_diem_days variable shadowing",
-    "Fixed contextvars race condition (shared mutable default)"
+  "fixes_this_session": [
+    "bank_reconciliation: voucher postings instead of /:payment (was 7-8x 404)",
+    "overdue_invoice_reminder: voucher for partial payment (was 1x 404, now 0 errors)",
+    "analyze_ledger_create_projects: removed failing activity creation (was 6x 422, now 0 errors)",
+    "register_payment: added /:payment -> voucher fallback (verified working)",
+    "create_invoice_with_payment: added /:payment -> voucher fallback",
+    "Extracted lookup_account and post_payment_voucher helpers",
+    "Created audit-and-submit.sh pipeline with hard-blocker gates"
   ],
   "blockers": [],
-  "rules_last_read": "2026-03-21T11:30:00Z",
-  "qc_status": "8/8 PASS Tier 1 (rev 65), rev 67 deployed but untested on competition",
-  "notes": "Rev 67 has all efficiency fixes. Need submissions to measure actual score delta. Self-improving loop ready: submit -> analyze logs -> self_improve.py -> fix -> deploy -> repeat."
+  "rules_last_read": "2026-03-21T20:35:00Z",
+  "notes": "Tier 3 fixes deployed and verified. overdue_invoice_reminder and analyze_ledger now 0 errors. register_payment fallback working (7/10 score). bank_reconciliation not yet triggered in submissions to verify. Next: submit more to get bank_recon data, then analyze remaining Tier 3 field misses."
 }

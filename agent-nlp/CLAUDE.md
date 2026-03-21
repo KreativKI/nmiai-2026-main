@@ -283,16 +283,24 @@ Prompts arrive in 7 languages: Norwegian, English, Spanish, Portuguese, Nynorsk,
 ## Efficiency Optimization (critical for high scores)
 Efficiency bonus applies ONLY when all fields are correct. On a perfect score, fewer API calls and zero 4xx errors yield up to 2x the tier multiplier.
 
-**IMPORTANT: ALL API calls likely count toward efficiency (not just writes).** Competition docs say "How many API calls" and examples say "Minimize GET calls." Treat every call as expensive.
+**CRITICAL: Every 4xx error from our bot's Tripletex API calls REDUCES the efficiency bonus for that run.**
+- Best score per task IS retained on leaderboard (bad runs don't lower your best)
+- BUT within each run, 4xx errors cost points on efficiency
+- A 404 or 422 counts against you even if you retry successfully
+- Better to return a partial/wrong answer than crash with 400/404/500
+- Our voucher-posting approach replaces /:payment 404s with clean voucher POSTs
+
+**ALL API calls count toward efficiency (not just writes).** Minimize everything.
 
 Rules:
 - Plan before calling. Know which endpoints you need before making any request.
-- Validate inputs before sending. A 4xx error counts against you even if you retry successfully.
+- Validate inputs before sending. A 4xx error costs efficiency points even if you recover.
 - Do NOT fetch back entities you just created. You already have the data from the POST response.
 - Do NOT make exploratory GET calls. Use the prompt to determine what to create.
 - Minimize ALL calls: GETs count too. find_customer with 3 GETs is worse than 1.
 - Benchmarks recalculated every 12h. The efficiency bar rises as teams improve.
 - Rate limit: 5 per task per day PER TIER.
+- Use lookup_account() and post_payment_voucher() helpers to avoid duplicate code/calls.
 
 ### Efficiency Environment (active)
 Bot logs `writes=N, errors_4xx=N` and full call sequence per request (Cloud Run logs).

@@ -1,10 +1,10 @@
 # Tripletex AI Accounting Agent -- Final Session Plan
 
 **Track:** NLP | **Weight:** 33.33%
-**Last updated:** 2026-03-21 21:00 CET
-**Bot:** tripletex_bot_v4.py (2515 lines, 27 executors, rev 83 deployed)
-**Time remaining:** ~18 hours (deadline Sunday 15:00 CET)
-**Submissions:** 51 remaining today + 300 fresh at 01:00 CET = 351 total
+**Last updated:** 2026-03-21 21:30 CET
+**Bot:** tripletex_bot_v4.py (27 executors, rev 86 deployed)
+**Time remaining:** ~17.5 hours (deadline Sunday 15:00 CET)
+**Submissions:** ~23 remaining today + 300 fresh at 01:00 CET = ~323 total
 
 ---
 
@@ -24,10 +24,20 @@ Each Tier 3 task at 100% + efficiency = up to 6.0 points.
 
 ---
 
+## Done This Session (21:00 - 21:30 CET)
+- Fixed /:payment 404s: replaced with voucher postings (debit bank 1920, credit AR 1500)
+- Fixed bank_reconciliation: use vouchers for all payments (was 7-8 x 404 per run)
+- Fixed overdue_invoice_reminder: voucher for partial payment (was 1 x 404 per run, now 0 errors)
+- Fixed analyze_ledger_create_projects: removed failing activity creation (6 x 422 per run, now 0 errors)
+- Added /:payment -> voucher fallback to register_payment and create_invoice_with_payment
+- Extracted lookup_account and post_payment_voucher helpers (simplifier)
+- Created audit-and-submit.sh pipeline: syntax + health + MALFORMED + smoke test gates submission
+- Deployed rev 86, submitted 20 runs: overdue_invoice_reminder now succeeds with 0 errors
+
 ## Phase 1: Analyze (01:00 - 02:00 CET)
-After rate limit reset, submit 10-15 to get fresh data with rev 83.
+After rate limit reset, submit 10-15 to get fresh data with rev 86.
 Run efficiency_analyzer.py on the results to see total_calls per task type.
-Identify which specific fields are wrong on the 4 Tier 3 groups.
+Identify which specific fields are still wrong on the 4 Tier 3 groups.
 
 ## Phase 2: Fix Top Issues (02:00 - 06:00 CET)
 For each Tier 3 group, use Cloud Run logs to identify exactly which fields
