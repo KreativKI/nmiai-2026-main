@@ -486,7 +486,8 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
     if salary is not None:
         details_body["annualSalary"] = float(salary)
 
-    return await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
+    await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
+    return emp_r  # Return employee result, not details result
 
 
 async def exec_create_product(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
@@ -843,8 +844,15 @@ async def exec_update_customer(c: httpx.AsyncClient, base: str, tok: str, f: dic
 
 
 async def exec_update_employee(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    target_first = f.get("firstName", "")
-    target_last = f.get("lastName", "")
+    # Use targetEntity for finding the employee (consistent with extraction prompt)
+    target = f.get("targetEntity") or f.get("name", "")
+    if target:
+        parts = target.strip().split()
+        target_first = parts[0] if parts else ""
+        target_last = " ".join(parts[1:]) if len(parts) > 1 else ""
+    else:
+        target_first = f.get("firstName", "")
+        target_last = f.get("lastName", "")
     emp_r = await tx(c, base, tok, "GET", "/employee", params={
         "firstName": target_first, "lastName": target_last, "count": 5
     })
@@ -858,6 +866,7 @@ async def exec_update_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
     if updates.get("email"): body["email"] = updates["email"]
     if updates.get("phone"): body["phoneNumber"] = updates["phone"]
     if updates.get("mobile"): body["phoneNumberMobile"] = updates["mobile"]
+    if updates.get("name"): body["firstName"] = updates["name"].split()[0]; body["lastName"] = " ".join(updates["name"].split()[1:])
 
     if not body:
         return {"success": True, "data": {"message": "No fields to update"}}
@@ -865,12 +874,11 @@ async def exec_update_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
 
 
 async def exec_create_contact(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    # Find or create customer
+    # Find or create customer (using exact match)
     cust_name = f.get("customerName", "")
-    cust_r = await tx(c, base, tok, "GET", "/customer", params={"name": cust_name, "count": 5})
-    if cust_r.get("success") and cust_r.get("data"):
-        customers = as_list(cust_r["data"])
-        cust_id = customers[0]["id"]
+    existing = await find_customer(c, base, tok, cust_name)
+    if existing["success"]:
+        cust_id = existing["id"]
     else:
         cust_r = await tx(c, base, tok, "POST", "/customer", {"name": cust_name, "isCustomer": True})
         if not cust_r.get("success"):
@@ -949,7 +957,7 @@ async def exec_process_salary(c: httpx.AsyncClient, base: str, tok: str, f: dict
             details_body = {"employment": {"id": employment_id}, "date": start_date,
                             "employmentType": "ORDINARY", "percentageOfFullTimeEquivalent": 100.0}
             if salary_amount is not None:
-                details_body["annualSalary"] = float(salary_amount) * 12
+                details_body["annualSalary"] = float(salary_amount)
             await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
 
     # Salary processing is done through employment details (annual salary + bonus).
@@ -960,9 +968,11 @@ async def exec_process_salary(c: httpx.AsyncClient, base: str, tok: str, f: dict
 
     # If employment was just created, details are already set. If existing, update them.
     if employment_id and salary_amount:
-        annual = float(salary_amount) * 12
+        # Send salary as annualSalary directly - don't multiply by 12
+        # The LLM extracts the stated amount, which could be monthly or annual
+        annual = float(salary_amount)
         if bonus_amount:
-            annual += float(bonus_amount) * 12  # Include bonus in annual calculation
+            annual += float(bonus_amount)
         details_body = {
             "employment": {"id": employment_id},
             "date": f.get("startDate", time.strftime("%Y-%m-%d")),
