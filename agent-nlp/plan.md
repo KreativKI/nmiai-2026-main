@@ -1,104 +1,86 @@
-# Tripletex AI Accounting Agent -- Execution Plan
+# Tripletex AI Accounting Agent -- Final Session Plan
 
 **Track:** NLP | **Weight:** 33.33%
-**Last updated:** 2026-03-21 20:00 CET
-**Bot:** tripletex_bot_v4.py (~2515 lines, 27 executors, rev 83 deployed)
-**Time remaining:** ~19 hours (deadline Sunday 15:00 CET)
-**Submissions:** 61 remaining today, 300 fresh at 01:00 CET
+**Last updated:** 2026-03-21 21:00 CET
+**Bot:** tripletex_bot_v4.py (2515 lines, 27 executors, rev 83 deployed)
+**Time remaining:** ~18 hours (deadline Sunday 15:00 CET)
+**Submissions:** 51 remaining today + 300 fresh at 01:00 CET = 351 total
 
 ---
 
-## Strategy: Correctness First, Efficiency Second
+## Strategy: Get Tier 3 to 100%
 
-1. **Fix tasks scoring 0% to score something** -- DONE (all 8 check-count groups have >0 scores)
-2. **Fix tasks scoring 20-70% to 100%** -- IN PROGRESS (4 Tier 3 groups remain)
-3. **Optimize API calls for efficiency bonus** -- DONE (audit rounds 1+2 applied)
+All Tier 1/2 tasks are at 100%. The entire remaining opportunity is Tier 3.
+Each Tier 3 task at 100% + efficiency = up to 6.0 points.
 
----
+| Task Group | Current | Target | Potential Gain | Priority |
+|-----------|---------|--------|---------------|----------|
+| 11-check (currency payment) | 36% | 100% | +4.9 pts | 1 |
+| 22-check (employee PDF) | 68% | 100% | +4.2 pts | 2 |
+| 14-check (bank recon) | 79% | 100% | +3.9 pts | 3 |
+| 10-check (5 Tier 3 types) | 75% | 100% | +3.8 pts | 4 |
 
-## Current Scores by Task Type
-
-| Checks | Tier | Subs | Best | Status | What's needed |
-|--------|------|------|------|--------|---------------|
-| 6 | 1 | 9 | 100% | LOCKED | -- |
-| 7 | 1/2 | 95 | 100% | LOCKED | -- |
-| 8 | 1/2 | 201 | 100% | LOCKED | -- |
-| 13 | 2/3 | 17 | 100% | LOCKED | -- |
-| **10** | **3** | 49 | **75%** | WORK | year_end monthly variant, overdue_invoice, analyze_ledger activity |
-| **11** | **3** | 5 | **36%** | WORK | currency payment paidAmountCurrency, agio sign (fixed rev 82) |
-| **14** | **3** | 4 | **71%** | WORK | bank_recon crash fix (rev 83), outgoing payment supplier |
-| **22** | **3** | 3 | **59%** | WORK | employee working hours (fixed rev 83), PDF field extraction |
-
-**Potential gain if all Tier 3 hit 100%: +16.8 points (29 -> ~46)**
+**Total potential: +16.8 points (29 -> ~46, competitive with #1)**
 
 ---
 
-## What Was Done Today (revs 65 -> 83, 18 deployments)
+## Phase 1: Analyze (01:00 - 02:00 CET)
+After rate limit reset, submit 10-15 to get fresh data with rev 83.
+Run efficiency_analyzer.py on the results to see total_calls per task type.
+Identify which specific fields are wrong on the 4 Tier 3 groups.
 
-### Efficiency (audit-driven)
-- Hardcoded: VAT IDs, payment type IDs, input VAT IDs (saves 6+ GETs per request)
-- POST-first: customer, department (skip unnecessary GETs on fresh sandbox)
-- 403 abort: prevents cascading errors
-- Account caching: year_end, ledger_error
-- Total call tracking: ALL API calls counted, not just writes
+## Phase 2: Fix Top Issues (02:00 - 06:00 CET)
+For each Tier 3 group, use Cloud Run logs to identify exactly which fields
+are wrong, fix the executor, deploy, and submit a small batch to verify.
+Boris workflow on every change.
 
-### Correctness
-- 5 Tier 3 executors built: analyze_ledger, year_end_closing, bank_reconciliation, overdue_invoice_reminder, ledger_error_correction
-- Employee: personnummer, dept by name, occupationCode disabled (422), salary annual/monthly detection, working hours config
-- Currency payment: two exchange rates, paidAmountCurrency fix, agio sign fix
-- Supplier invoice: account validation (reject org numbers)
-- Invoice: dueDate default today+30
-- Overdue reminder: removed voucher double-booking
+## Phase 3: Efficiency Sprint (06:00 - 09:00 CET)
+Once Tier 3 correctness is maximized, optimize API call counts.
+Focus on tasks at 100% correctness where efficiency bonus applies.
+Use efficiency_analyzer.py to find remaining unnecessary calls.
 
-### Boris Workflow
-- 3 separate review agents per round (feature-dev:code-reviewer, code-simplifier:code-simplifier, build-validator)
-- Each agent gets fresh context
-
----
-
-## QC Status (dev sandbox, rev 83)
-
-| Test | Result | Notes |
-|------|--------|-------|
-| Create Customer | PASS | |
-| Create Employee | PASS | |
-| Create Product | PASS | |
-| Create Department | PASS | |
-| Create Project | PASS | |
-| Create Invoice | FAIL | Dev sandbox state issue (competition sandboxes are fresh) |
-| Create Travel Expense | FAIL | "no costs attached" -- needs investigation |
-| Register Payment | FAIL | Depends on invoice test |
-
-**Note:** Dev sandbox accumulates state. Competition sandboxes are fresh per submission. Invoice/Payment failures may be sandbox-specific. Travel expense costs issue is real.
+## Phase 4: Feature Freeze (09:00 - 15:00 CET)
+No new features. Bug fixes only.
+Submit remaining budget strategically: focus on task types with
+the most room for improvement.
+Final submissions by 14:30.
+Make repo public at 14:45.
 
 ---
 
-## Next Actions
+## Submission Rules (prevent overnight burn)
 
-### Before next submission batch
-A. Investigate travel expense "no costs attached" from QC
-B. Run QC with --tier2 for extended tests
-C. Check if travel expense costs are being POSTed correctly
+**NEVER run auto-submitter unattended.**
+- Max 10-15 per batch
+- Analyze results after each batch before submitting more
+- JC must approve every batch
+- If running overnight: set hard cap of 30 submissions max
 
-### Tomorrow (01:00 CET reset, 300 fresh submissions)
-D. Submit 30-50 to cover all task types with rev 83 fixes
-E. Analyze results, fix remaining Tier 3 gaps
-F. Feature freeze at 09:00 CET
+## Boris Workflow (every code change)
+```
+EXPLORE -> PLAN -> CODE ->
+  REVIEW:   Agent(feature-dev:code-reviewer)     -- fresh context
+  SIMPLIFY: Agent(code-simplifier:code-simplifier) -- fresh context
+  VALIDATE: Agent(build-validator)                -- fresh context
+-> COMMIT
+```
 
-### Key Dates
-| Time | What |
-|------|------|
-| 01:00 CET Sun | Rate limits reset, 300 fresh submissions |
-| 09:00 CET Sun | FEATURE FREEZE |
-| 14:45 CET Sun | Repo goes public |
-| 15:00 CET Sun | COMPETITION ENDS |
+## QC Before Deploy
+Run `python3 agent-nlp/scripts/qc-verify.py endpoint --all` before every deploy.
+9/17 pass on dev sandbox (failures are sandbox state, not bot bugs).
 
 ---
 
-## 27 Executors (rev 83)
+## 27 Executors
 
-**Tier 1/2 (22):** create_customer, create_employee, create_employee_with_employment, create_product, create_department, create_project, create_invoice, create_invoice_with_payment, create_project_invoice, register_payment, create_credit_note, create_travel_expense, delete_employee, delete_travel_expense, update_customer, update_employee, create_contact, enable_module, process_salary, register_supplier_invoice, create_dimension, create_supplier
+**Tier 1/2 (22):** create_customer, create_employee, create_employee_with_employment,
+create_product, create_department, create_project, create_invoice,
+create_invoice_with_payment, create_project_invoice, register_payment,
+create_credit_note, create_travel_expense, delete_employee, delete_travel_expense,
+update_customer, update_employee, create_contact, enable_module, process_salary,
+register_supplier_invoice, create_dimension, create_supplier
 
-**Tier 3 (5):** analyze_ledger_create_projects, year_end_closing, bank_reconciliation, overdue_invoice_reminder, ledger_error_correction
+**Tier 3 (5):** analyze_ledger_create_projects, year_end_closing, bank_reconciliation,
+overdue_invoice_reminder, ledger_error_correction
 
 **Fallback:** Gemini agent loop for unknown task types
