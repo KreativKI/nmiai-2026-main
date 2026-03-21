@@ -1,47 +1,60 @@
 # Overseer Plan -- NM i AI 2026
-**Last updated:** 2026-03-20 19:00 CET | **Next refresh:** 03:00 CET | **Remaining:** 44h
+**Last updated:** 2026-03-21 13:49 CET | **Next refresh:** when scores change | **Remaining:** 25h
 
-## Mode: AUTONOMOUS EXECUTION
+## Mode: SEMI-AUTONOMOUS EXECUTION
 
-All agents have standing orders (CONSOLIDATED-ORDERS.md) and GO messages. They execute phase by phase without asking JC. Overseer monitors via intelligence/for-overseer/ status files.
+All 3 track agents have standing orders but require JC approval for key decisions. Overseer monitors via intelligence/for-overseer/ and updates docs.
 
 ## Scores
 
 | Track | Score | Rank | Status |
 |-------|-------|------|--------|
-| **ML** | 71.77 (R4) | #49/191 | Autonomous. Executing phases 1-5. Submit every round. |
-| **CV** | 0.5756 | ~mid/105 | Autonomous. Phase 1: fix .npz, Phase 2: QC, Phase 3: SAHI |
-| **NLP** | 8/8 (1 task) | ?/161 | Autonomous. Phase 1: Tier 2 fix, Phase 2: auto-submitter |
+| **ML** | 71.77 | #49/191 | Autonomous. v3 deployed: dual V2+V3 blend, deep stack, regime-conditional weights. |
+| **CV** | 0.6584 | ~mid/105 | 0.816 val model submitted. Now: Gemini shelf images + labeling for next push. |
+| **NLP** | ~40-43 | ?/161 | 10/16 tasks at 100%. 180 fresh submissions available. Fixing Travel Expense + Payment Reversal. |
 
-## What Changed This Session
-- Added "Autonomous Execution Mode" to all 4 agent CLAUDE.md files
-- Added scope restrictions: agents only read their own track + inbox + shared tools
-- Removed "ask JC for approval" gates that were blocking autonomous execution
-- Dropped GO-EXECUTE.md in all 4 agent inboxes (delivered via PostToolUse hook)
-- check_inbox.sh already fixed (.last_check working)
+## What Changed (Session 3)
+- CV submitted `submission_maxdata.zip` (0.816 val mAP model)
+- ML agent active again: v3 with dual V2+V3 blend, deep stack, regime-conditional weights
+- NLP exhausted day 1 budget (177/180), now has 180 fresh
+- Ops building labeling GUI with Grounding DINO pre-suggestions for CV
+
+## Agent Status
+
+### ML (Astar Island)
+- Has a plan, executing autonomously
+- v3 deployed with dual V2+V3 blend
+- Submitting every round (was silent earlier, now active)
+
+### CV (NorgesGruppen)
+- 0.816 val model submitted
+- Working on Gemini-generated shelf images (2 VMs parallel)
+- Grounding DINO auto-labeling being tested
+- Ops building labeling tool if JC manual labeling needed
+- 5 submission slots remaining today, 6 fresh Sunday
+
+### NLP (Tripletex)
+- 10/16 tasks at 100%, score ~40-43
+- 180 fresh submissions available (reset 02:00 CET)
+- Priority: fix Travel Expense (0%), Payment Reversal (25%), improve Salary (50-63%)
+- Tier 3 tasks may open Saturday
+
+### Ops (Butler)
+- Building CV labeling GUI (Grounding DINO + web UI)
+- Dashboard available at NM_I_AI_dash
 
 ## Overseer Role Now
 - Monitor intelligence/for-overseer/ for agent status reports
 - QC agent outputs when they report phase completion
-- Relay cross-track decisions if needed
-- Monitor competition for rule changes
 - Track scores and adjust priorities if a track stalls
-
-## Agent Communication System
-```
-Overseer writes to: intelligence/for-{agent}-agent/*.md
-Agents write to:    intelligence/for-overseer/{agent}-status.md
-Hook delivers:      PostToolUse fires check_inbox.sh on every Bash call
-                    Agent sees "NEW MESSAGES" alert, reads inbox
-```
+- Update docs when state changes
 
 ## Deadlines
 
 | Time | What |
 |------|------|
-| Tonight 01:00 CET | Rate limits reset (CV 6, NLP 300) |
-| Friday (today) | Tier 2 tasks live (NLP 2x multiplier) |
-| Saturday morning | Tier 3 tasks (NLP 3x multiplier) |
+| Saturday 01:00 CET | Rate limits reset (CV 6, NLP 180) |
+| Saturday morning | Tier 3 tasks open (NLP 3x multiplier) |
 | Saturday 12:00 | CUT-LOSS: any track with 0 = submit baseline |
 | Sunday 09:00 | FEATURE FREEZE |
 | Sunday 14:45 | Repo goes public (PRIZE ELIGIBILITY) |
@@ -50,6 +63,7 @@ Hook delivers:      PostToolUse fires check_inbox.sh on every Bash call
 ## Key Findings (carried forward)
 - Detection is NOT the bottleneck (TTA +0.002, ensemble +0.000)
 - Classification IS the bottleneck (DINOv2 + reference images is the path)
-- ML score = best single round, not cumulative. exp(-3*KL).
+- ML score = best single round, not cumulative. exp(-3*KL)
 - NLP: bad runs never lower score, submitting is always safe
-- NLP: 10/task/day, 300 total/day (verified from platform)
+- NLP: 10/task/day, 180 total/day (10 x 18 active task types)
+- YOLO26m (0.485) non-competitive vs YOLO11 series

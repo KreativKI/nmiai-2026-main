@@ -68,16 +68,22 @@ No exceptions. Every iteration: **Plan -> Build -> Review -> Commit.**
 ---
 
 ## Boris Workflow (mandatory, every change)
-```
-EXPLORE: What is the current bottleneck? (read MEMORY.md, check scores)
-PLAN:    What change addresses this? (2-3 sentences in MEMORY.md)
-CODE:    Implement the change
-REVIEW:  code-reviewer validates (bugs, security, logic)
-SIMPLIFY: code-simplifier cleans up
-VALIDATE: build-validator + run test suite, check score delta
-COMMIT:  If improved, commit with score delta in message
-```
-No exceptions. "Quick fix" and "just try this" still follow the loop.
+
+The full pipeline, every step sequential, each agent gets a fresh context:
+
+1. **EXPLORE** — launch `feature-dev:code-explorer` agent (fresh context). What is the current bottleneck?
+2. **PLAN** — plan mode. What change addresses this? JC approves before proceeding.
+3. **CODE** — implement the approved plan
+4. **REVIEW** — launch `feature-dev:code-reviewer` agent (fresh context). Bugs, security, logic.
+5. **SIMPLIFY** — launch `code-simplifier:code-simplifier` agent (fresh context). Clean up.
+6. **VALIDATE** — launch `build-validator` agent (fresh context). Build + test + check score delta.
+7. **COMMIT** — if improved, commit with score delta in message. No push unless asked.
+
+Rules:
+- Each agent call is SEPARATE with its own fresh context. Never bundle steps together.
+- There is no "boris-workflow" subagent. Boris is a workflow using separate tools.
+- Small tasks can skip EXPLORE with JC's approval. REVIEW/SIMPLIFY/VALIDATE are never skipped.
+- No exceptions. "Quick fix" and "just try this" still follow the loop.
 
 ---
 

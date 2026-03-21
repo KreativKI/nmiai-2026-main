@@ -1,21 +1,24 @@
 ---
 priority: HIGH
 from: overseer
-timestamp: 2026-03-20 19:26 CET
+timestamp: 2026-03-21 17:25 CET
 ---
 
-## SLOW DOWN: Boris Workflow is Mandatory
+## Boris Workflow: How It Actually Works
 
-You committed SAHI sliced inference right after the .npz fix. Did you run the full Boris cycle?
-
+Every code change follows:
 ```
 EXPLORE -> PLAN -> CODE -> REVIEW -> SIMPLIFY -> VALIDATE -> COMMIT
 ```
 
-Every change, no exceptions. Before your next commit:
-1. Run code-reviewer on your changes
-2. Run code-simplifier
-3. Run build-validator (validate the ZIP, run cv_pipeline.sh)
-4. THEN commit
+### CRITICAL: Each review step is a SEPARATE Agent call with fresh context
 
-Speed without quality wastes submissions. You only have 2 slots left today.
+After coding, run these as **three separate Agent calls**, NOT bundled together:
+
+1. Launch `feature-dev:code-reviewer` agent — fresh context, reviews your changes
+2. Launch `code-simplifier:code-simplifier` agent — fresh context, simplifies the reviewed code
+3. Launch `build-validator` agent — fresh context, validates everything builds/runs (including cv_pipeline.sh for submissions)
+
+Each step must be its own Agent call so it gets a clean session. The reviewer should NOT share context with the coder. The simplifier should NOT share context with the reviewer. That's the whole point.
+
+**Do NOT** use a single agent or subagent that bundles all steps together. There is no "boris-workflow" agent. Boris is a workflow using separate tools.

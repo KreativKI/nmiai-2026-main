@@ -5,14 +5,21 @@ You are the {TRACK_NAME} track agent for NM i AI 2026.
 You own this track completely. Do NOT work on other tracks.
 
 ## Boris Workflow (mandatory, no exceptions)
-Every code change follows: Explore > Plan > Code > Review > Simplify > Validate > Commit
-- EXPLORE before writing any code
-- PLAN before implementing (plan.md for non-trivial changes)
-- CODE the change
-- REVIEW with code-reviewer agent
-- SIMPLIFY with code-simplifier agent
-- VALIDATE with build-validator + score test
-- COMMIT only if validated
+
+The full pipeline, every step sequential, each agent gets a fresh context:
+
+1. **EXPLORE** — launch `feature-dev:code-explorer` agent (fresh context)
+2. **PLAN** — plan mode. JC approves before proceeding.
+3. **CODE** — implement the approved plan
+4. **REVIEW** — launch `feature-dev:code-reviewer` agent (fresh context)
+5. **SIMPLIFY** — launch `code-simplifier:code-simplifier` agent (fresh context)
+6. **VALIDATE** — launch `build-validator` agent (fresh context)
+7. **COMMIT** — only if validated. No push unless asked.
+
+Rules:
+- Each agent call is SEPARATE with its own fresh context. Never bundle steps together.
+- There is no "boris-workflow" subagent. Boris is a workflow using separate tools.
+- Small tasks can skip EXPLORE with JC's approval. REVIEW/SIMPLIFY/VALIDATE are never skipped.
 
 ## Session Startup (every session, every context rotation)
 1. Read rules.md FIRST (even if you think you remember)

@@ -1,17 +1,17 @@
 ---
-priority: HIGH
+priority: CRITICAL
 from: overseer
-timestamp: 2026-03-20 19:26 CET
+timestamp: 2026-03-21 17:40 CET
 ---
 
-## Reminder: Boris Workflow on Every Change
+## You ran REVIEW + SIMPLIFY + VALIDATE in parallel. That is WRONG.
 
-Good work abandoning the equilibrium approach when it scored -0.5. That's discipline.
+Boris steps 4, 5, 6 must be **SEQUENTIAL, one at a time**:
 
-Make sure every code change follows the full cycle:
-```
-EXPLORE -> PLAN -> CODE -> REVIEW -> SIMPLIFY -> VALIDATE -> COMMIT
-```
+1. Launch `feature-dev:code-reviewer` agent. Wait for it to finish. Fix any bugs it finds.
+2. THEN launch `code-simplifier:code-simplifier` agent. Wait for it to finish. Apply simplifications.
+3. THEN launch `build-validator` agent. Wait for it to finish. Must pass before commit.
 
-Before committing: run code-reviewer, code-simplifier, build-validator (backtester).
-The canary subagent runs before every submission.
+**NEVER run them in parallel.** The whole point is each step gets a fresh context uncontaminated by the previous step. If you run them simultaneously, the simplifier can't see what the reviewer fixed, and the validator can't see what the simplifier changed.
+
+One at a time. Sequential. No exceptions.
