@@ -98,7 +98,7 @@ Before ANY work, create or update plan.md. No exceptions. Every iteration: **Pla
 - **Submit:** HTTPS endpoint (POST /solve). Auto-submitter approved + JC manual.
 - **Deployed:** Cloud Run at `https://tripletex-agent-795548831221.europe-west4.run.app/solve`
 - **Request format:** `{prompt, files[], tripletex_credentials{base_url, session_token}}`
-- **Rate limit:** 10/task/day. **180 total/day** (verified from platform 2026-03-21, docs said 300 but platform enforces 180). 3 concurrent. 30 task types. Tier multipliers 1x/2x/3x.
+- **Rate limit:** 10/task/day. Daily total = 10 x active task types (currently 180 = 10x18 Tier 1+2, rises to 300 when Tier 3 opens Saturday). 3 concurrent. Tier multipliers 1x/2x/3x.
 
 ### Butler Agent — Operations [agent-ops/]
 - **Branch:** `agent-ops` | **Worktree:** `nmiai-worktree-ops/`
