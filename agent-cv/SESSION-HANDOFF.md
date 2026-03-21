@@ -11,19 +11,28 @@ Low-quality synthetic data barely moved the needle (+0.011). New approach: use G
 - Feeding actual product photos (front/back/left/right) produces much more accurate results
 - Imagen 3.0 also available but text-only (no reference images)
 
-## Next Session: Execute Phase 1 (Gemini Shelf Generation)
-1. Read plan.md for full strategy
-2. Write generation script that:
-   - Loads reference images per product (studio photos + shelf crops)
-   - Sends to Gemini 3.1 Flash with shelf scene prompt
-   - Saves output with YOLO pseudo-labels (full-image bbox)
-3. Split 134 weak categories across 2 VMs:
-   - cv-train-1: categories 0-177 (~67 weak products)
-   - cv-train-3: categories 178-355 (~67 weak products)
-4. Run generation (~5h parallel)
-5. When done: merge data, retrain YOLO11m (200 epochs, ~4h)
-6. Evaluate, validate, submit Saturday evening
-7. Sunday: iterate with remaining 6 slots
+## Next Session: Execute Full Pipeline
+
+### Step 1: Write generation script
+- Load ALL available reference images per product (studio photos + shelf crops + existing Gemini)
+- Feed to Gemini 3.1 Flash with shelf scene prompt
+- Save images with product name + category_id in filename
+- Save manifest.json mapping filename -> category
+
+### Step 2: Generate ~2150 images on 2 VMs (~10h parallel)
+- cv-train-1: categories 0-177
+- cv-train-3: categories 178-355
+- 15 variations for "seen once", 10 for "barely known", 8 for "somewhat known", 3 for "well-known"
+
+### Step 3: JC labels bounding boxes using Butler's GUI tool
+- Butler building labeling tool (assignment in intelligence/for-ops-agent/)
+- JC draws one box per image, category pre-filled
+- Output: YOLO format labels
+
+### Step 4: Retrain + Submit
+- Merge real images + human-labeled Gemini shelf images
+- Retrain YOLO11m, 200 epochs
+- Evaluate, validate, submit
 
 ## Product Weakness Tiers
 | Tier | Count | Generate per product | Total images |
