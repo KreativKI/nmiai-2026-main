@@ -113,6 +113,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - year_end_closing (use when prompt mentions year-end/arsoppgjor/Jahresabschluss, depreciation/avskrivning/Abschreibung, closing entries, or annual closing)
 - bank_reconciliation (use when prompt mentions bank reconciliation/bankavstemming/Kontoabgleich, matching payments to invoices, CSV bank statement)
 - overdue_invoice_reminder (use when prompt mentions overdue invoice/forfalt faktura, reminder fee/purregebyr/taxa de lembrete, late payment charge, or inkasso)
+- ledger_error_correction (use when prompt mentions finding errors in the ledger/hovedbok, wrong account postings, duplicate vouchers, missing VAT lines, correcting bookkeeping mistakes)
 - unknown (if none of the above match)
 
 ## Data format rules:
@@ -151,12 +152,16 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - period1Start, period1End, period2Start, period2End (for ledger analysis, YYYY-MM-DD format)
 - numAccounts (number of top accounts to find, default 3)
 - analysisType (increase or decrease, default increase)
-- assets (array of {name, value, years, account} for year-end depreciation)
+- assets (array of {name, value, years, account, accumulatedAccount} for year-end depreciation)
 - depreciationExpenseAccount (account number for depreciation expense, default 6010)
+- accumulatedDepreciationAccount (contra-account for accumulated depreciation, e.g., 1209 for 1210)
+- prepaidAccount, prepaidAmount, accrualAmount (for monthly closing: transfer from prepaid to expense)
 - transactions (array of {date, description, amount, type, reference} from CSV bank statements -- extract these from attached CSV files)
 - reminderFee, partialPaymentAmount, debitAccount, creditAccount
 - exchangeRate, originalCurrency, currencyAmount, currencyDifference
 - employees (array of {name, hours} when multiple employees register hours on same project)
+- errors (array of {type, account, correctAccount, amount, correctAmount, vatRate, description} for ledger error correction. Types: wrong_account, duplicate, missing_vat, wrong_amount)
+- prepaidExpenseAccount (specific expense account for prepaid accrual, e.g., 6400 rent, 7000 insurance)
 """
 
 # ---------------------------------------------------------------------------
@@ -1706,7 +1711,10 @@ async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: di
         return {"success": False, "error": "No assets provided for year-end closing"}
 
     depreciation_expense_acct_num = int(f.get("depreciationExpenseAccount") or f.get("debitAccount") or 6010)
-    voucher_date = f.get("date") or f"{time.strftime('%Y')}-12-31"
+    accumulated_depr_acct_num = f.get("accumulatedDepreciationAccount") or f.get("creditAccount")
+    prepaid_acct_num = f.get("prepaidAccount")  # e.g., 1710/1720 for monthly accruals
+    prepaid_amount = f.get("prepaidAmount") or f.get("accrualAmount")
+    voucher_date = f.get("date") or f.get("period1End") or f"{time.strftime('%Y')}-12-31"
     description = f.get("description") or "Arsavslutning - avskrivninger"
 
     # Look up the depreciation expense account once (shared across all assets)
@@ -1729,12 +1737,27 @@ async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: di
 
         annual_depreciation = round(asset_value / asset_years, 2)
 
-        # Look up the asset account
-        asset_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": asset_account_num})
-        if not asset_acct_r.get("success") or not asset_acct_r.get("data"):
-            log.warning("Year-end: could not find asset account %d for %s, skipping", asset_account_num, asset_name)
-            continue
-        asset_acct_id = as_list(asset_acct_r["data"])[0]["id"]
+        # Determine credit account: use accumulated depreciation account if provided,
+        # otherwise use the asset's own contra-account (asset_account - 1, e.g., 1209 for 1210)
+        credit_acct_num = asset_account_num
+        if accumulated_depr_acct_num:
+            credit_acct_num = int(accumulated_depr_acct_num)
+        elif asset.get("accumulatedAccount"):
+            credit_acct_num = int(asset["accumulatedAccount"])
+        else:
+            # Convention: accumulated depreciation contra-account ends in 9
+            # e.g., 1210 -> 1219, 1230 -> 1239, 1200 -> 1209
+            credit_acct_num = (asset_account_num // 10) * 10 + 9
+
+        # Look up the credit (accumulated depreciation) account
+        credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": credit_acct_num})
+        if not credit_acct_r.get("success") or not credit_acct_r.get("data"):
+            # Fallback: try the asset account directly
+            credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": asset_account_num})
+            if not credit_acct_r.get("success") or not credit_acct_r.get("data"):
+                log.warning("Year-end: could not find account %d or %d for %s, skipping", credit_acct_num, asset_account_num, asset_name)
+                continue
+        credit_acct_id = as_list(credit_acct_r["data"])[0]["id"]
 
         # Debit: depreciation expense
         postings.append({
@@ -1747,19 +1770,50 @@ async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: di
         })
         row += 1
 
-        # Credit: asset account (reduces asset value)
+        # Credit: accumulated depreciation account (contra-account)
         postings.append({
             "row": row, "date": voucher_date,
-            "account": {"id": asset_acct_id},
+            "account": {"id": credit_acct_id},
             "amountGross": -annual_depreciation,
             "amountGrossCurrency": -annual_depreciation,
             "currency": {"id": 1},
-            "description": f"Avskrivning {asset_name}",
+            "description": f"Akkumulert avskrivning {asset_name}",
         })
         row += 1
 
+    # Add prepaid expense accrual if specified (monthly closing: transfer from prepaid to expense)
+    if prepaid_acct_num and prepaid_amount:
+        pp_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(prepaid_acct_num)})
+        if pp_acct_r.get("success") and pp_acct_r.get("data"):
+            pp_acct_id = as_list(pp_acct_r["data"])[0]["id"]
+            pp_amt = float(prepaid_amount)
+            # Debit: specific prepaid expense account if provided, else fall back to depreciation expense
+            pp_expense_acct_num = f.get("prepaidExpenseAccount")
+            pp_expense_acct_id = expense_acct_id  # default fallback
+            if pp_expense_acct_num:
+                pp_exp_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(pp_expense_acct_num)})
+                if pp_exp_r.get("success") and pp_exp_r.get("data"):
+                    pp_expense_acct_id = as_list(pp_exp_r["data"])[0]["id"]
+            postings.append({
+                "row": row, "date": voucher_date,
+                "account": {"id": pp_expense_acct_id},
+                "amountGross": pp_amt, "amountGrossCurrency": pp_amt,
+                "currency": {"id": 1},
+                "description": f"Periodisering forskuddsbetalt kostnad",
+            })
+            row += 1
+            # Credit: prepaid account
+            postings.append({
+                "row": row, "date": voucher_date,
+                "account": {"id": pp_acct_id},
+                "amountGross": -pp_amt, "amountGrossCurrency": -pp_amt,
+                "currency": {"id": 1},
+                "description": f"Periodisering forskuddsbetalt kostnad",
+            })
+            row += 1
+
     if not postings:
-        return {"success": False, "error": "No valid assets to depreciate"}
+        return {"success": False, "error": "No valid assets to depreciate or accrue"}
 
     voucher_body = {
         "date": voucher_date,
@@ -1783,7 +1837,6 @@ async def exec_bank_reconciliation(c: httpx.AsyncClient, base: str, tok: str, f:
         "invoiceDateFrom": "2020-01-01",
         "invoiceDateTo": "2030-12-31",
         "count": 200,
-        "fields": "id,invoiceNumber,customer(id;name),amount,amountOutstanding,currency(code)",
     })
     open_invoices = []
     if inv_r.get("success") and inv_r.get("data"):
@@ -1984,6 +2037,114 @@ async def exec_overdue_invoice_reminder(c: httpx.AsyncClient, base: str, tok: st
     return {"success": True, "data": {"overdue_invoice_id": overdue_inv_id, "reminder_fee": reminder_fee}}
 
 
+async def exec_ledger_error_correction(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    """Find and correct errors in the ledger: wrong accounts, duplicates, missing VAT, wrong amounts.
+    The LLM extracts the specific errors from the prompt."""
+    errors = f.get("errors") or []
+    if not errors:
+        return {"success": False, "error": "No errors extracted from prompt"}
+
+    voucher_date = f.get("date") or time.strftime("%Y-%m-%d")
+    postings = []
+    row = 1
+
+    for err in errors:
+        err_type = err.get("type", "")
+        err_account = err.get("account")
+        correct_account = err.get("correctAccount")
+        amount = float(err.get("amount", 0))
+        desc = err.get("description", "Korreksjonsbilag")
+
+        if err_type == "wrong_account" and err_account and correct_account:
+            # Reverse from wrong account, post to correct account
+            wrong_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(err_account)})
+            correct_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(correct_account)})
+            if wrong_acct_r.get("success") and wrong_acct_r.get("data") and correct_acct_r.get("success") and correct_acct_r.get("data"):
+                wrong_id = as_list(wrong_acct_r["data"])[0]["id"]
+                correct_id = as_list(correct_acct_r["data"])[0]["id"]
+                # Credit wrong account (reverse)
+                postings.append({"row": row, "date": voucher_date, "account": {"id": wrong_id},
+                    "amountGross": -amount, "amountGrossCurrency": -amount,
+                    "currency": {"id": 1}, "description": f"Korreksjon: feil konto {err_account}"})
+                row += 1
+                # Debit correct account
+                postings.append({"row": row, "date": voucher_date, "account": {"id": correct_id},
+                    "amountGross": amount, "amountGrossCurrency": amount,
+                    "currency": {"id": 1}, "description": f"Korreksjon: riktig konto {correct_account}"})
+                row += 1
+
+        elif err_type == "duplicate" and err_account:
+            # Reverse the duplicate entry (debit+credit to zero it out)
+            dup_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(err_account)})
+            if dup_acct_r.get("success") and dup_acct_r.get("data"):
+                dup_id = as_list(dup_acct_r["data"])[0]["id"]
+                # Credit to reverse the duplicate debit
+                postings.append({"row": row, "date": voucher_date, "account": {"id": dup_id},
+                    "amountGross": -amount, "amountGrossCurrency": -amount,
+                    "currency": {"id": 1}, "description": f"Korreksjon: duplikat konto {err_account}"})
+                row += 1
+                # Need a balancing entry - use bank account 1920
+                bank_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
+                if bank_r.get("success") and bank_r.get("data"):
+                    bank_id = as_list(bank_r["data"])[0]["id"]
+                    postings.append({"row": row, "date": voucher_date, "account": {"id": bank_id},
+                        "amountGross": amount, "amountGrossCurrency": amount,
+                        "currency": {"id": 1}, "description": f"Korreksjon: duplikat"})
+                    row += 1
+
+        elif err_type == "missing_vat" and err_account:
+            # Add the missing VAT posting
+            vat_map = await lookup_vat_map(c, base, tok)
+            vat_rate = float(err.get("vatRate", 25))
+            vat_amount = round(amount * vat_rate / 100, 2)
+            acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(err_account)})
+            if acct_r.get("success") and acct_r.get("data"):
+                acct_id = as_list(acct_r["data"])[0]["id"]
+                # Debit: VAT on the expense
+                postings.append({"row": row, "date": voucher_date, "account": {"id": acct_id},
+                    "amountGross": vat_amount, "amountGrossCurrency": vat_amount,
+                    "currency": {"id": 1}, "description": f"Korreksjon: manglende MVA linje"})
+                row += 1
+                # Credit: input VAT account (2710 for deductible input VAT)
+                vat_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 2710})
+                if not vat_acct_r.get("success") or not vat_acct_r.get("data"):
+                    vat_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 2700})
+                if vat_acct_r.get("success") and vat_acct_r.get("data"):
+                    vat_acct_id = as_list(vat_acct_r["data"])[0]["id"]
+                    postings.append({"row": row, "date": voucher_date, "account": {"id": vat_acct_id},
+                        "amountGross": -vat_amount, "amountGrossCurrency": -vat_amount,
+                        "currency": {"id": 1}, "description": f"Korreksjon: manglende MVA"})
+                    row += 1
+
+        elif err_type == "wrong_amount" and err_account:
+            # Post the difference
+            diff = float(err.get("correctAmount", 0)) - amount
+            if diff != 0:
+                acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(err_account)})
+                if acct_r.get("success") and acct_r.get("data"):
+                    acct_id = as_list(acct_r["data"])[0]["id"]
+                    postings.append({"row": row, "date": voucher_date, "account": {"id": acct_id},
+                        "amountGross": diff, "amountGrossCurrency": diff,
+                        "currency": {"id": 1}, "description": f"Korreksjon: feil belop"})
+                    row += 1
+                    bank_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
+                    if bank_r.get("success") and bank_r.get("data"):
+                        bank_id = as_list(bank_r["data"])[0]["id"]
+                        postings.append({"row": row, "date": voucher_date, "account": {"id": bank_id},
+                            "amountGross": -diff, "amountGrossCurrency": -diff,
+                            "currency": {"id": 1}, "description": f"Korreksjon: belop differanse"})
+                        row += 1
+
+    if not postings:
+        return {"success": False, "error": "Could not build correction postings"}
+
+    return await tx(c, base, tok, "POST", "/ledger/voucher", {
+        "date": voucher_date,
+        "description": "Korreksjonsbilag - feilretting i hovedbok",
+        "postings": postings,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Task router
 # ---------------------------------------------------------------------------
@@ -2014,6 +2175,7 @@ TASK_EXECUTORS = {
     "year_end_closing": exec_year_end_closing,
     "bank_reconciliation": exec_bank_reconciliation,
     "overdue_invoice_reminder": exec_overdue_invoice_reminder,
+    "ledger_error_correction": exec_ledger_error_correction,
 }
 
 
