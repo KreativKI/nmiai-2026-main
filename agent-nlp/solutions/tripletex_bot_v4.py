@@ -134,7 +134,8 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 
 ## Field names to use:
 - name, firstName, lastName, email, phone, mobile, orgNumber
-- dateOfBirth, startDate, endDate, address, postalCode, city
+- dateOfBirth, startDate, endDate, address, postalCode, city, nationalIdentityNumber (personnummer/personnr, 11 digits)
+- occupationCode (stillingskode/STYRK code, e.g., "2511" or "3112")
 - productName, productNumber, price, vatRate (25, 15, 12, or 0)
 - departmentName, departmentNumber
 - projectName, projectNumber, projectManagerName, projectManagerEmail
@@ -260,31 +261,22 @@ async def ensure_department(c: httpx.AsyncClient, base: str, tok: str) -> int | 
 
 
 async def find_customer(c: httpx.AsyncClient, base: str, tok: str, name: str, org_nr: str | None = None) -> dict:
-    """Find a customer by name or org number. Returns {"success": True, "id": int} or error."""
-    # Try name search first (API does partial match, so filter for exact)
+    """Find a customer by name or org number. Returns {"success": True, "id": int} or error.
+    Optimized: max 1 GET (name search catches most cases). No full-scan fallback."""
+    # Single GET: name search (API does partial match, filter for exact locally)
     cust_r = await tx(c, base, tok, "GET", "/customer", params={"name": name, "count": 20})
     if cust_r.get("success") and cust_r.get("data"):
         customers = as_list(cust_r["data"])
+        # Try exact name match first
         for c_item in customers:
             if c_item.get("name") == name:
                 return {"success": True, "id": c_item["id"]}
-        # No exact match in name search results, try other methods
-    # Fallback: search by org number
-    if org_nr:
-        cust_r2 = await tx(c, base, tok, "GET", "/customer", params={"organizationNumber": org_nr, "count": 5})
-        if cust_r2.get("success") and cust_r2.get("data"):
-            customers2 = as_list(cust_r2["data"])
-            log.info("Customer found by orgNumber=%s (name search failed for '%s')", org_nr, name)
-            return {"success": True, "id": customers2[0]["id"]}
-    # Fallback: list all customers and search
-    all_r = await tx(c, base, tok, "GET", "/customer", params={"count": 100})
-    if all_r.get("success") and all_r.get("data"):
-        all_custs = as_list(all_r["data"])
-        for c_item in all_custs:
-            if c_item.get("name") == name:
-                log.info("Customer found via full list scan for '%s'", name)
-                return {"success": True, "id": c_item["id"]}
-    log.warning("Customer '%s' not found by any method", name)
+        # If partial matches exist but no exact, check org number within results
+        if org_nr:
+            for c_item in customers:
+                if str(c_item.get("organizationNumber", "")) == str(org_nr):
+                    return {"success": True, "id": c_item["id"]}
+    log.warning("Customer '%s' not found", name)
     return {"success": False, "error": f"Customer '{name}' not found"}
 
 
@@ -507,14 +499,28 @@ async def exec_create_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
 
 
 async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    dept_id = await ensure_department(c, base, tok)
+    # Create specific department if name given, otherwise use default
+    dept_name = f.get("departmentName")
+    if dept_name:
+        # Check if department with this name exists
+        dept_r = await tx(c, base, tok, "GET", "/department", params={"name": dept_name, "count": 5})
+        if dept_r.get("success") and dept_r.get("data"):
+            depts = as_list(dept_r["data"])
+            dept_id = depts[0]["id"]
+        else:
+            dept_r = await tx(c, base, tok, "POST", "/department", {"name": dept_name, "departmentNumber": 100})
+            dept_id = dept_r["data"]["id"] if dept_r.get("success") and dept_r.get("data") else None
+    else:
+        dept_id = await ensure_department(c, base, tok)
     if not dept_id:
         return {"success": False, "error": "Could not obtain department ID"}
 
     # Create employee with dateOfBirth (REQUIRED for employment)
     first, last = split_name(f)
-    user_type = f.get("userType", "STANDARD")
-    email = f.get("email") or f"{first.lower()}@company.no"
+    user_type = f.get("userType", "NO_ACCESS")
+    email = f.get("email")
+    if not email and user_type in ("STANDARD", "EXTENDED"):
+        email = f"{first.lower()}@company.no"
     emp_body = {
         "firstName": first,
         "lastName": last,
@@ -524,6 +530,7 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
         "dateOfBirth": f.get("dateOfBirth", "1990-01-15"),
     }
     if f.get("mobile"): emp_body["phoneNumberMobile"] = f["mobile"]
+    if f.get("nationalIdentityNumber"): emp_body["nationalIdentityNumber"] = f["nationalIdentityNumber"]
 
     emp_r = await tx(c, base, tok, "POST", "/employee", emp_body)
     if not emp_r.get("success"):
@@ -537,6 +544,8 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
         "startDate": start_date,
         "isMainEmployer": True,
     }
+    if f.get("occupationCode"):
+        employment_body["occupationCode"] = str(f["occupationCode"])
     empl_r = await tx(c, base, tok, "POST", "/employee/employment", employment_body)
     if not empl_r.get("success"):
         return empl_r
