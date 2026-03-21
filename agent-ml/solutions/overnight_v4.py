@@ -244,7 +244,7 @@ def predict_and_submit(session, round_id, detail, round_num, deep_seed,
     seeds_count = detail["seeds_count"]
 
     lgb_params = load_lgb_params()
-    alpha = lgb_params.pop("alpha_dirichlet", 20)
+    base_alpha = lgb_params.pop("alpha_dirichlet", 20)
     lgb_params["objective"] = "regression"
     lgb_params["metric"] = "mse"
     lgb_params["verbose"] = -1
@@ -299,6 +299,9 @@ def predict_and_submit(session, round_id, detail, round_num, deep_seed,
             regime = "stable"
         if regime != old_regime:
             log(f"  Regime reclassified: {old_regime} -> {regime} (obs_settle_growth={osg:.2f})")
+
+    # Per-regime Dirichlet alpha (after reclassification, so regime is final)
+    alpha = {"death": 5, "stable": 30, "growth": 15}.get(regime, base_alpha)
 
     regime_flags = {
         "regime_death": 1 if regime == "death" else 0,
@@ -465,7 +468,7 @@ def post_round_pipeline(session, round_data, state):
                     cal["rounds"] = [r for r in cal.get("rounds", []) if r["round"] != rn]
                     cal["rounds"].append({
                         "round": rn, "actual": actual,
-                        "regime": "unknown",
+                        "regime": state.get(f"regime_r{rn}", "unknown"),
                     })
                     with open(CAL_FILE, "w") as f:
                         json.dump(cal, f, indent=2)
@@ -523,25 +526,41 @@ def run_cycle(session, state):
     log(f"R{round_num} active, {remaining:.0f} min left, weight={active['round_weight']:.4f}")
 
     if round_num in state["submitted_rounds"]:
-        # Already submitted: check for resubmit opportunity
+        # Already submitted: check for resubmit opportunities
+        deep_seed = (round_num + state.get("deep_seed_offset", 0)) % 5
+        oc_path = DATA_DIR / f"obs_counts_r{round_num}_seed{deep_seed}_stacked.npy"
+        ot_path = DATA_DIR / f"obs_total_r{round_num}_seed{deep_seed}_stacked.npy"
+
+        should_resubmit = False
+        resubmit_reason = ""
+
+        # Check if replay data now exists (enables full trajectory features)
+        if remaining > 15 and not state.get(f"replay_resubmit_r{round_num}"):
+            replay_exists = (REPLAY_DIR / f"r{round_num}_seed0.json").exists()
+            if replay_exists:
+                should_resubmit = True
+                resubmit_reason = "replay data now available"
+
+        # Check if churn found new params
         if remaining > 30 and PARAMS_FILE.exists():
             mtime = PARAMS_FILE.stat().st_mtime
             if mtime > state.get("last_submit_time", 0):
-                log(f"  Churn found new params, resubmitting...")
-                detail = session.get(f"{BASE}/astar-island/rounds/{round_id}").json()
-                deep_seed = (round_num + state.get("deep_seed_offset", 0)) % 5
+                should_resubmit = True
+                resubmit_reason = "new churn params"
 
-                oc_path = DATA_DIR / f"obs_counts_r{round_num}_seed{deep_seed}_stacked.npy"
-                ot_path = DATA_DIR / f"obs_total_r{round_num}_seed{deep_seed}_stacked.npy"
-                if oc_path.exists() and ot_path.exists():
-                    oc = np.load(oc_path)
-                    ot = np.load(ot_path)
-                    regime = state.get(f"regime_r{round_num}", "stable")
-                    predict_and_submit(session, round_id, detail, round_num,
-                                       deep_seed, oc, ot, regime)
-                    state["last_submit_time"] = time.time()
-                    save_state(state)
-                    log(f"  R{round_num} RESUBMITTED with new churn params")
+        if should_resubmit and oc_path.exists() and ot_path.exists():
+            log(f"  Resubmitting R{round_num}: {resubmit_reason}")
+            detail = session.get(f"{BASE}/astar-island/rounds/{round_id}").json()
+            oc = np.load(oc_path)
+            ot = np.load(ot_path)
+            regime = state.get(f"regime_r{round_num}", "stable")
+            predict_and_submit(session, round_id, detail, round_num,
+                               deep_seed, oc, ot, regime)
+            state["last_submit_time"] = time.time()
+            if "replay" in resubmit_reason:
+                state[f"replay_resubmit_r{round_num}"] = True
+            save_state(state)
+            log(f"  R{round_num} RESUBMITTED ({resubmit_reason})")
         else:
             log(f"  R{round_num} already submitted.")
         return True
