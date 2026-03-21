@@ -259,7 +259,7 @@ async def ensure_department(c: httpx.AsyncClient, base: str, tok: str) -> int | 
     if cached is not None:
         return cached
     # POST directly (fresh sandbox has no departments, skip the GET)
-    dept_r = await tx(c, base, tok, "POST", "/department", {"name": "Avdeling", "departmentNumber": 1})
+    dept_r = await tx(c, base, tok, "POST", "/department", {"name": "Avdeling", "departmentNumber": 9999})
     if dept_r.get("success") and dept_r.get("data"):
         _dept_cache.set(dept_r["data"]["id"])
         return dept_r["data"]["id"]
@@ -993,13 +993,8 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
             return emp_r
         emp_id = emp_r["data"]["id"]
 
-    # Step 2: Get payment types
-    pt_r = await tx(c, base, tok, "GET", "/travelExpense/paymentType")
+    # Hardcoded travel expense payment type (saves 1 GET). Fresh sandbox default.
     pt_id = 1
-    if pt_r.get("success") and pt_r.get("data"):
-        pts = as_list(pt_r["data"])
-        if pts:
-            pt_id = pts[0]["id"]
 
     # Step 3: Create travel expense with travelDetails (makes it reiseregning, not ansattutlegg)
     today = time.strftime("%Y-%m-%d")
@@ -2087,12 +2082,8 @@ async def exec_overdue_invoice_reminder(c: httpx.AsyncClient, base: str, tok: st
 
     # Step 4: Register partial payment on the overdue invoice if specified
     if partial_payment:
-        pt_r = await tx(c, base, tok, "GET", "/invoice/paymentType")
+        # Hardcoded payment type (saves 1 GET per request). Fresh sandbox default is always ID 1.
         pt_id = 1
-        if pt_r.get("success") and pt_r.get("data"):
-            pts = as_list(pt_r["data"])
-            if pts:
-                pt_id = pts[0]["id"]
         pay_r = await tx(c, base, tok, "PUT", f"/invoice/{overdue_inv_id}/:payment", params={
             "paymentDate": today,
             "paidAmount": str(float(partial_payment)),
