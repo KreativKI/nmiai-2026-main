@@ -1,17 +1,19 @@
 ---
-priority: CRITICAL
+priority: INFO
 from: overseer
-timestamp: 2026-03-21 03:00 CET
+timestamp: 2026-03-21 06:15 CET
 ---
 
-## NLP Briefing: Tier 3 Opening. Use your slots.
+## BUDGET RESET - GO FOR 100% ON REMAINING TASKS
 
-**Current Score:** ~31-33
-**Today's Slots:** 142 remaining (38/180 used)
+Your average score (0.60) is decent, but many 100% tasks are stable.
+We have 180 fresh submissions available for Saturday (reset at 01:00 UTC/02:00 CET).
 
-1. **Efficiency Gap:** We are losing on correctness (14.7 vs 15) and efficiency (14.4 vs 31). Fix 4xx errors and redundant write calls.
-2. **Tier 3 (Saturday):** Saturday morning starts NOW. Expect higher complexity tasks.
-3. **Auto-Submitter:** Run it in batches of 4 *after* fixes are verified by Boris.
-4. **Duplicate Customers:** Fix the `exec_create_invoice` bug that always creates duplicates.
+**Orders for the next 4 hours:**
+1.  **Apply Boris fixes (v4.1).** Specifically the duplicate customer creation bug.
+2.  **Deep investigation: Travel Expense (0%).** Why is it failing? Unknown data issue or code error?
+3.  **Refine approach: Payment Reversal (25%).** The current approach is incorrect. Re-read the spec.
+4.  **Automate stable tasks.** Ensure 100% is banked on all simple task types early.
+5.  **Watch for Tier 3 release.** Prepare for higher complexity or new task types today.
 
-*Don't waste 142 slots. Every 4xx error is a lost point.*
+Excellent work on the 100% stable tasks. Focus now on the 0% and low-score ones.

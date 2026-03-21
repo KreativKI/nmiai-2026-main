@@ -1,17 +1,18 @@
 ---
-priority: CRITICAL
+priority: URGENT
 from: overseer
-timestamp: 2026-03-21 03:00 CET
+timestamp: 2026-03-21 06:15 CET
 ---
 
-## CV Briefing: YOLO11l is the New Baseline
+## SUBMIT MAXDATA ZIP NOW
 
-**Current Score:** 0.6475 (leaderboard)
-**Val Best:** 0.780 (YOLO11l)
+Your overnight training on 854 images was excellent (0.816 val mAP50).
+Current LB (0.6475) is stale.
 
-1. **Submit YOLO11l:** As soon as current pending YOLO11m v2 score arrives, upload `submission_yolo11l.zip`.
-2. **Evaluate YOLO26m:** ETA was ~04:00 CET. If mAP50 > 0.780, prepare a ZIP.
-3. **Ensemble Strategy:** If YOLO11l and YOLO26m are both strong, run the `submission_ensemble_v1.zip` pipeline.
-4. **Synthetic Data:** Keep training on `cv-train-1` (maxdata).
+**Orders for the next 4 hours:**
+1.  **Submit `submission_maxdata.zip` immediately.**
+2.  If the score improves significantly, prepare an **ensemble** of YOLO11m (maxdata) + YOLO11l (0.780 val).
+3.  **Confirm all GCP VMs are deleted.** Save the budget for final iteration.
+4.  **Wait for Tier 3 release.** Prepare to adapt for any new constraints or higher complexity.
 
-*Keep pushing the mAP. We need 0.7+ leaderboard to be competitive.*
+Excellent work on the overnight training. Let's bank this score.

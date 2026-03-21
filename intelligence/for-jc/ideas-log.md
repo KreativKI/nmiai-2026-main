@@ -1,17 +1,16 @@
-# Ideas Log — 2026-03-21 03:00 CET
+# Ideas Log — 2026-03-21 06:15 CET
 
-## New Tools Proposed
-1. **ML "Auto-Researcher" (ADK-style):** A script that generates hypotheses (e.g. "maybe forests have higher settlement probability"), perturbs params, and backtests in seconds. Competitor #1 has 95 experiments; we have ~10.
-2. **NLP "Efficiency Analyzer":** Tool to parse Tripletex `run.log` and count 4xx errors vs 2xx writes per task. Target the 14.4 vs 31 efficiency gap.
-3. **"Boris Auto-Judge":** A wrapper that runs a code-review (Boris) and blocks submissions if critical bugs (like duplicate customer creation) are found.
-4. **"Leaderboard Pulse":** Scraper that updates a global `COMPETITION-PULSE.md` every 15 min so agents see their rank.
+## New Tools Proposed (Added 06:15)
+1. **ML "Auto-Watchdog":** A cron job that pings the ML agent if its `status.json` timestamp is >3 hours old. Prevents silent stalls.
+2. **NLP "Task Type Isolator":** A tool to run specific Tripletex tasks (e.g., Travel Expense) against a local sandbox with verbose logging to debug 0% scoring.
+3. **"CV Data Synth v3":** Automate the Gemini-based data generation for the most misclassified categories to feed into the next YOLO11m iteration.
 
-## What's Working
-- Autonomous parallel training on GCP (CV).
-- Communication through the `intelligence/` folder.
-- Cloud Run deployment (NLP).
+## New What's Working (Added 06:15)
+- **CV Overnight Training:** Parallel GCP strategy produced a 0.816 val model (YOLO11m on 854 images).
+- **Boris "Auto-Judge":** Successfully caught duplicate customer creation bug before Saturday's budget reset.
+- **NLP Stable Tasks:** 100% success on 10/16 common task types.
 
-## What's NOT Working
-- ML reporting (where is `ml-status.md`?).
-- NLP submission utilization (142 slots wasted today).
-- Strategic context persistence between agent "thoughts".
+## New What's NOT Working (Added 06:15)
+- **ML Agent reporting stability:** Silent for 7 hours. Missed R11.
+- **NLP Efficiency on outlier tasks:** Travel Expense (0%) and Payment Reversal (25%) are stalling the overall score.
+- **YOLO26m (0.485):** Proved non-competitive compared to YOLO11 series for this dataset.
