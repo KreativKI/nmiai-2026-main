@@ -50,7 +50,7 @@ def log(msg):
         with open(CHURN_LOG, "a") as f:
             f.write(line + "\n")
     except Exception:
-        print(line, flush=True)
+        print(line, file=sys.stderr, flush=True)
 
 
 def load_best():
@@ -74,11 +74,18 @@ def save_if_better(score, params, experiment_name):
         params["experiment"] = experiment_name
         params["fitted_at"] = datetime.now(timezone.utc).isoformat()
         fd, tmp_path = tempfile.mkstemp(dir=str(DATA_DIR), suffix=".json.tmp")
+        fd_consumed = False
         try:
             with os.fdopen(fd, "w") as f:
+                fd_consumed = True
                 json.dump(params, f, indent=2)
             os.replace(tmp_path, str(PARAMS_FILE))
         except Exception:
+            if not fd_consumed:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
             try:
                 os.unlink(tmp_path)
             except OSError:

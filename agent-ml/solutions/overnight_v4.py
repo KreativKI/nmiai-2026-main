@@ -47,10 +47,11 @@ CAL_FILE = DATA_DIR / "calibration_v4_32feat.json"
 
 COMPETITION_END = datetime(2026, 3, 22, 14, 0, 0, tzinfo=timezone.utc)
 
-# Default LightGBM params (overridden by churn if brain_v4_params.json exists)
+# Default params (overridden by churn if brain_v4_params.json exists)
 DEFAULT_PARAMS = {
     "n_estimators": 50, "num_leaves": 31, "learning_rate": 0.05,
     "min_child_samples": 20, "subsample": 0.8, "colsample_bytree": 0.8,
+    "alpha_dirichlet": 20.0,
 }
 
 
@@ -224,12 +225,12 @@ def predict_and_submit(session, round_id, detail, round_num, deep_seed,
     h, w = detail["map_height"], detail["map_width"]
     seeds_count = detail["seeds_count"]
 
-    # Load churn params or defaults
+    # Load churn params or defaults (includes alpha_dirichlet if churn found one)
     lgb_params = load_lgb_params()
+    alpha = lgb_params.pop("alpha_dirichlet", 20)  # Extract alpha before passing to LGB
     lgb_params["objective"] = "regression"
     lgb_params["metric"] = "mse"
     lgb_params["verbose"] = -1
-    alpha = 20  # Dirichlet alpha
 
     # Train V4 on master dataset (all cached rounds)
     rounds_data = load_cached_rounds()
