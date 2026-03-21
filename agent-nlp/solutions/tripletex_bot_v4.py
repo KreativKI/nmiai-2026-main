@@ -1269,10 +1269,12 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
     org_number = f.get("orgNumber") or f.get("supplierOrgNumber")
     total_incl_vat = float(f.get("amount") or f.get("totalAmount") or f.get("invoiceAmount") or 0)
     vat_rate = float(f.get("vatRate", 25))
-    # Parse account number safely (LLM may put description in 'account' field)
+    # Parse account number safely (LLM may put org number or description in 'account' field)
     raw_acct = f.get("accountNumber") or f.get("account") or "6300"
     try:
         expense_account_number = int(raw_acct)
+        if expense_account_number < 1000 or expense_account_number > 9999:
+            expense_account_number = 6300  # fallback for invalid numbers (org numbers, etc.)
     except (ValueError, TypeError):
         expense_account_number = 6300
     invoice_number = f.get("invoiceNumber") or ""
