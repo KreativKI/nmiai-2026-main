@@ -1,16 +1,37 @@
 {
   "rounds": [
     {
-      "round_id": "75e625c3-60cb-4392-af3e-c86a98bde8c2",
-      "round_number": 10,
+      "round_id": "324fde07-1670-4202-b199-7aa92ecb40ee",
+      "round_number": 11,
       "status": "active",
-      "opens_at": "2026-03-20T21:00:58.134788+00:00",
-      "closes_at": "2026-03-20T23:45:58.134788+00:00",
-      "round_weight": 1.6289,
+      "opens_at": "2026-03-21T00:26:30.495136+00:00",
+      "closes_at": "2026-03-21T03:11:30.495136+00:00",
+      "round_weight": 1.7103,
       "our_score": null,
       "seed_scores": null,
       "our_rank": null,
       "total_teams": null,
+      "seeds_submitted": 5,
+      "queries_used": 47,
+      "queries_total": 50
+    },
+    {
+      "round_id": "75e625c3-60cb-4392-af3e-c86a98bde8c2",
+      "round_number": 10,
+      "status": "completed",
+      "opens_at": "2026-03-20T21:00:58.134788+00:00",
+      "closes_at": "2026-03-20T23:45:58.134788+00:00",
+      "round_weight": 1.6289,
+      "our_score": 50.1939,
+      "seed_scores": [
+        55.184,
+        48.7143,
+        48.2794,
+        49.3588,
+        49.4329
+      ],
+      "our_rank": 166,
+      "total_teams": 238,
       "seeds_submitted": 5,
       "queries_used": 50,
       "queries_total": 50
@@ -194,10 +215,10 @@
     }
   ],
   "active_round": {
-    "round_id": "75e625c3-60cb-4392-af3e-c86a98bde8c2",
-    "round_number": 10,
-    "closes_at": "2026-03-20T23:45:58.134788+00:00",
-    "budget_remaining": 0
+    "round_id": "324fde07-1670-4202-b199-7aa92ecb40ee",
+    "round_number": 11,
+    "closes_at": "2026-03-21T03:11:30.495136+00:00",
+    "budget_remaining": 3
   },
-  "last_fetched": "2026-03-20T22:34:02.438805+00:00"
+  "last_fetched": "2026-03-21T01:08:07.548173+00:00"
 }

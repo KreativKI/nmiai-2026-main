@@ -1,0 +1,90 @@
+[
+  {
+    "timestamp": "2026-03-20T11:05:14.793167+00:00",
+    "source": "/tmp/test_ml_preds.json",
+    "seed_count": 5,
+    "valid": true,
+    "error_count": 0,
+    "warning_count": 0,
+    "score": null,
+    "weighted_kl": null,
+    "verdict": "VALID"
+  },
+  {
+    "timestamp": "2026-03-20T11:05:37.088408+00:00",
+    "source": "/tmp/test_ml_perfect.json",
+    "seed_count": 5,
+    "valid": true,
+    "error_count": 0,
+    "warning_count": 0,
+    "score": 100.0,
+    "weighted_kl": 0.0,
+    "verdict": "SUBMIT"
+  },
+  {
+    "timestamp": "2026-03-20T11:05:37.233384+00:00",
+    "source": "/tmp/test_ml_bad.json",
+    "seed_count": 5,
+    "valid": true,
+    "error_count": 0,
+    "warning_count": 0,
+    "score": 1.99,
+    "weighted_kl": 1.305733,
+    "verdict": "SKIP"
+  },
+  {
+    "timestamp": "2026-03-20T11:05:37.433709+00:00",
+    "source": "/tmp/test_ml_zeros.json",
+    "seed_count": 5,
+    "valid": false,
+    "error_count": 5,
+    "warning_count": 0,
+    "score": null,
+    "weighted_kl": null,
+    "verdict": "VALIDATION_ERROR"
+  },
+  {
+    "timestamp": "2026-03-20T11:09:26.368873+00:00",
+    "source": "/tmp/test_ml_perfect.json",
+    "seed_count": 5,
+    "valid": true,
+    "error_count": 0,
+    "warning_count": 0,
+    "score": 100.0,
+    "weighted_kl": 0.0,
+    "verdict": "RISKY"
+  },
+  {
+    "timestamp": "2026-03-20T11:09:26.704751+00:00",
+    "source": "/tmp/test_ml_bad.json",
+    "seed_count": 5,
+    "valid": true,
+    "error_count": 0,
+    "warning_count": 0,
+    "score": 1.99,
+    "weighted_kl": 1.305733,
+    "verdict": "SKIP"
+  },
+  {
+    "timestamp": "2026-03-20T11:09:26.927211+00:00",
+    "source": "/tmp/test_ml_zeros.json",
+    "seed_count": 5,
+    "valid": false,
+    "error_count": 5,
+    "warning_count": 0,
+    "score": null,
+    "weighted_kl": null,
+    "verdict": "VALIDATION_ERROR"
+  },
+  {
+    "timestamp": "2026-03-20T11:09:27.130540+00:00",
+    "source": "/tmp/test_ml_zeros.json",
+    "seed_count": 5,
+    "valid": true,
+    "error_count": 0,
+    "warning_count": 5,
+    "score": null,
+    "weighted_kl": null,
+    "verdict": "VALID"
+  }
+]

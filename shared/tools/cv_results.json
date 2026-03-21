@@ -1,0 +1,42 @@
+[
+  {
+    "timestamp": "2026-03-20T11:04:02.775426+00:00",
+    "source": "/Volumes/devdrive/github_dev/nmiai-2026-main/agent-cv/docker_output/predictions.json",
+    "detection_mAP": 0.0,
+    "classification_mAP": 0.0,
+    "combined_score": 0.0,
+    "holdout_images": 50,
+    "prediction_count": 0,
+    "verdict": "SUBMIT"
+  },
+  {
+    "timestamp": "2026-03-20T11:04:54.631685+00:00",
+    "source": "/tmp/test_preds.json",
+    "detection_mAP": 0.079208,
+    "classification_mAP": 0.153428,
+    "combined_score": 0.101474,
+    "holdout_images": 50,
+    "prediction_count": 372,
+    "verdict": "SUBMIT"
+  },
+  {
+    "timestamp": "2026-03-20T11:05:57.750505+00:00",
+    "source": "/tmp/test_preds.json",
+    "detection_mAP": 0.079208,
+    "classification_mAP": 0.153428,
+    "combined_score": 0.101474,
+    "holdout_images": 50,
+    "prediction_count": 372,
+    "verdict": "RISKY"
+  },
+  {
+    "timestamp": "2026-03-20T11:09:25.847557+00:00",
+    "source": "/tmp/test_preds.json",
+    "detection_mAP": 0.079208,
+    "classification_mAP": 0.153428,
+    "combined_score": 0.101474,
+    "holdout_images": 50,
+    "prediction_count": 372,
+    "verdict": "RISKY"
+  }
+]
