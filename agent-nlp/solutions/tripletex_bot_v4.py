@@ -933,20 +933,10 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
     # NOK equivalent of what the customer actually paid
     pay_amount_nok = round(curr_amt * pay_rate, 2) if (curr_amt and pay_rate) else amount
 
-    # paidAmountCurrency = foreign currency amount (EUR), paidAmount = NOK equivalent
-    paid_currency_str = str(curr_amt) if curr_amt else str(pay_amount_nok)
-    pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params={
-        "paymentDate": pay_date,
-        "paidAmount": str(pay_amount_nok),
-        "paidAmountCurrency": paid_currency_str,
-        "paymentTypeId": str(pt_id),
-    })
-
-    # Fallback: if /:payment returns 404, use voucher posting instead
-    if not pay_r.get("success") and pay_r.get("status_code") == 404:
-        log.info("/:payment returned 404, falling back to voucher posting for payment")
-        pay_r = await post_payment_voucher(c, base, tok, pay_amount_nok, pay_date,
-                                           customer_id=cust_r.get("id"))
+    # Use voucher posting directly (/:payment always 404s on pre-populated invoices,
+    # and each 404 costs efficiency points)
+    pay_r = await post_payment_voucher(c, base, tok, pay_amount_nok, pay_date,
+                                       customer_id=cust_r.get("id"))
 
     # Post currency difference (agio/disagio) if applicable
     currency_diff = f.get("currencyDifference")
