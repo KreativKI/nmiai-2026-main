@@ -402,11 +402,13 @@ class LabelHandler(http.server.BaseHTTPRequestHandler):
             total = len(self.image_list)
             labeled = len(progress.get("labeled", []))
             skipped = len(progress.get("skipped", []))
+            deleted = len(progress.get("deleted", []))
             self.send_json({
                 "total": total,
                 "labeled": labeled,
                 "skipped": skipped,
-                "remaining": total - labeled - skipped,
+                "deleted": deleted,
+                "remaining": total - labeled - skipped - deleted,
                 "folder": progress.get("folder", ""),
             })
             return
@@ -415,9 +417,17 @@ class LabelHandler(http.server.BaseHTTPRequestHandler):
             progress = load_json(PROGRESS_PATH)
             labeled_set = set(progress.get("labeled", []))
             skipped_set = set(progress.get("skipped", []))
+            deleted_set = set(progress.get("deleted", []))
             items = []
             for i, img_name in enumerate(self.image_list):
-                status = "labeled" if img_name in labeled_set else "skipped" if img_name in skipped_set else "pending"
+                if img_name in deleted_set:
+                    status = "delete"
+                elif img_name in labeled_set:
+                    status = "labeled"
+                elif img_name in skipped_set:
+                    status = "skipped"
+                else:
+                    status = "pending"
                 info = self.manifest.get(img_name, {"product_name": img_name})
                 items.append({
                     "index": i, "filename": img_name,
@@ -429,7 +439,7 @@ class LabelHandler(http.server.BaseHTTPRequestHandler):
 
         if path == "/api/next":
             progress = load_json(PROGRESS_PATH)
-            done = set(progress.get("labeled", []) + progress.get("skipped", []))
+            done = set(progress.get("labeled", []) + progress.get("skipped", []) + progress.get("deleted", []))
             for i, img in enumerate(self.image_list):
                 if img not in done:
                     self.send_json(self.image_data(img, i))
@@ -482,7 +492,7 @@ class LabelHandler(http.server.BaseHTTPRequestHandler):
             total = apply_folder(folder_path)
             progress = load_json(PROGRESS_PATH)
             if progress.get("folder") != folder:
-                progress = {"folder": folder, "labeled": [], "skipped": []}
+                progress = {"folder": folder, "labeled": [], "skipped": [], "deleted": []}
             save_json(PROGRESS_PATH, progress)
             add_folder_history(folder)
             print(f"Folder: {folder} ({total} images)")
@@ -508,8 +518,12 @@ class LabelHandler(http.server.BaseHTTPRequestHandler):
                 labeled.append(filename)
             if filename in skipped:
                 skipped.remove(filename)
+            deleted = progress.get("deleted", [])
+            if filename in deleted:
+                deleted.remove(filename)
             progress["labeled"] = labeled
             progress["skipped"] = skipped
+            progress["deleted"] = deleted
             save_json(PROGRESS_PATH, progress)
             # Auto-notify CV agent when running low
             remaining = len(self.image_list) - len(labeled) - len(skipped)
@@ -532,10 +546,38 @@ class LabelHandler(http.server.BaseHTTPRequestHandler):
             filename = body["filename"]
             progress = load_json(PROGRESS_PATH)
             skipped = progress.get("skipped", [])
+            deleted = progress.get("deleted", [])
             if filename not in skipped:
                 skipped.append(filename)
+            if filename in deleted:
+                deleted.remove(filename)
             progress["skipped"] = skipped
+            progress["deleted"] = deleted
             save_json(PROGRESS_PATH, progress)
+            self.send_json({"ok": True})
+            return
+
+        if path == "/api/mark-delete":
+            filename = body["filename"]
+            progress = load_json(PROGRESS_PATH)
+            labeled = progress.get("labeled", [])
+            skipped = progress.get("skipped", [])
+            deleted = progress.get("deleted", [])
+            if filename not in deleted:
+                deleted.append(filename)
+            if filename in labeled:
+                labeled.remove(filename)
+            if filename in skipped:
+                skipped.remove(filename)
+            progress["labeled"] = labeled
+            progress["skipped"] = skipped
+            progress["deleted"] = deleted
+            save_json(PROGRESS_PATH, progress)
+            # Also remove the label file if one exists
+            if self.labels_dir:
+                label_path = self.labels_dir / (Path(filename).stem + ".txt")
+                if label_path.exists():
+                    label_path.unlink()
             self.send_json({"ok": True})
             return
 
@@ -543,6 +585,7 @@ class LabelHandler(http.server.BaseHTTPRequestHandler):
             progress = load_json(PROGRESS_PATH)
             folder = progress.get("folder", "")
             labeled = progress.get("labeled", [])
+            deleted = progress.get("deleted", [])
             total = len(self.image_list)
 
             # Write completion notice to CV agent
@@ -550,15 +593,24 @@ class LabelHandler(http.server.BaseHTTPRequestHandler):
             intel_dir.mkdir(parents=True, exist_ok=True)
             batch_name = Path(folder).name if folder else "unknown"
             notice_path = intel_dir / "BATCH-LABELED.md"
+            delete_section = ""
+            if deleted:
+                delete_section = (
+                    f"\n## Images Marked for Deletion\n\n"
+                    f"JC flagged {len(deleted)} images as bad. **Delete these files** from images/ and labels/:\n"
+                    + "".join(f"- {f}\n" for f in deleted)
+                )
             notice_path.write_text(
                 f"---\npriority: HIGH\nfrom: ops-agent\ntimestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n---\n\n"
                 f"## Batch Labeled Complete\n\n"
                 f"**Batch:** {batch_name}\n"
                 f"**Folder:** {folder}\n"
                 f"**Labeled:** {len(labeled)} / {total}\n"
+                f"**Deleted:** {len(deleted)}\n"
                 f"**Labels location:** {folder}/labels/\n"
                 f"**Format:** YOLO .txt (category_id cx cy w h, normalized 0-1)\n\n"
                 f"Please verify labels and prepare for training.\n"
+                + delete_section
             )
             print(f"BATCH COMPLETE: {batch_name} ({len(labeled)}/{total}), notified CV agent")
 
@@ -586,7 +638,7 @@ class LabelHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({"error": "Next batch folder not found"}, 400)
                 return
             total = apply_folder(next_folder)
-            progress = {"folder": next_folder, "labeled": [], "skipped": []}
+            progress = {"folder": next_folder, "labeled": [], "skipped": [], "deleted": []}
             save_json(PROGRESS_PATH, progress)
             add_folder_history(next_folder)
             print(f"Next batch: {next_folder} ({total} images)")

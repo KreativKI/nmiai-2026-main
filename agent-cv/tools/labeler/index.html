@@ -143,6 +143,7 @@ canvas{display:block;touch-action:none}
 <div class="bottombar">
     <button onclick="saveAndNext()" class="btn btn-green">Save &#10132;</button>
     <button onclick="skipImage()" class="btn btn-red">Skip</button>
+    <button onclick="markDelete()" class="btn btn-ghost" style="color:var(--red);border:1px solid var(--red)">&#10005; Bad</button>
     <button onclick="snapBox()" class="btn btn-amber">Snap</button>
     <button onclick="undoAction()" class="btn btn-ghost">Undo</button>
     <button onclick="toggleMode()" class="btn btn-ghost" id="mode-btn">Mode: Tap</button>
@@ -279,10 +280,11 @@ async function goHome(){
     const grid=document.getElementById('gallery-grid');grid.innerHTML='';
     const labeled=list.filter(x=>x.status==='labeled').length;
     document.getElementById('gallery-stats').innerText=list.length+' total | '+labeled+' labeled';
+    const dotColors={delete:'#ff00ff',labeled:'var(--green)',skipped:'var(--red)'};
     for(const item of list){
         const card=document.createElement('div');card.className='gallery-card';
         card.onclick=()=>{closeGallery();goToIndex(item.index)};
-        const dot=item.status==='labeled'?'var(--green)':item.status==='skipped'?'var(--red)':'var(--muted)';
+        const dot=dotColors[item.status]||'var(--muted)';
         card.innerHTML='<img src="/images/'+encodeURIComponent(item.filename)+'" loading="lazy"><div class="dot" style="background:'+dot+'"></div><div class="lbl">'+(item.index+1)+'. '+item.product_name+'</div>';
         grid.appendChild(card);
     }
@@ -314,7 +316,7 @@ async function updateProgress(){
     const s=await api('/api/status');if(!s)return;totalImages=s.total;
     document.getElementById('image-counter').innerText=(currentIndex>=0?(currentIndex+1):'-')+'/'+s.total;
     document.getElementById('progress-text').innerText=s.labeled+' labeled';
-    document.getElementById('progress-bar').style.width=(s.total>0?((s.labeled+s.skipped)/s.total*100):0)+'%';
+    document.getElementById('progress-bar').style.width=(s.total>0?((s.labeled+s.skipped+(s.deleted||0))/s.total*100):0)+'%';
     if(s.remaining===0&&s.total>0){
         const m=Math.floor(sessionSeconds/60),sec=sessionSeconds%60;
         const avg=s.labeled>0?(sessionSeconds/s.labeled).toFixed(1):'-';
@@ -332,6 +334,7 @@ async function saveLabel(){
 }
 async function saveAndNext(){await saveLabel();nextImage()}
 async function skipImage(){if(!currentImage)return;await api('/api/skip',{method:'POST',body:JSON.stringify({filename:currentImage.filename})});loadNext()}
+async function markDelete(){if(!currentImage)return;await api('/api/mark-delete',{method:'POST',body:JSON.stringify({filename:currentImage.filename})});showToast('Marked for deletion');loadNext()}
 async function nextImage(){if(currentIndex>=0&&currentIndex<totalImages-1)goToIndex(currentIndex+1);else loadNext()}
 async function nextImageNav(){await saveLabel();nextImage()}
 async function prevImage(){if(currentIndex>0){await saveLabel();goToIndex(currentIndex-1)}}
@@ -531,6 +534,7 @@ window.addEventListener('keydown',(e)=>{
     else if(e.key==='ArrowLeft'){e.preventDefault();prevImage()}
     else if(e.key===' '){e.preventDefault();snapBox()}
     else if(e.key.toLowerCase()==='s'&&!e.metaKey){e.preventDefault();skipImage()}
+    else if(e.key.toLowerCase()==='d'&&!e.metaKey){e.preventDefault();markDelete()}
     else if(e.key.toLowerCase()==='m'&&!e.metaKey){e.preventDefault();toggleMode()}
 });
 
