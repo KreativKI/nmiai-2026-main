@@ -109,6 +109,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - register_supplier_invoice (use when prompt mentions supplier invoice/leverandorfaktura/incoming invoice from a vendor/supplier, registering a received bill)
 - create_dimension (use when prompt mentions accounting dimension/dimensjon, custom dimensions, creating dimension values, or posting with dimensions)
 - create_supplier (use when prompt says to register/create a supplier/leverandor entity, NOT a supplier invoice)
+- analyze_ledger_create_projects (use when prompt asks to analyze the ledger/grand livre/hovedbok, find accounts with biggest changes/increases/decreases between periods, and create projects and/or activities based on the analysis)
 - unknown (if none of the above match)
 
 ## Data format rules:
@@ -144,6 +145,9 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - updateFields (for updates: what to change)
 - supplierName, supplierOrgNumber, invoiceNumber, invoiceAmount, totalAmount, account, accountNumber
 - dimensionName, dimensionValues (array of strings), linkedDimensionValue
+- period1Start, period1End, period2Start, period2End (for ledger analysis, YYYY-MM-DD format)
+- numAccounts (number of top accounts to find, default 3)
+- analysisType (increase or decrease, default increase)
 """
 
 # ---------------------------------------------------------------------------
@@ -1478,6 +1482,115 @@ async def exec_create_supplier(c: httpx.AsyncClient, base: str, tok: str, f: dic
     return await tx(c, base, tok, "POST", "/customer", body)
 
 
+async def exec_analyze_ledger_create_projects(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    """Analyze ledger postings between two periods, find top N expense accounts
+    with the biggest change, and create an internal project + activity for each."""
+    from collections import defaultdict
+    from datetime import datetime, timedelta
+
+    # Parse periods from extracted fields (with sensible defaults)
+    p1_start = f.get("period1Start", "2026-01-01")
+    p1_end = f.get("period1End", "2026-01-31")
+    p2_start = f.get("period2Start", "2026-02-01")
+    p2_end = f.get("period2End", "2026-02-28")
+    num_accounts = int(f.get("numAccounts", 3))
+    analysis_type = f.get("analysisType", "increase")  # "increase" or "decrease"
+
+    # Step 1: Fetch ALL postings across both periods in a single call
+    # dateTo in the API is EXCLUSIVE, so add 1 day to the end
+    try:
+        end_dt = datetime.strptime(p2_end, "%Y-%m-%d")
+        date_to_exclusive = (end_dt + timedelta(days=1)).strftime("%Y-%m-%d")
+    except ValueError:
+        date_to_exclusive = "2026-03-01"
+
+    postings_r = await tx(c, base, tok, "GET", "/ledger/posting", params={
+        "dateFrom": p1_start,
+        "dateTo": date_to_exclusive,
+        "accountNumberFrom": 4000,
+        "accountNumberTo": 7999,
+        "count": 10000,
+        "fields": "account(id;number;name),amount,date",
+    })
+    if not postings_r.get("success") or not postings_r.get("data"):
+        return {"success": False, "error": "Could not fetch ledger postings"}
+
+    postings = as_list(postings_r["data"])
+
+    # Step 2: Aggregate amounts by account and period
+    # Period 1: p1_start to p1_end, Period 2: p2_start to p2_end
+    period1_sums: dict[int, float] = defaultdict(float)
+    period2_sums: dict[int, float] = defaultdict(float)
+    account_names: dict[int, str] = {}
+
+    for posting in postings:
+        acct = posting.get("account") or {}
+        acct_num = acct.get("number")
+        acct_name = acct.get("name", "")
+        amount = float(posting.get("amount", 0))
+        post_date = posting.get("date", "")
+
+        if not acct_num or not post_date:
+            continue
+
+        account_names[acct_num] = acct_name
+
+        if p1_start <= post_date <= p1_end:
+            period1_sums[acct_num] += amount
+        elif p2_start <= post_date <= p2_end:
+            period2_sums[acct_num] += amount
+
+    # Step 3: Calculate changes for all accounts present in either period
+    all_accounts = set(period1_sums.keys()) | set(period2_sums.keys())
+    changes = []
+    for acct_num in all_accounts:
+        p1 = period1_sums.get(acct_num, 0.0)
+        p2 = period2_sums.get(acct_num, 0.0)
+        change = p2 - p1
+        changes.append((acct_num, account_names.get(acct_num, f"Konto {acct_num}"), change))
+
+    # Step 4: Sort and pick top N
+    if analysis_type == "decrease":
+        changes.sort(key=lambda x: x[2])  # smallest (most negative) first
+    else:
+        changes.sort(key=lambda x: x[2], reverse=True)  # largest increase first
+
+    top_accounts = changes[:num_accounts]
+    log.info("Ledger analysis: top %d accounts by %s: %s", num_accounts, analysis_type,
+             [(a[0], a[1], f"{a[2]:.2f}") for a in top_accounts])
+
+    if not top_accounts:
+        return {"success": False, "error": "No expense account changes found between periods"}
+
+    # Step 5: Get admin as project manager (1 GET call)
+    whoami = await tx(c, base, tok, "GET", "/token/session/>whoAmI")
+    admin_emp = whoami.get("data", {}).get("employee", {})
+    pm_id = admin_emp.get("id")
+    if not pm_id:
+        return {"success": False, "error": "Could not determine project manager from whoAmI"}
+
+    # Step 6: Create projects and activities
+    last_result = {"success": False, "error": "No projects created"}
+    for acct_num, acct_name, change in top_accounts:
+        proj_name = acct_name or f"Konto {acct_num}"
+        proj_r = await tx(c, base, tok, "POST", "/project", {
+            "name": proj_name,
+            "projectManager": {"id": pm_id},
+            "isInternal": True,
+            "startDate": time.strftime("%Y-%m-%d"),
+        })
+        if proj_r.get("success") and proj_r.get("data"):
+            proj_id = proj_r["data"]["id"]
+            # Create a project-specific activity linked to this project
+            await tx(c, base, tok, "POST", "/project/projectActivity", {
+                "project": {"id": proj_id},
+                "activity": {"name": proj_name},
+            })
+            last_result = proj_r
+
+    return last_result
+
+
 # ---------------------------------------------------------------------------
 # Task router
 # ---------------------------------------------------------------------------
@@ -1504,6 +1617,7 @@ TASK_EXECUTORS = {
     "register_supplier_invoice": exec_register_supplier_invoice,
     "create_dimension": exec_create_dimension,
     "create_supplier": exec_create_supplier,
+    "analyze_ledger_create_projects": exec_analyze_ledger_create_projects,
 }
 
 
