@@ -162,7 +162,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - prepaidAccount, prepaidAmount, accrualAmount (for monthly closing: transfer from prepaid to expense)
 - transactions (array of {date, description, amount, type, reference} from CSV bank statements -- extract these from attached CSV files)
 - reminderFee, partialPaymentAmount, debitAccount, creditAccount
-- exchangeRate, originalCurrency, currencyAmount, currencyDifference
+- exchangeRate (the original rate when invoice was sent), paymentExchangeRate (the rate when customer paid), originalCurrency, currencyAmount, currencyDifference
 - employees (array of {name, hours} when multiple employees register hours on same project)
 - errors (array of {type, account, correctAccount, amount, correctAmount, vatRate, description} for ledger error correction. Types: wrong_account, duplicate, missing_vat, wrong_amount)
 - prepaidExpenseAccount (specific expense account for prepaid accrual, e.g., 6400 rent, 7000 insurance)
@@ -857,30 +857,37 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
     pay_date = f.get("paymentDate", time.strftime("%Y-%m-%d"))
 
     # Determine payment amount in NOK (may differ from invoice amount due to currency)
-    currency_amount = f.get("currencyAmount")
-    exchange_rate = f.get("exchangeRate")
+    currency_amount = f.get("currencyAmount")  # Amount in foreign currency (e.g., EUR)
+    original_rate = f.get("exchangeRate")  # Rate when invoice was sent
+    payment_rate = f.get("paymentExchangeRate")  # Rate when customer paid
     original_currency = f.get("originalCurrency")
 
-    if currency_amount and exchange_rate:
-        # Payment was in foreign currency at a specific exchange rate
-        paid_nok = float(currency_amount) * float(exchange_rate)
-        paid_currency = float(currency_amount)
+    if currency_amount and (original_rate or payment_rate):
+        curr_amt = float(currency_amount)
+        orig_rate = float(original_rate or payment_rate)
+        pay_rate = float(payment_rate or original_rate)
     else:
-        paid_nok = amount
-        paid_currency = amount
+        orig_rate = None
+        pay_rate = None
+        curr_amt = None
 
+    # Always pay the sandbox invoice amount (what was owed)
+    pay_amount_nok = amount
+
+    # paidAmountCurrency = foreign currency amount (EUR), paidAmount = NOK equivalent
+    paid_currency_str = str(curr_amt) if curr_amt else str(pay_amount_nok)
     pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params={
         "paymentDate": pay_date,
-        "paidAmount": str(paid_nok),
-        "paidAmountCurrency": str(paid_currency),
+        "paidAmount": str(pay_amount_nok),
+        "paidAmountCurrency": paid_currency_str,
         "paymentTypeId": str(pt_id),
     })
 
     # Post currency difference (agio/disagio) if applicable
     currency_diff = f.get("currencyDifference")
-    if not currency_diff and currency_amount and exchange_rate:
-        # Calculate difference: paid NOK minus invoice NOK amount
-        currency_diff = paid_nok - amount
+    if not currency_diff and curr_amt and orig_rate and pay_rate:
+        # Difference = what was actually received minus what was invoiced
+        currency_diff = (curr_amt * pay_rate) - (curr_amt * orig_rate)
 
     if currency_diff:
         diff = float(currency_diff)
@@ -904,20 +911,21 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
                 if cust_id_for_voucher:
                     ar_posting_extra = {"customer": {"id": cust_id_for_voucher}}
 
-                # Balanced voucher: debit/credit depends on gain or loss
+                # Balanced voucher: agio = gain (more NOK received), disagio = loss (less NOK received)
                 if diff > 0:
-                    # Agio: debit 1500 (AR), credit 8060 (gain)
+                    # Agio: credit AR (reduce receivable), credit 8060 (gain income)
+                    # Actually: debit bank-like, credit 8060. AR already closed by /:payment.
                     postings = [
                         {"row": 1, "date": pay_date, "account": {"id": ar_acct_id},
-                         "amountGross": abs_diff, "amountGrossCurrency": abs_diff,
+                         "amountGross": -abs_diff, "amountGrossCurrency": -abs_diff,
                          "currency": {"id": 1}, "description": "Valutagevinst (agio)",
                          **ar_posting_extra},
                         {"row": 2, "date": pay_date, "account": {"id": diff_acct_id},
-                         "amountGross": -abs_diff, "amountGrossCurrency": -abs_diff,
+                         "amountGross": abs_diff, "amountGrossCurrency": abs_diff,
                          "currency": {"id": 1}, "description": "Valutagevinst (agio)"},
                     ]
                 else:
-                    # Disagio: debit 8160 (loss), credit 1500 (AR)
+                    # Disagio: debit 8160 (loss expense), credit AR
                     postings = [
                         {"row": 1, "date": pay_date, "account": {"id": diff_acct_id},
                          "amountGross": abs_diff, "amountGrossCurrency": abs_diff,
@@ -2045,13 +2053,13 @@ async def exec_overdue_invoice_reminder(c: httpx.AsyncClient, base: str, tok: st
         return {"success": False, "error": "No overdue invoice found"}
     overdue_inv_id = overdue_inv["id"]
 
-    # Step 2: Create reminder invoice for the fee (skip voucher to avoid double-booking)
+    # Step 2: Create reminder invoice (invoice auto-creates ledger postings, no separate voucher needed)
     if customer_id:
         # Register bank account for invoicing
         acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
         if acct_r.get("success") and acct_r.get("data"):
             accts = as_list(acct_r["data"])
-            if accts and not accts[0].get("bankAccountNumber"):
+            if accts:
                 await tx(c, base, tok, "PUT", f"/ledger/account/{accts[0]['id']}", {
                     "bankAccountNumber": "19201234568",
                     "bankAccountCountry": {"id": 161}, "currency": {"id": 1},
