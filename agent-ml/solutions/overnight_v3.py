@@ -572,12 +572,13 @@ def run_chef_v3(session, round_id, detail, round_num):
 
     all_obs = {0: (obs_counts.copy(), obs_total.copy())}
 
-    # DEEP STACK STRATEGY (R9 insight: concentrated queries >> spread)
-    # R9 scored 82.6 with ALL seeds 80+ using deep stack on seed 0.
-    # Multiple observations per cell give better probability estimates.
-    # Budget: ~30 queries on seed 0 (3 passes), ~10 on seeds 1-2, model-only 3-4.
+    # PURE DEEP STACK (Direction A): ALL queries on seed 0
+    # R9 proof: 50 queries on seed 0 -> ALL seeds scored 80+ (std 0.9)
+    # Cross-seed transfer from deep observations is the #1 scoring lever.
+    # Seeds 1-4 use model-only prediction (14 rounds training data).
 
     # Pass 1: Cover seed 0 completely (fill gaps from smell test)
+    pass_count = 1
     for vx, vy, vw, vh in viewports:
         if rem <= 0:
             break
@@ -596,12 +597,13 @@ def run_chef_v3(session, round_id, detail, round_num):
             log(f"  Seed 0 pass 1 failed: {e}")
             break
 
-    # Pass 2+3: Deep stack seed 0 (re-query same viewports for multi-sampling)
-    # Each re-query runs a NEW stochastic simulation, giving independent samples
-    deep_budget = min(rem - 10, 18)  # Reserve 10 for seeds 1-2
-    if deep_budget > 0:
+    # Passes 2-5: Re-query seed 0 for multi-sampling (all remaining budget)
+    # Each re-query runs a NEW stochastic simulation = independent sample
+    while rem > 0:
+        pass_count += 1
+        queries_this_pass = 0
         for vx, vy, vw, vh in viewports:
-            if deep_budget <= 0:
+            if rem <= 0:
                 break
             try:
                 obs = query_viewport(session, round_id, 0, vx, vy, vw, vh, round_num=round_num)
@@ -611,47 +613,22 @@ def run_chef_v3(session, round_id, detail, round_num):
                         ya, xa = obs["viewport"]["y"] + dy, obs["viewport"]["x"] + dx
                         oc[ya, xa, TERRAIN_TO_CLASS.get(terrain, 0)] += 1
                         ot[ya, xa] += 1
-                deep_budget -= 1
                 rem -= 1
+                queries_this_pass += 1
             except Exception:
                 break
+        if queries_this_pass == 0:
+            break
 
     np.save(DATA_DIR / f"obs_counts_r{round_num}_seed0_stacked.npy", all_obs[0][0])
     np.save(DATA_DIR / f"obs_total_r{round_num}_seed0_stacked.npy", all_obs[0][1])
     avg_samples = all_obs[0][1][all_obs[0][1] > 0].mean() if (all_obs[0][1] > 0).any() else 0
     log(f"  Seed 0: {(all_obs[0][1] > 0).sum()}/{height*width} cells, "
-        f"avg {avg_samples:.1f} samples/cell (deep stack)")
+        f"avg {avg_samples:.1f} samples/cell ({pass_count} passes, pure deep stack)")
 
-    # Seeds 1-2: basic coverage with remaining queries
-    per_seed = rem // 2 if rem > 0 else 0
-    for si in range(1, min(3, seeds_count)):
-        if rem <= 0:
-            break
-        oc = np.zeros((height, width, NUM_CLASSES))
-        ot = np.zeros((height, width))
-        sb = min(per_seed, rem)
-        for vx, vy, vw, vh in viewports:
-            if sb <= 0:
-                break
-            try:
-                obs = query_viewport(session, round_id, si, vx, vy, vw, vh, round_num=round_num)
-                for dy, row in enumerate(obs["grid"]):
-                    for dx, terrain in enumerate(row):
-                        ya, xa = obs["viewport"]["y"] + dy, obs["viewport"]["x"] + dx
-                        oc[ya, xa, TERRAIN_TO_CLASS.get(terrain, 0)] += 1
-                        ot[ya, xa] += 1
-                sb -= 1
-                rem -= 1
-            except Exception:
-                break
-        np.save(DATA_DIR / f"obs_counts_r{round_num}_seed{si}_overview.npy", oc)
-        np.save(DATA_DIR / f"obs_total_r{round_num}_seed{si}_overview.npy", ot)
-        all_obs[si] = (oc, ot)
-        log(f"  Seed {si}: {(ot > 0).sum()}/{height*width} cells")
-
-    # Seeds 3-4: model-only (no observations, cross-seed transfer from seed 0)
-    for si in range(3, seeds_count):
-        log(f"  Seed {si}: model-only (cross-seed transfer)")
+    # Seeds 1-4: model-only (cross-seed transfer from deep-stacked seed 0)
+    for si in range(1, seeds_count):
+        log(f"  Seed {si}: model-only (cross-seed transfer from seed 0)")
 
     # ── DUAL PREDICT & SUBMIT ──
     _submit_blended(session, round_id, detail, round_num, all_obs, regime_info)
