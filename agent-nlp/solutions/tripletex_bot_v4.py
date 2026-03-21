@@ -781,14 +781,18 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
     # Step 3: Create travel expense with travelDetails (makes it reiseregning, not ansattutlegg)
     today = time.strftime("%Y-%m-%d")
     location = f.get("travelLocation", "")
-    per_diem_days = f.get("perDiemDays")
+    per_diem_days = int(f.get("perDiemDays", 1))
+    # Set departure/return dates based on trip duration
+    from datetime import datetime, timedelta
+    dep_date = datetime.strptime(today, "%Y-%m-%d")
+    ret_date = dep_date + timedelta(days=max(per_diem_days - 1, 0))
     te_body = {
         "employee": {"id": emp_id},
         "title": f.get("title", "Reiseregning"),
         "travelDetails": {
-            "departureDate": today,
-            "returnDate": today,
-            "departureFrom": location or "Oslo",
+            "departureDate": dep_date.strftime("%Y-%m-%d"),
+            "returnDate": ret_date.strftime("%Y-%m-%d"),
+            "departureFrom": "Oslo",
             "destination": location or "Oslo",
             "purpose": f.get("title", "Tjenestereise"),
         },
