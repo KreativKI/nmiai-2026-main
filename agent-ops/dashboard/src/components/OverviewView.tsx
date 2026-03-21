@@ -349,6 +349,20 @@ export function OverviewView() {
           subtitle={ourRow ? `Rank #${ourRow["rank"] ?? ourRow["#"] ?? "?"}` : "Not on leaderboard"}
           color="text-sky-900"
         />
+        {latestLB && ourRow && (() => {
+          const top10Last = latestLB.rows[9];
+          const top10Score = top10Last ? Number(top10Last["total"] ?? 0) : 0;
+          const ourTotal = Number(ourRow["total"] ?? 0);
+          const gap = top10Score - ourTotal;
+          return (
+            <MetricCard
+              label="Gap to #10"
+              value={gap > 0 ? gap.toFixed(1) : "In top 10!"}
+              subtitle={top10Last ? `#10: ${String(top10Last["team"] ?? "?")}` : ""}
+              color={gap > 0 ? "text-red-600" : "text-green-600"}
+            />
+          );
+        })()}
         <MetricCard
           label="ML Weighted"
           value={mlWeightedTotal > 0 ? mlWeightedTotal.toFixed(1) : "--"}
