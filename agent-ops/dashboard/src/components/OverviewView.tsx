@@ -215,10 +215,10 @@ export function OverviewView() {
 
   // --- Derive track scorecard data ---
 
-  // ML card: latest scored round
+  // ML card: latest scored round + weighted total from leaderboard
   const scoredRounds = mlData?.rounds.filter((r) => r.our_score != null) ?? [];
   const latestScoredML = scoredRounds.length > 0 ? scoredRounds[0] : null;
-  const mlScore = latestScoredML?.our_score ?? null;
+  const mlLatestScore = latestScoredML?.our_score ?? null;
   const mlRank = latestScoredML?.our_rank ?? null;
   const mlRoundsCount = scoredRounds.length;
   const mlBudget = mlData?.active_round?.budget_remaining ?? 0;
@@ -243,6 +243,9 @@ export function OverviewView() {
            d.getUTCDate() === now.getUTCDate();
   }).length;
   const nlpDailyLimit = nlpTaskScores?.daily_limit ?? 180;
+
+  // ML weighted total from leaderboard (cumulative score across all rounds)
+  const mlWeightedTotal = ourRow ? Number(ourRow["astar_island"] ?? 0) : 0;
 
   // CV card
   const cvScore = ourRow ? Number(ourRow["norgesgruppen"] ?? 0) : 0;
@@ -310,11 +313,11 @@ export function OverviewView() {
             </h3>
           </div>
           <div className="space-y-1.5">
-            <ScoreRow label="Score" value={mlScore != null ? mlScore.toFixed(1) : "--"} bold />
-            <ScoreRow label="Rank" value={mlRank != null ? `#${mlRank}` : "--"} />
+            <ScoreRow label="Weighted Total" value={mlWeightedTotal > 0 ? mlWeightedTotal.toFixed(1) : "--"} bold />
+            <ScoreRow label="Latest Round" value={mlLatestScore != null ? mlLatestScore.toFixed(1) : "--"} />
+            <ScoreRow label="Rank (round)" value={mlRank != null ? `#${mlRank}` : "--"} />
             <ScoreRow label="Rounds scored" value={String(mlRoundsCount)} />
             <ScoreRow label="Budget left" value={`${mlBudget} queries`} />
-            <ScoreRow label="Weight" value="33.33%" />
           </div>
         </div>
 
@@ -378,9 +381,9 @@ export function OverviewView() {
           color="text-sky-900"
         />
         <MetricCard
-          label="ML Score"
-          value={mlScore != null ? mlScore.toFixed(1) : "--"}
-          subtitle={mlRank != null ? `Rank #${mlRank}` : "No rank yet"}
+          label="ML Weighted"
+          value={mlWeightedTotal > 0 ? mlWeightedTotal.toFixed(1) : "--"}
+          subtitle={mlLatestScore != null ? `Latest: ${mlLatestScore.toFixed(1)}` : "No rounds yet"}
           color="text-green-700"
         />
         <MetricCard
