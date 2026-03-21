@@ -110,6 +110,9 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - create_dimension (use when prompt mentions accounting dimension/dimensjon, custom dimensions, creating dimension values, or posting with dimensions)
 - create_supplier (use when prompt says to register/create a supplier/leverandor entity, NOT a supplier invoice)
 - analyze_ledger_create_projects (use when prompt asks to analyze the ledger/grand livre/hovedbok, find accounts with biggest changes/increases/decreases between periods, and create projects and/or activities based on the analysis)
+- year_end_closing (use when prompt mentions year-end/arsoppgjor/Jahresabschluss, depreciation/avskrivning/Abschreibung, closing entries, or annual closing)
+- bank_reconciliation (use when prompt mentions bank reconciliation/bankavstemming/Kontoabgleich, matching payments to invoices, CSV bank statement)
+- overdue_invoice_reminder (use when prompt mentions overdue invoice/forfalt faktura, reminder fee/purregebyr/taxa de lembrete, late payment charge, or inkasso)
 - unknown (if none of the above match)
 
 ## Data format rules:
@@ -148,6 +151,12 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - period1Start, period1End, period2Start, period2End (for ledger analysis, YYYY-MM-DD format)
 - numAccounts (number of top accounts to find, default 3)
 - analysisType (increase or decrease, default increase)
+- assets (array of {name, value, years, account} for year-end depreciation)
+- depreciationExpenseAccount (account number for depreciation expense, default 6010)
+- transactions (array of {date, description, amount, type, reference} from CSV bank statements -- extract these from attached CSV files)
+- reminderFee, partialPaymentAmount, debitAccount, creditAccount
+- exchangeRate, originalCurrency, currencyAmount, currencyDifference
+- employees (array of {name, hours} when multiple employees register hours on same project)
 """
 
 # ---------------------------------------------------------------------------
@@ -818,12 +827,77 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
             pt_id = pts[0]["id"]
 
     pay_date = f.get("paymentDate", time.strftime("%Y-%m-%d"))
-    return await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params={
+
+    # Determine payment amount in NOK (may differ from invoice amount due to currency)
+    currency_amount = f.get("currencyAmount")
+    exchange_rate = f.get("exchangeRate")
+    original_currency = f.get("originalCurrency")
+
+    if currency_amount and exchange_rate:
+        # Payment was in foreign currency at a specific exchange rate
+        paid_nok = float(currency_amount) * float(exchange_rate)
+        paid_currency = float(currency_amount)
+    else:
+        paid_nok = amount
+        paid_currency = amount
+
+    pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params={
         "paymentDate": pay_date,
-        "paidAmount": str(amount),
-        "paidAmountCurrency": str(amount),
+        "paidAmount": str(paid_nok),
+        "paidAmountCurrency": str(paid_currency),
         "paymentTypeId": str(pt_id),
     })
+
+    # Post currency difference (agio/disagio) if applicable
+    currency_diff = f.get("currencyDifference")
+    if not currency_diff and currency_amount and exchange_rate:
+        # Calculate difference: paid NOK minus invoice NOK amount
+        currency_diff = paid_nok - amount
+
+    if currency_diff:
+        diff = float(currency_diff)
+        if abs(diff) > 0.01:
+            # Agio (gain) = 8060, Disagio (loss) = 8160
+            if diff > 0:
+                diff_account_number = 8060  # Agio (currency gain)
+            else:
+                diff_account_number = 8160  # Disagio (currency loss)
+
+            # Look up accounts
+            diff_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": diff_account_number})
+            ar_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1500})
+            if diff_acct_r.get("success") and diff_acct_r.get("data") and ar_acct_r.get("success") and ar_acct_r.get("data"):
+                diff_acct_id = as_list(diff_acct_r["data"])[0]["id"]
+                ar_acct_id = as_list(ar_acct_r["data"])[0]["id"]
+                abs_diff = abs(diff)
+                # Balanced voucher: debit/credit depends on gain or loss
+                if diff > 0:
+                    # Agio: debit 1500 (AR), credit 8060 (gain)
+                    postings = [
+                        {"row": 1, "date": pay_date, "account": {"id": ar_acct_id},
+                         "amountGross": abs_diff, "amountGrossCurrency": abs_diff,
+                         "currency": {"id": 1}, "description": "Valutagevinst (agio)"},
+                        {"row": 2, "date": pay_date, "account": {"id": diff_acct_id},
+                         "amountGross": -abs_diff, "amountGrossCurrency": -abs_diff,
+                         "currency": {"id": 1}, "description": "Valutagevinst (agio)"},
+                    ]
+                else:
+                    # Disagio: debit 8160 (loss), credit 1500 (AR)
+                    postings = [
+                        {"row": 1, "date": pay_date, "account": {"id": diff_acct_id},
+                         "amountGross": abs_diff, "amountGrossCurrency": abs_diff,
+                         "currency": {"id": 1}, "description": "Valutatap (disagio)"},
+                        {"row": 2, "date": pay_date, "account": {"id": ar_acct_id},
+                         "amountGross": -abs_diff, "amountGrossCurrency": -abs_diff,
+                         "currency": {"id": 1}, "description": "Valutatap (disagio)"},
+                    ]
+                await tx(c, base, tok, "POST", "/ledger/voucher", {
+                    "date": pay_date,
+                    "description": f"Kursdifferanse {original_currency or 'valuta'}",
+                    "postings": postings,
+                })
+
+    return pay_r
 
 
 async def exec_create_credit_note(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
@@ -1433,16 +1507,49 @@ async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str,
             })
 
     # Step 5: Create invoice with project hours as line items
-    hours = float(f.get("hours", 1))
+    vat_map = await lookup_vat_map(c, base, tok)
     rate = float(f.get("hourlyRate", 1000))
     activity = f.get("activityName", "Konsulentarbeid")
-    vat_map = await lookup_vat_map(c, base, tok)
-    order_lines = [{
-        "description": f"{activity} - {int(hours)} timer",
-        "count": hours,
-        "unitPriceExcludingVatCurrency": rate,
-        "vatType": {"id": vat_id_sync(25, vat_map)},
-    }]
+
+    # Handle hours as list (multiple employees) or single value
+    raw_hours = f.get("hours", 1)
+    employees_list = f.get("employees")  # [{name, hours}, ...]
+    order_lines = []
+
+    if employees_list and isinstance(employees_list, list):
+        # Multiple employees with individual hours
+        for emp_entry in employees_list:
+            emp_name = emp_entry.get("name", "Ansatt")
+            emp_hours = float(emp_entry.get("hours", 1))
+            order_lines.append({
+                "description": f"{activity} - {emp_name} - {int(emp_hours)} timer",
+                "count": emp_hours,
+                "unitPriceExcludingVatCurrency": rate,
+                "vatType": {"id": vat_id_sync(25, vat_map)},
+            })
+    elif isinstance(raw_hours, list):
+        # hours is a list of numbers or employee-hour dicts
+        for i, h in enumerate(raw_hours):
+            if isinstance(h, dict):
+                emp_name = h.get("name", f"Ansatt {i+1}")
+                emp_hours = float(h.get("hours", 1))
+            else:
+                emp_name = f"Ansatt {i+1}"
+                emp_hours = float(h)
+            order_lines.append({
+                "description": f"{activity} - {emp_name} - {int(emp_hours)} timer",
+                "count": emp_hours,
+                "unitPriceExcludingVatCurrency": rate,
+                "vatType": {"id": vat_id_sync(25, vat_map)},
+            })
+    else:
+        hours = float(raw_hours)
+        order_lines.append({
+            "description": f"{activity} - {int(hours)} timer",
+            "count": hours,
+            "unitPriceExcludingVatCurrency": rate,
+            "vatType": {"id": vat_id_sync(25, vat_map)},
+        })
     # Note: 'project' field does NOT exist on order lines. Project is linked via the order.
 
     today = time.strftime("%Y-%m-%d")
@@ -1591,6 +1698,292 @@ async def exec_analyze_ledger_create_projects(c: httpx.AsyncClient, base: str, t
     return last_result
 
 
+async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    """Perform simplified year-end closing: calculate and post depreciation for assets.
+    Each asset gets: debit depreciation expense account, credit asset account."""
+    assets = f.get("assets") or []
+    if not assets:
+        return {"success": False, "error": "No assets provided for year-end closing"}
+
+    depreciation_expense_acct_num = int(f.get("depreciationExpenseAccount") or f.get("debitAccount") or 6010)
+    voucher_date = f.get("date") or f"{time.strftime('%Y')}-12-31"
+    description = f.get("description") or "Arsavslutning - avskrivninger"
+
+    # Look up the depreciation expense account once (shared across all assets)
+    expense_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": depreciation_expense_acct_num})
+    if not expense_acct_r.get("success") or not expense_acct_r.get("data"):
+        return {"success": False, "error": f"Could not find account {depreciation_expense_acct_num}"}
+    expense_acct_id = as_list(expense_acct_r["data"])[0]["id"]
+
+    # Build all postings in a single voucher for efficiency
+    postings = []
+    row = 1
+    for asset in assets:
+        asset_name = asset.get("name", "Eiendel")
+        asset_value = float(asset.get("value", 0))
+        asset_years = int(asset.get("years", 1))
+        asset_account_num = int(asset.get("account", 1200))
+
+        if asset_value <= 0 or asset_years <= 0:
+            continue
+
+        annual_depreciation = round(asset_value / asset_years, 2)
+
+        # Look up the asset account
+        asset_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": asset_account_num})
+        if not asset_acct_r.get("success") or not asset_acct_r.get("data"):
+            log.warning("Year-end: could not find asset account %d for %s, skipping", asset_account_num, asset_name)
+            continue
+        asset_acct_id = as_list(asset_acct_r["data"])[0]["id"]
+
+        # Debit: depreciation expense
+        postings.append({
+            "row": row, "date": voucher_date,
+            "account": {"id": expense_acct_id},
+            "amountGross": annual_depreciation,
+            "amountGrossCurrency": annual_depreciation,
+            "currency": {"id": 1},
+            "description": f"Avskrivning {asset_name} ({asset_value}/{asset_years} ar)",
+        })
+        row += 1
+
+        # Credit: asset account (reduces asset value)
+        postings.append({
+            "row": row, "date": voucher_date,
+            "account": {"id": asset_acct_id},
+            "amountGross": -annual_depreciation,
+            "amountGrossCurrency": -annual_depreciation,
+            "currency": {"id": 1},
+            "description": f"Avskrivning {asset_name}",
+        })
+        row += 1
+
+    if not postings:
+        return {"success": False, "error": "No valid assets to depreciate"}
+
+    voucher_body = {
+        "date": voucher_date,
+        "description": description,
+        "postings": postings,
+    }
+    return await tx(c, base, tok, "POST", "/ledger/voucher", voucher_body)
+
+
+async def exec_bank_reconciliation(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    """Reconcile bank statement transactions against open invoices.
+    Match incoming payments to customer invoices, outgoing to supplier invoices."""
+    transactions = f.get("transactions") or []
+    if not transactions:
+        return {"success": False, "error": "No transactions extracted from bank statement"}
+
+    reconciliation_date = f.get("date") or time.strftime("%Y-%m-%d")
+
+    # Step 1: Get all open customer invoices in one call
+    inv_r = await tx(c, base, tok, "GET", "/invoice", params={
+        "invoiceDateFrom": "2020-01-01",
+        "invoiceDateTo": "2030-12-31",
+        "count": 200,
+        "fields": "id,invoiceNumber,customer(id;name),amount,amountOutstanding,currency(code)",
+    })
+    open_invoices = []
+    if inv_r.get("success") and inv_r.get("data"):
+        for inv in as_list(inv_r["data"]):
+            outstanding = float(inv.get("amountOutstanding") or inv.get("amount") or 0)
+            if outstanding > 0:
+                open_invoices.append(inv)
+
+    # Step 2: Get payment type once
+    pt_r = await tx(c, base, tok, "GET", "/invoice/paymentType")
+    pt_id = 1
+    if pt_r.get("success") and pt_r.get("data"):
+        pts = as_list(pt_r["data"])
+        if pts:
+            pt_id = pts[0]["id"]
+
+    # Step 3: Pre-fetch account IDs for outgoing payments (avoid per-txn GETs)
+    bank_acct_id = None
+    supp_acct_id = None
+    has_outgoing = any(
+        float(t.get("amount", 0)) < 0 or (t.get("type") or "").lower() in ("outgoing", "utbetaling", "debit")
+        for t in transactions
+    )
+    if has_outgoing:
+        bank_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
+        supp_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 2400})
+        if bank_acct_r.get("success") and bank_acct_r.get("data"):
+            bank_acct_id = as_list(bank_acct_r["data"])[0]["id"]
+        if supp_acct_r.get("success") and supp_acct_r.get("data"):
+            supp_acct_id = as_list(supp_acct_r["data"])[0]["id"]
+
+    # Step 4: Process each transaction
+    last_result = {"success": False, "error": "No transactions processed"}
+    matched_count = 0
+
+    for txn in transactions:
+        txn_amount = float(txn.get("amount", 0))
+        txn_desc = txn.get("description", "")
+        txn_ref = txn.get("reference", "")
+        txn_date = txn.get("date", reconciliation_date)
+        txn_type = (txn.get("type") or "").lower()
+
+        if txn_amount > 0 or txn_type in ("incoming", "innbetaling", "credit"):
+            # Incoming payment: match to customer invoice
+            abs_amount = abs(txn_amount)
+            best_match = None
+            best_diff = float("inf")
+
+            for inv in open_invoices:
+                outstanding = float(inv.get("amountOutstanding") or inv.get("amount") or 0)
+                diff = abs(outstanding - abs_amount)
+                # Match by amount (exact or partial) or reference in description
+                inv_number = str(inv.get("invoiceNumber", ""))
+                ref_match = inv_number and (inv_number in txn_desc or inv_number in txn_ref)
+                if ref_match or diff < best_diff:
+                    if ref_match or diff <= outstanding * 0.01:  # within 1% tolerance
+                        best_match = inv
+                        best_diff = diff
+                        if ref_match:
+                            break  # exact reference match, stop looking
+
+            if best_match:
+                inv_id = best_match["id"]
+                outstanding = float(best_match.get("amountOutstanding") or best_match.get("amount") or 0)
+                pay_amount = min(abs_amount, outstanding)  # Handle partial payments
+                pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params={
+                    "paymentDate": txn_date,
+                    "paidAmount": str(pay_amount),
+                    "paidAmountCurrency": str(pay_amount),
+                    "paymentTypeId": str(pt_id),
+                })
+                if pay_r.get("success"):
+                    matched_count += 1
+                    last_result = pay_r
+                    # Update outstanding for subsequent matches
+                    best_match["amountOutstanding"] = outstanding - pay_amount
+
+        elif txn_amount < 0 or txn_type in ("outgoing", "utbetaling", "debit"):
+            # Outgoing payment: post as supplier payment voucher
+            abs_amount = abs(txn_amount)
+            if bank_acct_id and supp_acct_id:
+                voucher_r = await tx(c, base, tok, "POST", "/ledger/voucher", {
+                    "date": txn_date,
+                    "description": f"Betaling: {txn_desc or txn_ref}",
+                    "postings": [
+                        {"row": 1, "date": txn_date, "account": {"id": supp_acct_id},
+                         "amountGross": abs_amount, "amountGrossCurrency": abs_amount,
+                         "currency": {"id": 1}, "description": f"Betaling {txn_desc}"},
+                        {"row": 2, "date": txn_date, "account": {"id": bank_acct_id},
+                         "amountGross": -abs_amount, "amountGrossCurrency": -abs_amount,
+                         "currency": {"id": 1}, "description": f"Betaling {txn_desc}"},
+                    ],
+                })
+                if voucher_r.get("success"):
+                    matched_count += 1
+                    last_result = voucher_r
+
+    log.info("Bank reconciliation: matched %d/%d transactions", matched_count, len(transactions))
+    if matched_count > 0:
+        return {"success": True, "data": {"matched": matched_count, "total": len(transactions)}}
+    return last_result
+
+
+async def exec_overdue_invoice_reminder(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    """Find overdue invoice, post reminder fee voucher, create reminder invoice, register partial payment."""
+    today = time.strftime("%Y-%m-%d")
+    reminder_fee = float(f.get("reminderFee", 40))
+    partial_payment = f.get("partialPaymentAmount")
+    debit_account_num = int(f.get("debitAccount") or 1500)  # Accounts receivable
+    credit_account_num = int(f.get("creditAccount") or 3400)  # Reminder fee income
+
+    # Step 1: Find overdue invoices (dueDate < today, with outstanding amount)
+    inv_r = await tx(c, base, tok, "GET", "/invoice", params={
+        "invoiceDateFrom": "2020-01-01",
+        "invoiceDateTo": today,
+        "count": 50,
+        "fields": "id,invoiceNumber,invoiceDueDate,customer(id;name),amount,amountOutstanding",
+    })
+    overdue_inv = None
+    customer_id = None
+    if inv_r.get("success") and inv_r.get("data"):
+        for inv in as_list(inv_r["data"]):
+            due = inv.get("invoiceDueDate", "")
+            outstanding = float(inv.get("amountOutstanding") or inv.get("amount") or 0)
+            if due and due < today and outstanding > 0:
+                overdue_inv = inv
+                customer_id = inv.get("customer", {}).get("id")
+                break
+
+    if not overdue_inv:
+        return {"success": False, "error": "No overdue invoice found"}
+    overdue_inv_id = overdue_inv["id"]
+
+    # Step 2: Post reminder fee voucher (debit 1500 AR, credit 3400 reminder income)
+    debit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": debit_account_num})
+    credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": credit_account_num})
+    if debit_acct_r.get("success") and debit_acct_r.get("data") and credit_acct_r.get("success") and credit_acct_r.get("data"):
+        debit_id = as_list(debit_acct_r["data"])[0]["id"]
+        credit_id = as_list(credit_acct_r["data"])[0]["id"]
+        await tx(c, base, tok, "POST", "/ledger/voucher", {
+            "date": today,
+            "description": f"Purregebyr faktura {overdue_inv.get('invoiceNumber', overdue_inv_id)}",
+            "postings": [
+                {"row": 1, "date": today, "account": {"id": debit_id},
+                 "amountGross": reminder_fee, "amountGrossCurrency": reminder_fee,
+                 "currency": {"id": 1}, "description": "Purregebyr"},
+                {"row": 2, "date": today, "account": {"id": credit_id},
+                 "amountGross": -reminder_fee, "amountGrossCurrency": -reminder_fee,
+                 "currency": {"id": 1}, "description": "Purregebyr inntekt"},
+            ],
+        })
+
+    # Step 3: Create reminder invoice for the fee (if customer found)
+    if customer_id:
+        # Register bank account for invoicing
+        acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
+        if acct_r.get("success") and acct_r.get("data"):
+            accts = as_list(acct_r["data"])
+            if accts and not accts[0].get("bankAccountNumber"):
+                await tx(c, base, tok, "PUT", f"/ledger/account/{accts[0]['id']}", {
+                    "bankAccountNumber": "19201234568",
+                    "bankAccountCountry": {"id": 161}, "currency": {"id": 1},
+                })
+
+        vat_map = await lookup_vat_map(c, base, tok)
+        reminder_inv_r = await tx(c, base, tok, "POST", "/invoice", {
+            "invoiceDate": today, "invoiceDueDate": today,
+            "customer": {"id": customer_id},
+            "orders": [{
+                "customer": {"id": customer_id},
+                "orderDate": today, "deliveryDate": today,
+                "orderLines": [{
+                    "description": "Purregebyr",
+                    "count": 1,
+                    "unitPriceExcludingVatCurrency": reminder_fee,
+                    "vatType": {"id": vat_id_sync(0, vat_map)},
+                }],
+            }],
+        })
+        log.info("Reminder invoice created: success=%s", reminder_inv_r.get("success"))
+
+    # Step 4: Register partial payment on the overdue invoice if specified
+    if partial_payment:
+        pt_r = await tx(c, base, tok, "GET", "/invoice/paymentType")
+        pt_id = 1
+        if pt_r.get("success") and pt_r.get("data"):
+            pts = as_list(pt_r["data"])
+            if pts:
+                pt_id = pts[0]["id"]
+        pay_r = await tx(c, base, tok, "PUT", f"/invoice/{overdue_inv_id}/:payment", params={
+            "paymentDate": today,
+            "paidAmount": str(float(partial_payment)),
+            "paidAmountCurrency": str(float(partial_payment)),
+            "paymentTypeId": str(pt_id),
+        })
+        return pay_r
+
+    return {"success": True, "data": {"overdue_invoice_id": overdue_inv_id, "reminder_fee": reminder_fee}}
+
+
 # ---------------------------------------------------------------------------
 # Task router
 # ---------------------------------------------------------------------------
@@ -1618,6 +2011,9 @@ TASK_EXECUTORS = {
     "create_dimension": exec_create_dimension,
     "create_supplier": exec_create_supplier,
     "analyze_ledger_create_projects": exec_analyze_ledger_create_projects,
+    "year_end_closing": exec_year_end_closing,
+    "bank_reconciliation": exec_bank_reconciliation,
+    "overdue_invoice_reminder": exec_overdue_invoice_reminder,
 }
 
 
