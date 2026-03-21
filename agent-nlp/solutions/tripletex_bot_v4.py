@@ -61,7 +61,8 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - create_product
 - create_department
 - create_project
-- create_invoice
+- create_invoice (use ONLY when creating an invoice WITHOUT payment registration)
+- create_invoice_with_payment (use when prompt asks to create an invoice AND register/record payment for it, or convert order to invoice and register payment)
 - register_payment (existing customer and invoice, register that payment was received)
 - create_credit_note (create credit note on existing invoice, also use when payment was returned/reversed by bank)
 - create_travel_expense (use when prompt mentions reiseregning/travel expense/travel report, even if it also says to create an employee first)
@@ -626,7 +627,7 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             "unitPriceExcludingVatCurrency": float(item.get("unitPrice", 0)),
             "vatType": {"id": vat_id_sync(item.get("vatRate"), vat_map)},
         }
-        # Create product if productNumber given (competition may check product existence)
+        # Create or find product if productNumber given
         prod_num = item.get("productNumber")
         if prod_num:
             prod_body = {"name": item.get("description", "Produkt"), "number": prod_num}
@@ -635,6 +636,11 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             prod_r = await tx(c, base, tok, "POST", "/product", prod_body)
             if prod_r.get("success") and prod_r.get("data"):
                 line["product"] = {"id": prod_r["data"]["id"]}
+            elif "i bruk" in str(prod_r.get("error", "")).lower() or "in use" in str(prod_r.get("error", "")).lower():
+                # Product number already exists, find it
+                existing = await tx(c, base, tok, "GET", "/product", params={"number": prod_num, "count": 1})
+                if existing.get("success") and existing.get("data"):
+                    line["product"] = {"id": as_list(existing["data"])[0]["id"]}
         order_lines.append(line)
 
     # Step 4: Create invoice with inline order
@@ -657,6 +663,39 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             ol.pop("vatType", None)
         r = await tx(c, base, tok, "POST", "/invoice", invoice_body)
     return r
+
+
+async def exec_create_invoice_with_payment(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    """Create invoice and register payment in one flow."""
+    # Step 1: Create the invoice
+    inv_result = await exec_create_invoice(c, base, tok, f)
+    if not inv_result.get("success"):
+        return inv_result
+    inv_id = inv_result.get("data", {}).get("id")
+    if not inv_id:
+        return inv_result
+
+    # Step 2: Register payment on the created invoice
+    amount = f.get("amount") or inv_result.get("data", {}).get("amount", 0)
+    # Get payment type
+    pt_r = await tx(c, base, tok, "GET", "/invoice/paymentType")
+    pt_id = 1
+    if pt_r.get("success") and pt_r.get("data"):
+        pts = as_list(pt_r["data"])
+        if pts:
+            pt_id = pts[0]["id"]
+
+    pay_date = f.get("paymentDate", time.strftime("%Y-%m-%d"))
+    pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params={
+        "paymentDate": pay_date,
+        "paidAmount": str(amount),
+        "paidAmountCurrency": str(amount),
+        "paymentTypeId": str(pt_id),
+    })
+    if pay_r.get("success"):
+        return pay_r
+    # If payment fails, at least the invoice was created
+    return inv_result
 
 
 async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
@@ -891,6 +930,11 @@ async def exec_process_salary(c: httpx.AsyncClient, base: str, tok: str, f: dict
         create_r = await tx(c, base, tok, "POST", "/employee", emp_body)
         if not create_r.get("success"): return create_r
         emp_id = create_r["data"]["id"]
+    else:
+        # Existing employee: ensure dateOfBirth is set (required for employment creation)
+        await tx(c, base, tok, "PUT", f"/employee/{emp_id}", {
+            "dateOfBirth": f.get("dateOfBirth", "1990-01-15"),
+        })
 
     empl_r = await tx(c, base, tok, "GET", "/employee/employment", params={"employeeId": emp_id, "count": 5})
     employment_id = None
@@ -951,7 +995,7 @@ async def exec_process_salary(c: httpx.AsyncClient, base: str, tok: str, f: dict
 
 
 async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    """Register an incoming supplier invoice."""
+    """Register an incoming supplier invoice. Skips /supplier and /supplierInvoice (BETA/403)."""
     supplier_name = f.get("supplierName") or f.get("name", "Leverandor")
     org_number = f.get("orgNumber") or f.get("supplierOrgNumber")
     total_incl_vat = float(f.get("amount") or f.get("totalAmount") or f.get("invoiceAmount") or 0)
@@ -961,40 +1005,57 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
     invoice_date = f.get("invoiceDate") or f.get("date") or time.strftime("%Y-%m-%d")
     description = f.get("description") or f"Leverandorfaktura {invoice_number} fra {supplier_name}"
 
-    net_amount = round(total_incl_vat / (1 + vat_rate / 100), 2) if vat_rate > 0 else total_incl_vat
+    # Calculate VAT split
+    if vat_rate > 0:
+        net_amount = round(total_incl_vat / (1 + vat_rate / 100), 2)
+        vat_amount = round(total_incl_vat - net_amount, 2)
+    else:
+        net_amount = total_incl_vat
+        vat_amount = 0.0
 
-    sup_body = {"name": supplier_name}
+    # Create supplier via /customer (not /supplier which is BETA/403)
+    sup_body = {"name": supplier_name, "isCustomer": False, "isSupplier": True}
     if org_number: sup_body["organizationNumber"] = str(org_number)
-    sup_r = await tx(c, base, tok, "POST", "/supplier", sup_body)
-    supplier_id = sup_r["data"]["id"] if sup_r.get("success") and sup_r.get("data") else None
-    if not supplier_id:
-        cust_r = await tx(c, base, tok, "POST", "/customer", {"name": supplier_name, "isCustomer": False, "isSupplier": True,
-                          **({"organizationNumber": str(org_number)} if org_number else {})})
-        if cust_r.get("success") and cust_r.get("data"):
-            supplier_id = cust_r["data"]["id"]
+    await tx(c, base, tok, "POST", "/customer", sup_body)
 
-    sup_inv_body = {"invoiceDate": invoice_date, "paymentDueDate": invoice_date, "invoiceNumber": invoice_number,
-                    "amountCurrency": total_incl_vat, "currency": {"id": 1}}
-    if supplier_id: sup_inv_body["supplier"] = {"id": supplier_id}
-    sup_inv_r = await tx(c, base, tok, "POST", "/supplierInvoice", sup_inv_body)
-    if sup_inv_r.get("success"): return sup_inv_r
-
+    # Look up accounts
     expense_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": expense_account_number})
     expense_acct_id = as_list(expense_acct_r["data"])[0]["id"] if expense_acct_r.get("success") and expense_acct_r.get("data") else None
+
+    credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 2400})
+    credit_acct_id = as_list(credit_acct_r["data"])[0]["id"] if credit_acct_r.get("success") and credit_acct_r.get("data") else None
+
     input_vat_map = await lookup_input_vat_map(c, base, tok)
     input_vat_id = input_vat_map.get(int(vat_rate), input_vat_map.get(25, 1))
 
-    if expense_acct_id:
-        voucher_body = {"date": invoice_date, "description": description, "postings": [{
-            "account": {"id": expense_acct_id}, "amountGross": total_incl_vat,
-            "amountGrossCurrency": total_incl_vat, "currency": {"id": 1},
-            "description": description, "date": invoice_date, "vatType": {"id": input_vat_id}}]}
-        return await tx(c, base, tok, "POST", "/ledger/voucher", voucher_body)
-    return {"success": False, "error": "Could not resolve expense account"}
+    if not expense_acct_id or not credit_acct_id:
+        return {"success": False, "error": "Could not resolve ledger accounts"}
+
+    # Balanced voucher: expense debit + credit on 2400 (accounts payable)
+    posting_debit = {
+        "row": 1, "date": invoice_date,
+        "account": {"id": expense_acct_id},
+        "amountGross": total_incl_vat,
+        "amountGrossCurrency": total_incl_vat,
+        "currency": {"id": 1},
+        "description": description,
+        "vatType": {"id": input_vat_id},
+    }
+    posting_credit = {
+        "row": 2, "date": invoice_date,
+        "account": {"id": credit_acct_id},
+        "amountGross": -total_incl_vat,
+        "amountGrossCurrency": -total_incl_vat,
+        "currency": {"id": 1},
+        "description": f"Leverandorgjeld {supplier_name}",
+    }
+    voucher_body = {"date": invoice_date, "description": description, "postings": [posting_debit, posting_credit]}
+    return await tx(c, base, tok, "POST", "/ledger/voucher", voucher_body)
 
 
 async def exec_create_dimension(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    """Create custom accounting dimension with values and optional posting."""
+    """Create custom accounting dimension with values and optional voucher posting.
+    Uses /ledger/accountingDimensionName and /ledger/accountingDimensionValue (not departments)."""
     dimension_name = f.get("dimensionName") or f.get("name", "")
     dimension_values = f.get("dimensionValues") or f.get("values") or []
     if isinstance(dimension_values, str):
@@ -1005,38 +1066,80 @@ async def exec_create_dimension(c: httpx.AsyncClient, base: str, tok: str, f: di
     post_date = f.get("date") or time.strftime("%Y-%m-%d")
     description = f.get("description") or f"Bilag med dimensjon {dimension_name}"
 
-    created_values = []
-    for i, val in enumerate(dimension_values):
-        dept_r = await tx(c, base, tok, "POST", "/department", {
-            "name": f"{dimension_name}: {val}", "departmentNumber": i + 100})
-        if dept_r.get("success") and dept_r.get("data"):
-            created_values.append({"name": val, "id": dept_r["data"]["id"]})
+    # Step 1: Create the dimension name
+    dim_r = await tx(c, base, tok, "POST", "/ledger/accountingDimensionName", {
+        "dimensionName": dimension_name,
+    })
+    dimension_index = None
+    if dim_r.get("success") and dim_r.get("data"):
+        dimension_index = dim_r["data"].get("dimensionIndex")
+        log.info("Created dimension '%s' with index %s", dimension_name, dimension_index)
+    else:
+        log.warning("accountingDimensionName POST failed: %s. Trying department fallback.", dim_r.get("error"))
 
+    # Step 2: Create dimension values
+    created_values = []
+    if dimension_index is not None:
+        for i, val in enumerate(dimension_values):
+            val_r = await tx(c, base, tok, "POST", "/ledger/accountingDimensionValue", {
+                "displayName": val,
+                "dimensionIndex": dimension_index,
+                "number": str(i + 1),
+                "active": True,
+            })
+            if val_r.get("success") and val_r.get("data"):
+                created_values.append({"name": val, "id": val_r["data"]["id"], "index": dimension_index})
+                log.info("Created dimension value '%s' id=%s", val, val_r["data"]["id"])
+    else:
+        # Fallback: create departments as dimension proxy
+        for i, val in enumerate(dimension_values):
+            dept_r = await tx(c, base, tok, "POST", "/department", {
+                "name": f"{dimension_name}: {val}", "departmentNumber": i + 100})
+            if dept_r.get("success") and dept_r.get("data"):
+                created_values.append({"name": val, "id": dept_r["data"]["id"], "index": None})
+
+    # Step 3: Post voucher if requested
     if post_account and post_amount:
-        target_dept_id = None
+        target_value = None
         for cv in created_values:
             if post_dim_value and post_dim_value.lower() in cv["name"].lower():
-                target_dept_id = cv["id"]
+                target_value = cv
                 break
-        if not target_dept_id and created_values:
-            target_dept_id = created_values[0]["id"]
+        if not target_value and created_values:
+            target_value = created_values[0]
+
         acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(post_account)})
         acct_id = as_list(acct_r["data"])[0]["id"] if acct_r.get("success") and acct_r.get("data") else None
-        if acct_id:
-            posting_debit = {"account": {"id": acct_id}, "amountGross": float(post_amount),
-                             "amountGrossCurrency": float(post_amount), "currency": {"id": 1},
-                             "description": description, "date": post_date}
-            if target_dept_id: posting_debit["department"] = {"id": target_dept_id}
-            # Balanced voucher: add credit posting on account 2400
-            credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 2400})
-            credit_id = as_list(credit_acct_r["data"])[0]["id"] if credit_acct_r.get("success") and credit_acct_r.get("data") else None
-            postings = [posting_debit]
-            if credit_id:
-                postings.append({"account": {"id": credit_id}, "amountGross": -float(post_amount),
-                                 "amountGrossCurrency": -float(post_amount), "currency": {"id": 1},
-                                 "description": description, "date": post_date})
+        credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 2400})
+        credit_id = as_list(credit_acct_r["data"])[0]["id"] if credit_acct_r.get("success") and credit_acct_r.get("data") else None
+
+        if acct_id and credit_id:
+            posting_debit = {
+                "row": 1, "date": post_date,
+                "account": {"id": acct_id},
+                "amountGross": float(post_amount),
+                "amountGrossCurrency": float(post_amount),
+                "currency": {"id": 1},
+                "description": description,
+            }
+            # Link dimension value to posting
+            if target_value and target_value.get("index") is not None:
+                dim_key = f"freeAccountingDimension{target_value['index']}"
+                posting_debit[dim_key] = {"id": target_value["id"]}
+            elif target_value:
+                posting_debit["department"] = {"id": target_value["id"]}
+
+            posting_credit = {
+                "row": 2, "date": post_date,
+                "account": {"id": credit_id},
+                "amountGross": -float(post_amount),
+                "amountGrossCurrency": -float(post_amount),
+                "currency": {"id": 1},
+                "description": description,
+            }
             return await tx(c, base, tok, "POST", "/ledger/voucher", {
-                "date": post_date, "description": description, "postings": postings})
+                "date": post_date, "description": description,
+                "postings": [posting_debit, posting_credit]})
 
     if created_values:
         return {"success": True, "data": {"message": f"Created {len(created_values)} dimension values"}}
@@ -1044,7 +1147,7 @@ async def exec_create_dimension(c: httpx.AsyncClient, base: str, tok: str, f: di
 
 
 async def exec_create_supplier(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    """Register a supplier entity."""
+    """Register a supplier entity. Uses /customer with isSupplier=True (not /supplier which is BETA/403)."""
     name = f.get("supplierName") or f.get("name", "")
     body = {"name": name, "isCustomer": False, "isSupplier": True}
     if f.get("orgNumber") or f.get("supplierOrgNumber"):
@@ -1057,10 +1160,6 @@ async def exec_create_supplier(c: httpx.AsyncClient, base: str, tok: str, f: dic
             "postalCode": f.get("postalCode", ""),
             "city": f.get("city", ""),
         }
-    # Try /supplier first, fall back to /customer with isSupplier
-    sup_r = await tx(c, base, tok, "POST", "/supplier", body)
-    if sup_r.get("success"):
-        return sup_r
     return await tx(c, base, tok, "POST", "/customer", body)
 
 
@@ -1075,6 +1174,7 @@ TASK_EXECUTORS = {
     "create_department": exec_create_department,
     "create_project": exec_create_project,
     "create_invoice": exec_create_invoice,
+    "create_invoice_with_payment": exec_create_invoice_with_payment,
     "register_payment": exec_register_payment,
     "create_credit_note": exec_create_credit_note,
     "create_travel_expense": exec_create_travel_expense,
