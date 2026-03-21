@@ -100,11 +100,8 @@ while [ "$DONE" = false ]; do
 import json
 try:
     p = json.load(open('$PROGRESS_FILE'))
-    if isinstance(p, dict):
-        print(len(p))
-    else:
-        print(0)
-except:
+    print(len(p) if isinstance(p, dict) else 0)
+except Exception:
     print(0)
 " 2>/dev/null || echo "?")
         echo "$(ts) Progress: $IMG_COUNT images, $CAT_DONE categories done"
@@ -116,6 +113,12 @@ except:
     if [ -n "$GEN_PID" ]; then
         if ! kill -0 "$GEN_PID" 2>/dev/null; then
             echo "$(ts) Generation process (PID $GEN_PID) has exited."
+            # Verify generation produced images (not a crash with 0 output)
+            FINAL_COUNT=$(get_image_count)
+            if [ "$FINAL_COUNT" -eq 0 ]; then
+                echo "$(ts) WARNING: Process exited but 0 images generated. Possible crash."
+                echo "$(ts) Check generation log for errors."
+            fi
             DONE=true
             continue
         fi

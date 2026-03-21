@@ -81,7 +81,7 @@ while [ "$PIPELINE_DONE" = false ] && [ "$POLL_COUNT" -lt "$MAX_POLLS" ]; do
         continue
     }
 
-    # Parse state, phase, message from JSON in a single python3 call
+    # Parse all fields from JSON in a single python3 call
     PARSED=$(echo "$STATUS_JSON" | python3 -c "
 import json, sys
 try:
@@ -89,31 +89,29 @@ try:
     print(d.get('state', 'unknown'))
     print(d.get('phase', '?'))
     print(d.get('message', '')[:80])
-except:
+    print(d.get('zip_path', ''))
+    print(d.get('submission_name', 'submission'))
+except Exception:
     print('parse_error')
     print('?')
     print('')
-" 2>/dev/null || printf 'parse_error\n?\n\n')
+    print('')
+    print('submission')
+" 2>/dev/null || printf 'parse_error\n?\n\n\nsubmission\n')
 
     STATE=$(echo "$PARSED" | sed -n '1p')
     PHASE=$(echo "$PARSED" | sed -n '2p')
     MSG=$(echo "$PARSED" | sed -n '3p')
+    ZIP_REMOTE_PARSED=$(echo "$PARSED" | sed -n '4p')
+    SUB_NAME_PARSED=$(echo "$PARSED" | sed -n '5p')
 
     case "$STATE" in
         "done")
             if [ "$PHASE" = "complete" ]; then
                 echo "$(ts) [Poll $POLL_COUNT] Pipeline COMPLETE: $MSG"
                 PIPELINE_DONE=true
-                ZIP_REMOTE=$(echo "$STATUS_JSON" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print(d.get('zip_path', ''))
-" 2>/dev/null || echo "")
-                SUB_NAME=$(echo "$STATUS_JSON" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print(d.get('submission_name', 'submission'))
-" 2>/dev/null || echo "submission")
+                ZIP_REMOTE="$ZIP_REMOTE_PARSED"
+                SUB_NAME="$SUB_NAME_PARSED"
             else
                 echo "$(ts) [Poll $POLL_COUNT] Phase '$PHASE' done: $MSG"
                 sleep "$POLL_INTERVAL"
@@ -168,7 +166,7 @@ if [ ! -f "$ZIP_LOCAL" ]; then
     exit 1
 fi
 
-ZIP_SIZE=$(stat -f%z "$ZIP_LOCAL" 2>/dev/null || stat -c%s "$ZIP_LOCAL" 2>/dev/null)
+ZIP_SIZE=$(stat -f%z "$ZIP_LOCAL" 2>/dev/null || stat -c%s "$ZIP_LOCAL" 2>/dev/null || echo "0")
 ZIP_MB=$((ZIP_SIZE / 1024 / 1024))
 echo "$(ts) Downloaded: $ZIP_LOCAL (${ZIP_MB}MB)"
 echo ""
@@ -188,13 +186,9 @@ if [ -f "$TOOLS_DIR/cv_pipeline.sh" ]; then
         echo "$(ts) Local validation FAILED. Check output above."
     fi
 else
-    echo "$(ts) WARNING: cv_pipeline.sh not found at $TOOLS_DIR"
-    echo "$(ts) Falling back to validate_cv_zip.py..."
-    if python3 "$TOOLS_DIR/validate_cv_zip.py" "$ZIP_LOCAL"; then
-        VERDICT="PASS"
-    else
-        VERDICT="FAIL"
-    fi
+    echo "$(ts) CRITICAL: cv_pipeline.sh not found at $TOOLS_DIR"
+    echo "$(ts) Cannot validate submission locally. Check TOOLS_DIR path."
+    VERDICT="UNVALIDATED"
 fi
 
 echo ""
@@ -213,6 +207,11 @@ if [ "$VERDICT" = "PASS" ]; then
     echo ""
     echo "$(ts) Ready for JC to upload to competition."
     echo "$(ts) Path: $ZIP_LOCAL"
+elif [ "$VERDICT" = "UNVALIDATED" ]; then
+    notify "CV Submission UNVALIDATED" "$SUB_NAME downloaded but validation tools missing."
+    echo ""
+    echo "$(ts) Submission downloaded but could not be validated. Install cv_pipeline.sh first."
+    exit 1
 else
     notify "CV Submission FAILED validation" "$SUB_NAME failed local checks. Review needed."
     echo ""

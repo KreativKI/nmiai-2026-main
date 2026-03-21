@@ -77,20 +77,17 @@ echo "$(ts) Preflight checks..."
 for f in "$PYTHON" "$BASE_WEIGHTS" "$REAL_ANNOTATIONS" "$SCRIPTS_DIR/yolo_second_pass.py" \
          "$SCRIPTS_DIR/retrain_with_gemini.py" "$SCRIPTS_DIR/build_submission.sh"; do
     if [ ! -f "$f" ]; then
-        echo "$(ts) MISSING: $f"
+        echo "$(ts) MISSING file: $f"
         exit 1
     fi
 done
 
-if [ ! -d "$IMAGES_DIR" ]; then
-    echo "$(ts) MISSING directory: $IMAGES_DIR"
-    exit 1
-fi
-
-if [ ! -d "$LABELS_DIR" ]; then
-    echo "$(ts) MISSING directory: $LABELS_DIR"
-    exit 1
-fi
+for d in "$IMAGES_DIR" "$LABELS_DIR"; do
+    if [ ! -d "$d" ]; then
+        echo "$(ts) MISSING directory: $d"
+        exit 1
+    fi
+done
 
 LABEL_COUNT=$(find "$LABELS_DIR" -name "*.txt" | wc -l | tr -d ' ')
 echo "$(ts) Labels found: $LABEL_COUNT"
@@ -159,6 +156,10 @@ m = YOLO('$NEW_WEIGHTS')
 m.export(format='onnx', imgsz=1280, opset=17, simplify=True)
 print('ONNX exported')
 "
+    if [ ! -f "$NEW_ONNX" ]; then
+        echo "$(ts) CRITICAL: ONNX export failed. File not found: $NEW_ONNX"
+        exit 1
+    fi
 fi
 
 echo "$(ts) Retrain complete."
@@ -182,7 +183,7 @@ if [ ! -f "$ZIP_PATH" ]; then
     exit 1
 fi
 
-ZIP_SIZE=$(stat -c%s "$ZIP_PATH" 2>/dev/null || stat -f%z "$ZIP_PATH" 2>/dev/null)
+ZIP_SIZE=$(stat -c%s "$ZIP_PATH" 2>/dev/null || stat -f%z "$ZIP_PATH" 2>/dev/null || echo "0")
 ZIP_MB=$((ZIP_SIZE / 1024 / 1024))
 echo "$(ts) ZIP created: $ZIP_PATH (${ZIP_MB}MB)"
 write_status "build_zip" "done" "ZIP: ${ZIP_MB}MB"
@@ -204,18 +205,10 @@ elif [ -f "$TOOLS_DIR/validate_cv_zip.py" ]; then
     echo "$(ts) cv_pipeline.sh not found, falling back to validate_cv_zip.py"
     "$PYTHON" "$TOOLS_DIR/validate_cv_zip.py" "$ZIP_PATH" && VALID=true || VALID=false
 else
-    echo "$(ts) WARNING: No validation tools found at $TOOLS_DIR"
-    echo "$(ts) Running basic blocked-import check..."
-    TMPDIR=$(mktemp -d)
-    unzip -q "$ZIP_PATH" -d "$TMPDIR"
-    if grep -rn "import os\b\|import sys\b\|import subprocess\|import socket\|import pickle" "$TMPDIR/run.py"; then
-        echo "$(ts) BLOCKED IMPORT FOUND"
-        VALID=false
-    else
-        echo "$(ts) No blocked imports found (basic check)"
-        VALID=true
-    fi
-    rm -rf "$TMPDIR"
+    echo "$(ts) CRITICAL: No validation tools found at $TOOLS_DIR"
+    echo "$(ts) Cannot safely validate submission. Blocked imports = instant ban."
+    echo "$(ts) Aborting. Copy cv_pipeline.sh and validate_cv_zip.py to $TOOLS_DIR first."
+    VALID=false
 fi
 
 if [ "$VALID" = true ]; then
