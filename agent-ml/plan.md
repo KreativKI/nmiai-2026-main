@@ -12,30 +12,80 @@
 overnight_v4 handles: observe, predict, submit, cache GT, download replay, rebuild dataset.
 No manual intervention needed for round operations.
 
-## Priority 1: Deep Analysis on GCP
-The competition briefing (OVERSEER-BRIEFING-ASTAR-DEEP-ANALYSIS.md) identified
-hidden rules from 8 rounds. We now have 16 rounds + 80 replay files.
-These rules have NEVER been validated. Some may be wrong. Some may reveal
-new patterns we're missing.
+## Priority 1: Deep Analysis on GCP — IMPLEMENTATION PLAN
 
-### Task: Create `deep_analysis.py` and run on GCP
-Process ALL 80 replay files (16 rounds x 5 seeds x 51 frames = ~6.5M cell-states).
+### Goal
+Validate 8 hypotheses from briefing using 75 replay files (16 rounds).
+Output: actionable hard constraints and feature ideas for V4 model.
 
-Hypotheses to test:
-1. Empty -> Forest transition rate (claimed: zero)
-2. Settlement expansion radius by regime type
-3. Mountain adjacency effect on settlement survival
-4. Port formation rules (coastal only? what triggers it?)
-5. Ruin lifecycle (how many years before forest reclaims?)
-6. Winter detection: can year-10 stats predict year-50 outcome?
-7. Faction dynamics (owner_id patterns)
-8. What distinguishes predictable rounds (R9, R15) from chaotic ones (R16)?
+### Architecture
+Single file `deep_analysis.py` that:
+- Loads ALL replays from data/replays/
+- Processes frame-by-frame transitions (year N -> year N+1)
+- Groups results by regime (death/stable/growth, using classify_round)
+- Prints structured findings per hypothesis
+- Outputs JSON summary to data/deep_analysis_results.json
 
-### Output: Hard constraints + new features for V4
-- If empty never becomes forest: force forest probability to 0.01 for empty cells
-- If ruins never dominant: cap ruin probability
-- If expansion radius is bounded: distance-based cutoff for settlement probability
-- Settlement health features from year-0 replay data
+### Data flow
+```
+replays/*.json (75 files, 51 frames each)
+    -> for each file: track cell transitions year-over-year
+    -> aggregate into transition matrices per regime
+    -> test each hypothesis
+    -> print findings + save JSON
+```
+
+### Hypothesis tests (detailed)
+
+H1: Empty->Forest transitions
+- Count transitions where cell goes from Empty(0) to Forest(4) between any consecutive years
+- Group by regime. If truly zero across ALL data, that's a hard constraint.
+
+H2: Settlement expansion radius
+- For each round/seed: find initial settlement positions (year 0)
+- Find NEW settlements at year 50 (not in initial set)
+- Measure Manhattan distance from each new settlement to nearest initial settlement
+- Report min/median/max by regime
+
+H3: Mountain adjacency kills settlements
+- For each settlement at year 0: count adjacent mountains
+- Track which settlements survive to year 50
+- Report survival rate by mountain adjacency count (0, 1, 2+)
+
+H4: Port formation rules
+- Find all cells that become Port at any year
+- Check if every port has ocean adjacency
+- Measure what % of coastal settlements become ports
+
+H5: Ruin lifecycle
+- Track how long Ruin(3) cells persist before changing
+- Measure transitions: Ruin->Forest, Ruin->Empty, Ruin->stays Ruin
+- Report average ruin lifespan in years
+
+H6: Winter detection from year-10 stats
+- At year 10: count alive settlements per seed
+- At year 50: classify regime (death/stable/growth)
+- Test if year-10 survival rate predicts year-50 regime
+
+H7: Faction dynamics
+- Track owner_id persistence over time
+- Count number of unique factions at year 0, 10, 25, 50
+- Measure faction consolidation (do big factions absorb small ones?)
+
+H8: Predictable vs chaotic rounds
+- For each round: compute variance of year-50 settlement counts across 5 seeds
+- Low variance = predictable. High variance = chaotic.
+- Correlate with actual competition scores
+
+### Dependencies
+- json, numpy, pathlib (stdlib + numpy only)
+- Uses classify_round from regime_model.py for regime labels
+- Uses TERRAIN_TO_CLASS, STATIC_TERRAIN from backtest.py
+
+### NOT in scope
+- Modifying overnight_v4, churn_v4, or build_dataset
+- Training any model
+- Making API calls or submissions
 
 ## Priority 2: Keep Autonomous System Running
 overnight_v4 and churn_v4 handle rounds and optimization.

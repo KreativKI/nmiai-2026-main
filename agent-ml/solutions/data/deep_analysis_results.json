@@ -1,0 +1,513 @@
+{
+  "h1_empty_to_forest": {
+    "total_empty_to_forest": 0,
+    "total_empty_cell_years": 0,
+    "rate": 0.0,
+    "by_regime": {
+      "death": {
+        "empty_to_forest": 0,
+        "total_empty_years": 0
+      },
+      "stable": {
+        "empty_to_forest": 0,
+        "total_empty_years": 0
+      },
+      "growth": {
+        "empty_to_forest": 0,
+        "total_empty_years": 0
+      }
+    },
+    "conclusion": "CONFIRMED_ZERO"
+  },
+  "h2_expansion_radius": {
+    "death": {
+      "count": 3442,
+      "min": 1,
+      "median": 3.0,
+      "p90": 5.0,
+      "max": 10
+    },
+    "growth": {
+      "count": 8622,
+      "min": 1,
+      "median": 2.0,
+      "p90": 5.0,
+      "max": 12
+    },
+    "unknown": {
+      "count": 67,
+      "min": 1,
+      "median": 2.0,
+      "p90": 3.3999999999999986,
+      "max": 4
+    },
+    "stable": {
+      "count": 1798,
+      "min": 1,
+      "median": 2.0,
+      "p90": 4.0,
+      "max": 11
+    }
+  },
+  "h3_mountain_adjacency": {
+    "mtns_0": {
+      "survived": 1028,
+      "total": 3159,
+      "rate": 0.325
+    },
+    "mtns_1": {
+      "survived": 41,
+      "total": 129,
+      "rate": 0.318
+    },
+    "mtns_2": {
+      "survived": 22,
+      "total": 89,
+      "rate": 0.247
+    },
+    "mtns_3+": {
+      "survived": 21,
+      "total": 69,
+      "rate": 0.304
+    },
+    "by_regime": {
+      "death": {
+        "mtns_0": 0.173,
+        "mtns_1": 0.14,
+        "mtns_2": 0.114,
+        "mtns_3+": 0.129
+      },
+      "stable": {
+        "mtns_0": 0.389,
+        "mtns_1": 0.364,
+        "mtns_2": 0.167,
+        "mtns_3+": 0.273
+      },
+      "growth": {
+        "mtns_0": 0.48,
+        "mtns_1": 0.519,
+        "mtns_2": 0.469,
+        "mtns_3+": 0.538
+      }
+    }
+  },
+  "h4_port_formation": {
+    "coastal_port_formations": 1834,
+    "inland_port_formations": 0,
+    "coastal_pct": 1.0,
+    "coastal_settle_to_port_rate": 0.004225777241171144
+  },
+  "h5_ruin_lifecycle": {
+    "total_appearances": 35932,
+    "lifespans": {
+      "mean": 0.9566681509517978,
+      "median": 1.0,
+      "min": 0,
+      "max": 1
+    },
+    "transitions": {
+      "Empty": 11876,
+      "Forest": 5683,
+      "Settlement": 16371,
+      "Port": 445,
+      "still_ruin_at_50": 1557
+    }
+  },
+  "h6_winter_detection": {
+    "survival_y10_by_regime": {
+      "death": {
+        "mean": 0.965,
+        "min": 0.429,
+        "max": 1.667
+      },
+      "stable": {
+        "mean": 1.36,
+        "min": 1.122,
+        "max": 1.587
+      },
+      "growth": {
+        "mean": 1.553,
+        "min": 1.189,
+        "max": 2.062
+      }
+    },
+    "pop_by_regime": {
+      "death": 1.129,
+      "growth": 1.035,
+      "unknown": 0.989,
+      "stable": 1.038
+    },
+    "food_by_regime": {
+      "death": 0.756,
+      "growth": 0.771,
+      "unknown": 0.766,
+      "stable": 0.782
+    }
+  },
+  "h7_faction_dynamics": {
+    "death": {
+      "mean_ratio": 0.277,
+      "min": 0.017,
+      "max": 0.5
+    },
+    "stable": {
+      "mean_ratio": 0.543,
+      "min": 0.37,
+      "max": 0.714
+    },
+    "growth": {
+      "mean_ratio": 0.586,
+      "min": 0.433,
+      "max": 0.875
+    }
+  },
+  "h8_predictability": {
+    "10": {
+      "regime": "death",
+      "n_seeds": 5,
+      "settle_y50_mean": 13.2,
+      "settle_y50_std": 6.5,
+      "cv": 0.492,
+      "settle_y50_per_seed": [
+        24,
+        9,
+        12,
+        5,
+        16
+      ]
+    },
+    "11": {
+      "regime": "growth",
+      "n_seeds": 5,
+      "settle_y50_mean": 373.2,
+      "settle_y50_std": 50.8,
+      "cv": 0.136,
+      "settle_y50_per_seed": [
+        319,
+        333,
+        444,
+        346,
+        424
+      ]
+    },
+    "12": {
+      "regime": "growth",
+      "n_seeds": 5,
+      "settle_y50_mean": 216.0,
+      "settle_y50_std": 22.9,
+      "cv": 0.106,
+      "settle_y50_per_seed": [
+        228,
+        215,
+        233,
+        232,
+        172
+      ]
+    },
+    "13": {
+      "regime": "death",
+      "n_seeds": 5,
+      "settle_y50_mean": 142.2,
+      "settle_y50_std": 26.0,
+      "cv": 0.183,
+      "settle_y50_per_seed": [
+        140,
+        122,
+        121,
+        192,
+        136
+      ]
+    },
+    "14": {
+      "regime": "growth",
+      "n_seeds": 5,
+      "settle_y50_mean": 368.2,
+      "settle_y50_std": 41.3,
+      "cv": 0.112,
+      "settle_y50_per_seed": [
+        391,
+        404,
+        408,
+        331,
+        307
+      ]
+    },
+    "15": {
+      "regime": "death",
+      "n_seeds": 5,
+      "settle_y50_mean": 266.6,
+      "settle_y50_std": 62.3,
+      "cv": 0.234,
+      "settle_y50_per_seed": [
+        204,
+        208,
+        360,
+        319,
+        242
+      ]
+    },
+    "16": {
+      "regime": "unknown",
+      "n_seeds": 1,
+      "settle_y50_mean": 78.0,
+      "settle_y50_std": 0.0,
+      "cv": 0.0,
+      "settle_y50_per_seed": [
+        78
+      ]
+    },
+    "1": {
+      "regime": "stable",
+      "n_seeds": 5,
+      "settle_y50_mean": 221.6,
+      "settle_y50_std": 33.6,
+      "cv": 0.152,
+      "settle_y50_per_seed": [
+        165,
+        229,
+        214,
+        269,
+        231
+      ]
+    },
+    "2": {
+      "regime": "growth",
+      "n_seeds": 5,
+      "settle_y50_mean": 325.8,
+      "settle_y50_std": 48.7,
+      "cv": 0.149,
+      "settle_y50_per_seed": [
+        346,
+        251,
+        338,
+        298,
+        396
+      ]
+    },
+    "3": {
+      "regime": "death",
+      "n_seeds": 5,
+      "settle_y50_mean": 2.6,
+      "settle_y50_std": 1.4,
+      "cv": 0.522,
+      "settle_y50_per_seed": [
+        3,
+        2,
+        1,
+        2,
+        5
+      ]
+    },
+    "4": {
+      "regime": "death",
+      "n_seeds": 5,
+      "settle_y50_mean": 152.6,
+      "settle_y50_std": 28.2,
+      "cv": 0.185,
+      "settle_y50_per_seed": [
+        127,
+        138,
+        192,
+        125,
+        181
+      ]
+    },
+    "5": {
+      "regime": "stable",
+      "n_seeds": 5,
+      "settle_y50_mean": 172.0,
+      "settle_y50_std": 43.6,
+      "cv": 0.253,
+      "settle_y50_per_seed": [
+        170,
+        134,
+        256,
+        153,
+        147
+      ]
+    },
+    "6": {
+      "regime": "growth",
+      "n_seeds": 5,
+      "settle_y50_mean": 354.6,
+      "settle_y50_std": 18.3,
+      "cv": 0.052,
+      "settle_y50_per_seed": [
+        345,
+        323,
+        366,
+        372,
+        367
+      ]
+    },
+    "7": {
+      "regime": "growth",
+      "n_seeds": 5,
+      "settle_y50_mean": 220.2,
+      "settle_y50_std": 25.8,
+      "cv": 0.117,
+      "settle_y50_per_seed": [
+        171,
+        240,
+        221,
+        227,
+        242
+      ]
+    },
+    "8": {
+      "regime": "death",
+      "n_seeds": 5,
+      "settle_y50_mean": 44.6,
+      "settle_y50_std": 26.0,
+      "cv": 0.582,
+      "settle_y50_per_seed": [
+        43,
+        37,
+        94,
+        30,
+        19
+      ]
+    },
+    "9": {
+      "regime": "death",
+      "n_seeds": 4,
+      "settle_y50_mean": 149.0,
+      "settle_y50_std": 62.8,
+      "cv": 0.422,
+      "settle_y50_per_seed": [
+        61,
+        210,
+        207,
+        118
+      ]
+    }
+  },
+  "transition_matrix": {
+    "death": {
+      "Settlement": {
+        "Empty": 0.0,
+        "Settlement": 0.908627,
+        "Port": 0.003336,
+        "Ruin": 0.088038,
+        "Forest": 0.0,
+        "Mountain": 0.0
+      },
+      "Port": {
+        "Empty": 0.0,
+        "Settlement": 0.0,
+        "Port": 0.92658,
+        "Ruin": 0.07342,
+        "Forest": 0.0,
+        "Mountain": 0.0
+      },
+      "Ruin": {
+        "Empty": 0.359213,
+        "Settlement": 0.446224,
+        "Port": 0.013825,
+        "Ruin": 0.0,
+        "Forest": 0.180739,
+        "Mountain": 0.0
+      },
+      "Forest": {
+        "Empty": 0.0,
+        "Settlement": 0.003054,
+        "Port": 0.0,
+        "Ruin": 0.001662,
+        "Forest": 0.995284,
+        "Mountain": 0.0
+      },
+      "Mountain": {
+        "Empty": 0.0,
+        "Settlement": 0.0,
+        "Port": 0.0,
+        "Ruin": 0.0,
+        "Forest": 0.0,
+        "Mountain": 1.0
+      }
+    },
+    "stable": {
+      "Settlement": {
+        "Empty": 0.0,
+        "Settlement": 0.924273,
+        "Port": 0.003878,
+        "Ruin": 0.071849,
+        "Forest": 0.0,
+        "Mountain": 0.0
+      },
+      "Port": {
+        "Empty": 0.0,
+        "Settlement": 0.0,
+        "Port": 0.956522,
+        "Ruin": 0.043478,
+        "Forest": 0.0,
+        "Mountain": 0.0
+      },
+      "Ruin": {
+        "Empty": 0.340327,
+        "Settlement": 0.482332,
+        "Port": 0.012147,
+        "Ruin": 0.0,
+        "Forest": 0.165194,
+        "Mountain": 0.0
+      },
+      "Forest": {
+        "Empty": 0.0,
+        "Settlement": 0.005715,
+        "Port": 0.0,
+        "Ruin": 0.000991,
+        "Forest": 0.993294,
+        "Mountain": 0.0
+      },
+      "Mountain": {
+        "Empty": 0.0,
+        "Settlement": 0.0,
+        "Port": 0.0,
+        "Ruin": 0.0,
+        "Forest": 0.0,
+        "Mountain": 1.0
+      }
+    },
+    "growth": {
+      "Settlement": {
+        "Empty": 0.0,
+        "Settlement": 0.928938,
+        "Port": 0.003614,
+        "Ruin": 0.067448,
+        "Forest": 0.0,
+        "Mountain": 0.0
+      },
+      "Port": {
+        "Empty": 0.0,
+        "Settlement": 0.0,
+        "Port": 0.952861,
+        "Ruin": 0.047139,
+        "Forest": 0.0,
+        "Mountain": 0.0
+      },
+      "Ruin": {
+        "Empty": 0.336058,
+        "Settlement": 0.49827,
+        "Port": 0.012588,
+        "Ruin": 0.0,
+        "Forest": 0.153084,
+        "Mountain": 0.0
+      },
+      "Forest": {
+        "Empty": 0.0,
+        "Settlement": 0.00865,
+        "Port": 0.0,
+        "Ruin": 0.001224,
+        "Forest": 0.990126,
+        "Mountain": 0.0
+      },
+      "Mountain": {
+        "Empty": 0.0,
+        "Settlement": 0.0,
+        "Port": 0.0,
+        "Ruin": 0.0,
+        "Forest": 0.0,
+        "Mountain": 1.0
+      }
+    }
+  }
+}
