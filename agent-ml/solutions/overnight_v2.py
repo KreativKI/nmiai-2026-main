@@ -782,11 +782,21 @@ def run_cycle(session, state):
 
     # Already submitted: use remaining time to improve and resubmit
     if round_num in state["submitted_rounds"]:
-        # Check if enough time for improvement cycle (~15 min needed)
-        if remaining > 20 and state.get("last_resubmit_round") != round_num:
-            n_cached = len(load_cached_rounds())
-            if n_cached > state.get("last_model_rounds", 0):
-                log(f"  R{round_num} submitted but {remaining:.0f} min left. Improving Brain and resubmitting...")
+        # Check if Brain params were updated by parallel experiments
+        params_updated = False
+        if PARAMS_FILE.exists():
+            params_mtime = PARAMS_FILE.stat().st_mtime
+            last_resubmit_time = state.get("last_resubmit_time", 0)
+            if params_mtime > last_resubmit_time:
+                params_updated = True
+
+        n_cached = len(load_cached_rounds())
+        new_data = n_cached > state.get("last_model_rounds", 0)
+
+        if remaining > 20 and (params_updated or new_data):
+            reason = "new params from parallel experiments" if params_updated else "new ground truth data"
+            log(f"  R{round_num} submitted but {remaining:.0f} min left. Resubmitting ({reason})...")
+            if new_data:
                 try:
                     self_improve(session, state)
                 except Exception as e:
@@ -819,12 +829,13 @@ def run_cycle(session, state):
                 try:
                     resubmit_with_improved_brain(session, round_id, detail, round_num, all_obs, regime_info)
                     state["last_resubmit_round"] = round_num
+                    state["last_resubmit_time"] = time.time()
                     save_state(state)
                     log(f"  R{round_num} RESUBMITTED with improved Brain")
                 except Exception as e:
                     log(f"  Resubmit failed: {e}")
             else:
-                log(f"  R{round_num} already submitted. No new data to improve with.")
+                log(f"  R{round_num} submitted. Waiting for experiments or new data. ({remaining:.0f} min left)")
         else:
             log(f"  R{round_num} already submitted and resubmitted.")
         return True
