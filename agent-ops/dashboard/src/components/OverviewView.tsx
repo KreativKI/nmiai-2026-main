@@ -40,6 +40,16 @@ interface NLPSubmission {
   daily_limit: number | null;
 }
 
+interface NLPTaskScores {
+  total_score: number;
+  tasks_solved: string;
+  rank: number;
+  rank_of: number;
+  submissions_total: number;
+  daily_used: number | null;
+  daily_limit: number | null;
+}
+
 interface LeaderboardSnapshot {
   timestamp: string;
   rows: Record<string, string | number>[];
@@ -131,6 +141,7 @@ export function OverviewView() {
   // Track data
   const [mlData, setMlData] = useState<MLRoundsData | null>(null);
   const [nlpSubs, setNlpSubs] = useState<NLPSubmission[]>([]);
+  const [nlpTaskScores, setNlpTaskScores] = useState<NLPTaskScores | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardSnapshot[]>([]);
 
   // Mini terrain preview
@@ -139,14 +150,16 @@ export function OverviewView() {
 
   // --- Fetch all data ---
   const fetchAll = useCallback(async () => {
-    const [ml, nlp, lb, viz] = await Promise.all([
+    const [ml, nlp, nlpScores, lb, viz] = await Promise.all([
       fetchJSON<MLRoundsData>("/data/ml_rounds.json"),
       fetchJSON<NLPSubmission[]>("/data/nlp_submissions.json"),
+      fetchJSON<NLPTaskScores>("/data/nlp_task_scores.json"),
       fetchJSON<LeaderboardSnapshot[]>("/data/leaderboard.json"),
       fetchJSON<VizData>("/data/viz_data.json"),
     ]);
     if (ml) setMlData(ml);
     if (nlp) setNlpSubs(nlp);
+    if (nlpScores) setNlpTaskScores(nlpScores);
     if (lb) setLeaderboard(lb);
 
     // Extract the latest round's seed 0 grid for the mini preview
@@ -217,22 +230,19 @@ export function OverviewView() {
     return team.includes("kreativ");
   });
 
-  // NLP card
-  const nlpScore = ourRow ? Number(ourRow["tripletex"] ?? 0) : 0;
-  const nlpTodaySubs = nlpSubs.filter((s) => {
+  // NLP card: prefer fresh task scores over stale leaderboard
+  const nlpScore = nlpTaskScores?.total_score ?? (ourRow ? Number(ourRow["tripletex"] ?? 0) : 0);
+  const nlpRank = nlpTaskScores?.rank ?? null;
+  const nlpTasksSolved = nlpTaskScores?.tasks_solved ?? null;
+  const nlpTotalSubs = nlpTaskScores?.submissions_total ?? nlpSubs.length;
+  const nlpDailyUsed = nlpTaskScores?.daily_used ?? nlpSubs.filter((s) => {
     const d = new Date(s.timestamp);
     const now = new Date();
-    // "Today" in UTC (rate limits reset at midnight UTC)
     return d.getUTCFullYear() === now.getUTCFullYear() &&
            d.getUTCMonth() === now.getUTCMonth() &&
            d.getUTCDate() === now.getUTCDate();
-  });
-  const nlpDailyUsed = nlpTodaySubs.length;
-  // Try to get daily budget from latest sub with the field
-  const latestWithBudget = [...nlpSubs].reverse().find(
-    (s) => s.daily_used != null && s.daily_limit != null
-  );
-  const nlpDailyLimit = latestWithBudget?.daily_limit ?? 180;
+  }).length;
+  const nlpDailyLimit = nlpTaskScores?.daily_limit ?? 180;
 
   // CV card
   const cvScore = ourRow ? Number(ourRow["norgesgruppen"] ?? 0) : 0;
@@ -318,7 +328,9 @@ export function OverviewView() {
           </div>
           <div className="space-y-1.5">
             <ScoreRow label="Score" value={nlpScore > 0 ? nlpScore.toFixed(1) : "--"} bold />
-            <ScoreRow label="Subs today" value={`${nlpDailyUsed}`} />
+            {nlpRank && <ScoreRow label="Rank" value={`#${nlpRank}`} />}
+            {nlpTasksSolved && <ScoreRow label="Tasks" value={nlpTasksSolved} />}
+            <ScoreRow label="Total subs" value={`${nlpTotalSubs}`} />
             <div>
               <div className="flex justify-between text-xs mb-0.5">
                 <span className="text-sky-600">Daily budget</span>
@@ -374,7 +386,7 @@ export function OverviewView() {
         <MetricCard
           label="NLP Score"
           value={nlpScore > 0 ? nlpScore.toFixed(1) : "--"}
-          subtitle={`${nlpDailyUsed} subs today`}
+          subtitle={nlpRank ? `Rank #${nlpRank}` : `${nlpTotalSubs} subs total`}
           color="text-amber-700"
         />
         <MetricCard
