@@ -123,30 +123,31 @@ Root cause: similar packaging, model can't read distinguishing text.
 
 ---
 
-## Action Plan (next 20 hours)
+## Action Plan (audit-based, status as of 19:15 CET Saturday)
 
-### IMMEDIATE (next 1 hour)
-1. Fix retrain config (fine-tune from best weights, 50 epochs, lower LR)
-2. Verify NMS in 0.6584 submission (class-agnostic vs per-class)
-3. Build + validate YOLO11l submission ZIP
-4. Standardize run.py (make run_yolo_only.py canonical)
+### IMMEDIATE — DONE
+1. ~~Fix retrain config~~ DONE
+2. ~~Verify NMS in 0.6584 submission~~ DONE (per-class confirmed)
+3. ~~Build YOLO11l ZIP~~ Built, not submitting (JC: won't improve)
+4. ~~Standardize run.py~~ DONE
 
 ### TONIGHT (19:00-01:00 CET)
-5. JC labels with Gemini 2.5 Flash auto-detect (Butler GUI)
-6. Pass 1 generation finishes, pass 3 (angles) starts on cv-train-1
-7. When enough labels ready (~200): start retrain (fine-tune, 50 epochs, ~1.5h)
-8. Submit YOLO11l if not done yet
+5. ~~JC labels with Gemini 2.5 Flash auto-detect~~ ABANDONED (API too slow)
+6. ~~Pass 3 angles generation~~ KILLED (freed GPU for training)
+7. Round 1 retrain: RUNNING (100 JC-labeled + 211 real, 50 epochs, fine-tune)
+8. Round 2 bootstrap: QUEUED (auto-label ~800 with round 1 model, retrain again)
+9. NEW: Crop-based regeneration tested and confirmed working (for potential round 3)
 
 ### OVERNIGHT (01:00-09:00 CET)
-9. Training finishes, build submission ZIP
-10. Second retrain iteration if first improves
+10. Round 2 finishes, ZIP ready (~20:05 CET estimate)
+11. If JC wakes up and labels more: round 3 with JC labels + crop-based regeneration
 
 ### SUNDAY MORNING (09:00-15:00 CET)
-11. Feature freeze 09:00
-12. Submit best model
-13. Test conf/IOU variants on remaining slots
-14. Repo public by 14:45
-15. DEADLINE 15:00
+12. Feature freeze 09:00
+13. Submit best model from round 1 or round 2 (whichever has better val)
+14. Test conf/IOU variants on remaining slots if time
+15. Repo public by 14:45
+16. DEADLINE 15:00
 
 ---
 

@@ -1,0 +1,502 @@
+{
+  "cat_114_shelf_v00.jpg": {
+    "category_id": 114,
+    "product_name": "CLEAN MATCHA GREEN TE ØKOL 20POS PUKKA",
+    "train_count": 3
+  },
+  "cat_114_shelf_v01.jpg": {
+    "category_id": 114,
+    "product_name": "CLEAN MATCHA GREEN TE ØKOL 20POS PUKKA",
+    "train_count": 3
+  },
+  "cat_114_shelf_v02.jpg": {
+    "category_id": 114,
+    "product_name": "CLEAN MATCHA GREEN TE ØKOL 20POS PUKKA",
+    "train_count": 3
+  },
+  "cat_114_shelf_v03.jpg": {
+    "category_id": 114,
+    "product_name": "CLEAN MATCHA GREEN TE ØKOL 20POS PUKKA",
+    "train_count": 3
+  },
+  "cat_114_shelf_v04.jpg": {
+    "category_id": 114,
+    "product_name": "CLEAN MATCHA GREEN TE ØKOL 20POS PUKKA",
+    "train_count": 3
+  },
+  "cat_119_shelf_v00.jpg": {
+    "category_id": 119,
+    "product_name": "SOFT FLORA STEKE&BAKE 500G",
+    "train_count": 3
+  },
+  "cat_119_shelf_v01.jpg": {
+    "category_id": 119,
+    "product_name": "SOFT FLORA STEKE&BAKE 500G",
+    "train_count": 3
+  },
+  "cat_119_shelf_v02.jpg": {
+    "category_id": 119,
+    "product_name": "SOFT FLORA STEKE&BAKE 500G",
+    "train_count": 3
+  },
+  "cat_119_shelf_v03.jpg": {
+    "category_id": 119,
+    "product_name": "SOFT FLORA STEKE&BAKE 500G",
+    "train_count": 3
+  },
+  "cat_119_shelf_v04.jpg": {
+    "category_id": 119,
+    "product_name": "SOFT FLORA STEKE&BAKE 500G",
+    "train_count": 3
+  },
+  "cat_155_shelf_v00.jpg": {
+    "category_id": 155,
+    "product_name": "MELANGE FLYTENDE MARGARIN M/SMØR 500ML",
+    "train_count": 3
+  },
+  "cat_155_shelf_v01.jpg": {
+    "category_id": 155,
+    "product_name": "MELANGE FLYTENDE MARGARIN M/SMØR 500ML",
+    "train_count": 3
+  },
+  "cat_155_shelf_v02.jpg": {
+    "category_id": 155,
+    "product_name": "MELANGE FLYTENDE MARGARIN M/SMØR 500ML",
+    "train_count": 3
+  },
+  "cat_155_shelf_v03.jpg": {
+    "category_id": 155,
+    "product_name": "MELANGE FLYTENDE MARGARIN M/SMØR 500ML",
+    "train_count": 3
+  },
+  "cat_155_shelf_v04.jpg": {
+    "category_id": 155,
+    "product_name": "MELANGE FLYTENDE MARGARIN M/SMØR 500ML",
+    "train_count": 3
+  },
+  "cat_156_shelf_v00.jpg": {
+    "category_id": 156,
+    "product_name": "GRANOLA CRAZELNUT 500G START!",
+    "train_count": 3
+  },
+  "cat_156_shelf_v01.jpg": {
+    "category_id": 156,
+    "product_name": "GRANOLA CRAZELNUT 500G START!",
+    "train_count": 3
+  },
+  "cat_156_shelf_v02.jpg": {
+    "category_id": 156,
+    "product_name": "GRANOLA CRAZELNUT 500G START!",
+    "train_count": 3
+  },
+  "cat_156_shelf_v03.jpg": {
+    "category_id": 156,
+    "product_name": "GRANOLA CRAZELNUT 500G START!",
+    "train_count": 3
+  },
+  "cat_156_shelf_v04.jpg": {
+    "category_id": 156,
+    "product_name": "GRANOLA CRAZELNUT 500G START!",
+    "train_count": 3
+  },
+  "cat_161_shelf_v00.jpg": {
+    "category_id": 161,
+    "product_name": "HAVRERINGER 250G SYNNØVE FINDEN",
+    "train_count": 3
+  },
+  "cat_161_shelf_v01.jpg": {
+    "category_id": 161,
+    "product_name": "HAVRERINGER 250G SYNNØVE FINDEN",
+    "train_count": 3
+  },
+  "cat_161_shelf_v02.jpg": {
+    "category_id": 161,
+    "product_name": "HAVRERINGER 250G SYNNØVE FINDEN",
+    "train_count": 3
+  },
+  "cat_161_shelf_v03.jpg": {
+    "category_id": 161,
+    "product_name": "HAVRERINGER 250G SYNNØVE FINDEN",
+    "train_count": 3
+  },
+  "cat_161_shelf_v04.jpg": {
+    "category_id": 161,
+    "product_name": "HAVRERINGER 250G SYNNØVE FINDEN",
+    "train_count": 3
+  },
+  "cat_288_shelf_v00.jpg": {
+    "category_id": 288,
+    "product_name": "Sunnmørsegg 10stk",
+    "train_count": 3
+  },
+  "cat_288_shelf_v01.jpg": {
+    "category_id": 288,
+    "product_name": "Sunnmørsegg 10stk",
+    "train_count": 3
+  },
+  "cat_288_shelf_v02.jpg": {
+    "category_id": 288,
+    "product_name": "Sunnmørsegg 10stk",
+    "train_count": 3
+  },
+  "cat_288_shelf_v03.jpg": {
+    "category_id": 288,
+    "product_name": "Sunnmørsegg 10stk",
+    "train_count": 3
+  },
+  "cat_288_shelf_v04.jpg": {
+    "category_id": 288,
+    "product_name": "Sunnmørsegg 10stk",
+    "train_count": 3
+  },
+  "cat_299_shelf_v00.jpg": {
+    "category_id": 299,
+    "product_name": "KAMILLE TE 20POS LIPTON",
+    "train_count": 3
+  },
+  "cat_299_shelf_v01.jpg": {
+    "category_id": 299,
+    "product_name": "KAMILLE TE 20POS LIPTON",
+    "train_count": 3
+  },
+  "cat_299_shelf_v02.jpg": {
+    "category_id": 299,
+    "product_name": "KAMILLE TE 20POS LIPTON",
+    "train_count": 3
+  },
+  "cat_299_shelf_v03.jpg": {
+    "category_id": 299,
+    "product_name": "KAMILLE TE 20POS LIPTON",
+    "train_count": 3
+  },
+  "cat_299_shelf_v04.jpg": {
+    "category_id": 299,
+    "product_name": "KAMILLE TE 20POS LIPTON",
+    "train_count": 3
+  },
+  "cat_319_shelf_v00.jpg": {
+    "category_id": 319,
+    "product_name": "LIPTON ICETEA PEACH PULVER 50G",
+    "train_count": 3
+  },
+  "cat_319_shelf_v01.jpg": {
+    "category_id": 319,
+    "product_name": "LIPTON ICETEA PEACH PULVER 50G",
+    "train_count": 3
+  },
+  "cat_319_shelf_v02.jpg": {
+    "category_id": 319,
+    "product_name": "LIPTON ICETEA PEACH PULVER 50G",
+    "train_count": 3
+  },
+  "cat_319_shelf_v03.jpg": {
+    "category_id": 319,
+    "product_name": "LIPTON ICETEA PEACH PULVER 50G",
+    "train_count": 3
+  },
+  "cat_319_shelf_v04.jpg": {
+    "category_id": 319,
+    "product_name": "LIPTON ICETEA PEACH PULVER 50G",
+    "train_count": 3
+  },
+  "cat_321_shelf_v00.jpg": {
+    "category_id": 321,
+    "product_name": "GIFFLAR KANEL 300G PÅGEN",
+    "train_count": 3
+  },
+  "cat_321_shelf_v01.jpg": {
+    "category_id": 321,
+    "product_name": "GIFFLAR KANEL 300G PÅGEN",
+    "train_count": 3
+  },
+  "cat_321_shelf_v02.jpg": {
+    "category_id": 321,
+    "product_name": "GIFFLAR KANEL 300G PÅGEN",
+    "train_count": 3
+  },
+  "cat_321_shelf_v03.jpg": {
+    "category_id": 321,
+    "product_name": "GIFFLAR KANEL 300G PÅGEN",
+    "train_count": 3
+  },
+  "cat_321_shelf_v04.jpg": {
+    "category_id": 321,
+    "product_name": "GIFFLAR KANEL 300G PÅGEN",
+    "train_count": 3
+  },
+  "cat_346_shelf_v00.jpg": {
+    "category_id": 346,
+    "product_name": "SANDWICH SOUR CREAM&ONION 33G WASA",
+    "train_count": 3
+  },
+  "cat_346_shelf_v01.jpg": {
+    "category_id": 346,
+    "product_name": "SANDWICH SOUR CREAM&ONION 33G WASA",
+    "train_count": 3
+  },
+  "cat_346_shelf_v02.jpg": {
+    "category_id": 346,
+    "product_name": "SANDWICH SOUR CREAM&ONION 33G WASA",
+    "train_count": 3
+  },
+  "cat_346_shelf_v03.jpg": {
+    "category_id": 346,
+    "product_name": "SANDWICH SOUR CREAM&ONION 33G WASA",
+    "train_count": 3
+  },
+  "cat_346_shelf_v04.jpg": {
+    "category_id": 346,
+    "product_name": "SANDWICH SOUR CREAM&ONION 33G WASA",
+    "train_count": 3
+  },
+  "cat_017_shelf_v00.jpg": {
+    "category_id": 17,
+    "product_name": "KNEKKEBRØD GL.FRI 150G BRISK",
+    "train_count": 4
+  },
+  "cat_017_shelf_v01.jpg": {
+    "category_id": 17,
+    "product_name": "KNEKKEBRØD GL.FRI 150G BRISK",
+    "train_count": 4
+  },
+  "cat_017_shelf_v02.jpg": {
+    "category_id": 17,
+    "product_name": "KNEKKEBRØD GL.FRI 150G BRISK",
+    "train_count": 4
+  },
+  "cat_017_shelf_v03.jpg": {
+    "category_id": 17,
+    "product_name": "KNEKKEBRØD GL.FRI 150G BRISK",
+    "train_count": 4
+  },
+  "cat_017_shelf_v04.jpg": {
+    "category_id": 17,
+    "product_name": "KNEKKEBRØD GL.FRI 150G BRISK",
+    "train_count": 4
+  },
+  "cat_077_shelf_v00.jpg": {
+    "category_id": 77,
+    "product_name": "BAKEKAKAO 250G REGIA",
+    "train_count": 4
+  },
+  "cat_077_shelf_v01.jpg": {
+    "category_id": 77,
+    "product_name": "BAKEKAKAO 250G REGIA",
+    "train_count": 4
+  },
+  "cat_077_shelf_v02.jpg": {
+    "category_id": 77,
+    "product_name": "BAKEKAKAO 250G REGIA",
+    "train_count": 4
+  },
+  "cat_077_shelf_v03.jpg": {
+    "category_id": 77,
+    "product_name": "BAKEKAKAO 250G REGIA",
+    "train_count": 4
+  },
+  "cat_077_shelf_v04.jpg": {
+    "category_id": 77,
+    "product_name": "BAKEKAKAO 250G REGIA",
+    "train_count": 4
+  },
+  "cat_124_shelf_v00.jpg": {
+    "category_id": 124,
+    "product_name": "O'BOY MINDRE SUKKER 500G POSE FREIA",
+    "train_count": 4
+  },
+  "cat_124_shelf_v01.jpg": {
+    "category_id": 124,
+    "product_name": "O'BOY MINDRE SUKKER 500G POSE FREIA",
+    "train_count": 4
+  },
+  "cat_124_shelf_v02.jpg": {
+    "category_id": 124,
+    "product_name": "O'BOY MINDRE SUKKER 500G POSE FREIA",
+    "train_count": 4
+  },
+  "cat_124_shelf_v03.jpg": {
+    "category_id": 124,
+    "product_name": "O'BOY MINDRE SUKKER 500G POSE FREIA",
+    "train_count": 4
+  },
+  "cat_124_shelf_v04.jpg": {
+    "category_id": 124,
+    "product_name": "O'BOY MINDRE SUKKER 500G POSE FREIA",
+    "train_count": 4
+  },
+  "cat_147_shelf_v00.jpg": {
+    "category_id": 147,
+    "product_name": "ROOIBOS TE ØKOLOGISK 20PS",
+    "train_count": 4
+  },
+  "cat_147_shelf_v01.jpg": {
+    "category_id": 147,
+    "product_name": "ROOIBOS TE ØKOLOGISK 20PS",
+    "train_count": 4
+  },
+  "cat_147_shelf_v02.jpg": {
+    "category_id": 147,
+    "product_name": "ROOIBOS TE ØKOLOGISK 20PS",
+    "train_count": 4
+  },
+  "cat_147_shelf_v03.jpg": {
+    "category_id": 147,
+    "product_name": "ROOIBOS TE ØKOLOGISK 20PS",
+    "train_count": 4
+  },
+  "cat_147_shelf_v04.jpg": {
+    "category_id": 147,
+    "product_name": "ROOIBOS TE ØKOLOGISK 20PS",
+    "train_count": 4
+  },
+  "cat_159_shelf_v00.jpg": {
+    "category_id": 159,
+    "product_name": "Galåvolden Store Gårdsegg 10stk",
+    "train_count": 4
+  },
+  "cat_159_shelf_v01.jpg": {
+    "category_id": 159,
+    "product_name": "Galåvolden Store Gårdsegg 10stk",
+    "train_count": 4
+  },
+  "cat_159_shelf_v02.jpg": {
+    "category_id": 159,
+    "product_name": "Galåvolden Store Gårdsegg 10stk",
+    "train_count": 4
+  },
+  "cat_159_shelf_v03.jpg": {
+    "category_id": 159,
+    "product_name": "Galåvolden Store Gårdsegg 10stk",
+    "train_count": 4
+  },
+  "cat_159_shelf_v04.jpg": {
+    "category_id": 159,
+    "product_name": "Galåvolden Store Gårdsegg 10stk",
+    "train_count": 4
+  },
+  "cat_179_shelf_v00.jpg": {
+    "category_id": 179,
+    "product_name": "SJOKOLADEDRIKK 10X32G RETT I KOPPEN",
+    "train_count": 4
+  },
+  "cat_179_shelf_v01.jpg": {
+    "category_id": 179,
+    "product_name": "SJOKOLADEDRIKK 10X32G RETT I KOPPEN",
+    "train_count": 4
+  },
+  "cat_179_shelf_v02.jpg": {
+    "category_id": 179,
+    "product_name": "SJOKOLADEDRIKK 10X32G RETT I KOPPEN",
+    "train_count": 4
+  },
+  "cat_179_shelf_v03.jpg": {
+    "category_id": 179,
+    "product_name": "SJOKOLADEDRIKK 10X32G RETT I KOPPEN",
+    "train_count": 4
+  },
+  "cat_179_shelf_v04.jpg": {
+    "category_id": 179,
+    "product_name": "SJOKOLADEDRIKK 10X32G RETT I KOPPEN",
+    "train_count": 4
+  },
+  "cat_245_shelf_v00.jpg": {
+    "category_id": 245,
+    "product_name": "ENGLISH BREAKFAST TEA 200G TWININGS",
+    "train_count": 4
+  },
+  "cat_245_shelf_v01.jpg": {
+    "category_id": 245,
+    "product_name": "ENGLISH BREAKFAST TEA 200G TWININGS",
+    "train_count": 4
+  },
+  "cat_245_shelf_v02.jpg": {
+    "category_id": 245,
+    "product_name": "ENGLISH BREAKFAST TEA 200G TWININGS",
+    "train_count": 4
+  },
+  "cat_245_shelf_v03.jpg": {
+    "category_id": 245,
+    "product_name": "ENGLISH BREAKFAST TEA 200G TWININGS",
+    "train_count": 4
+  },
+  "cat_245_shelf_v04.jpg": {
+    "category_id": 245,
+    "product_name": "ENGLISH BREAKFAST TEA 200G TWININGS",
+    "train_count": 4
+  },
+  "cat_252_shelf_v00.jpg": {
+    "category_id": 252,
+    "product_name": "SIDAMO ETIOPIA HELE BØNNER 340G COTW",
+    "train_count": 4
+  },
+  "cat_252_shelf_v01.jpg": {
+    "category_id": 252,
+    "product_name": "SIDAMO ETIOPIA HELE BØNNER 340G COTW",
+    "train_count": 4
+  },
+  "cat_252_shelf_v02.jpg": {
+    "category_id": 252,
+    "product_name": "SIDAMO ETIOPIA HELE BØNNER 340G COTW",
+    "train_count": 4
+  },
+  "cat_252_shelf_v03.jpg": {
+    "category_id": 252,
+    "product_name": "SIDAMO ETIOPIA HELE BØNNER 340G COTW",
+    "train_count": 4
+  },
+  "cat_252_shelf_v04.jpg": {
+    "category_id": 252,
+    "product_name": "SIDAMO ETIOPIA HELE BØNNER 340G COTW",
+    "train_count": 4
+  },
+  "cat_313_shelf_v00.jpg": {
+    "category_id": 313,
+    "product_name": "FLOTT MATFETT 500G",
+    "train_count": 4
+  },
+  "cat_313_shelf_v01.jpg": {
+    "category_id": 313,
+    "product_name": "FLOTT MATFETT 500G",
+    "train_count": 4
+  },
+  "cat_313_shelf_v02.jpg": {
+    "category_id": 313,
+    "product_name": "FLOTT MATFETT 500G",
+    "train_count": 4
+  },
+  "cat_313_shelf_v03.jpg": {
+    "category_id": 313,
+    "product_name": "FLOTT MATFETT 500G",
+    "train_count": 4
+  },
+  "cat_313_shelf_v04.jpg": {
+    "category_id": 313,
+    "product_name": "FLOTT MATFETT 500G",
+    "train_count": 4
+  },
+  "cat_051_shelf_v00.jpg": {
+    "category_id": 51,
+    "product_name": "Tørresvik Gårdsegg 6stk",
+    "train_count": 5
+  },
+  "cat_051_shelf_v01.jpg": {
+    "category_id": 51,
+    "product_name": "Tørresvik Gårdsegg 6stk",
+    "train_count": 5
+  },
+  "cat_051_shelf_v02.jpg": {
+    "category_id": 51,
+    "product_name": "Tørresvik Gårdsegg 6stk",
+    "train_count": 5
+  },
+  "cat_051_shelf_v03.jpg": {
+    "category_id": 51,
+    "product_name": "Tørresvik Gårdsegg 6stk",
+    "train_count": 5
+  },
+  "cat_051_shelf_v04.jpg": {
+    "category_id": 51,
+    "product_name": "Tørresvik Gårdsegg 6stk",
+    "train_count": 5
+  }
+}
