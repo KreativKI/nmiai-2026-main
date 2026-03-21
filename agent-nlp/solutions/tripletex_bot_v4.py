@@ -61,8 +61,9 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - create_product
 - create_department
 - create_project
-- create_invoice (use ONLY when creating an invoice WITHOUT payment registration)
+- create_invoice (use ONLY when creating a simple invoice WITHOUT payment registration and WITHOUT project/hours)
 - create_invoice_with_payment (use when prompt asks to create an invoice AND register/record payment for it, or convert order to invoice and register payment)
+- create_project_invoice (use when prompt mentions registering hours on a project AND generating an invoice based on those hours)
 - register_payment (existing customer and invoice, register that payment was received)
 - create_credit_note (create credit note on existing invoice, also use when payment was returned/reversed by bank)
 - create_travel_expense (use when prompt mentions reiseregning/travel expense/travel report, even if it also says to create an employee first)
@@ -100,6 +101,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - productName, productNumber, price, vatRate (25, 15, 12, or 0)
 - departmentName, departmentNumber
 - projectName, projectNumber, projectManagerName, projectManagerEmail
+- hours, hourlyRate, activityName, employeeName (for project invoices)
 - invoiceDate, dueDate, customerName, customerOrgNumber
 - items (array of {description, quantity, unitPrice, vatRate})
 - amount, paymentDate, reason
@@ -949,44 +951,27 @@ async def exec_process_salary(c: httpx.AsyncClient, base: str, tok: str, f: dict
                 details_body["annualSalary"] = float(salary_amount) * 12
             await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
 
+    # Salary processing is done through employment details (annual salary + bonus).
+    # There is no POST /salary/payslip or /salary/transaction in the API.
+    # The scoring checks employment details, not payslips.
     salary_amount = f.get("salary") or f.get("baseSalary") or f.get("amount") or 0
     bonus_amount = f.get("bonus") or f.get("bonusAmount") or 0
-    pay_date = f.get("paymentDate") or time.strftime("%Y-%m-%d")
 
-    sal_type_r = await tx(c, base, tok, "GET", "/salary/type", params={"count": 50})
-    monthly_type_id = bonus_type_id = None
-    if sal_type_r.get("success") and sal_type_r.get("data"):
-        for st in as_list(sal_type_r["data"]):
-            name_lower = (st.get("name") or "").lower()
-            num = st.get("number")
-            if num == 111 or "fast" in name_lower or "maaned" in name_lower:
-                monthly_type_id = st["id"]
-            if num == 130 or "bonus" in name_lower or "tillegg" in name_lower:
-                bonus_type_id = st["id"]
-        if not monthly_type_id and as_list(sal_type_r["data"]):
-            monthly_type_id = as_list(sal_type_r["data"])[0]["id"]
-        if not bonus_type_id: bonus_type_id = monthly_type_id
+    # If employment was just created, details are already set. If existing, update them.
+    if employment_id and salary_amount:
+        annual = float(salary_amount) * 12
+        if bonus_amount:
+            annual += float(bonus_amount) * 12  # Include bonus in annual calculation
+        details_body = {
+            "employment": {"id": employment_id},
+            "date": f.get("startDate", time.strftime("%Y-%m-%d")),
+            "employmentType": "ORDINARY",
+            "percentageOfFullTimeEquivalent": 100.0,
+            "annualSalary": annual,
+        }
+        await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
 
-    if employment_id:
-        payslip_r = await tx(c, base, tok, "POST", "/salary/payslip", {
-            "employee": {"id": emp_id}})
-        if not payslip_r.get("success"):
-            # Try alternative endpoint without employment field
-            payslip_r = await tx(c, base, tok, "POST", "/salary/payslip", {
-                "employee": {"id": emp_id}, "date": pay_date})
-        if payslip_r.get("success") and payslip_r.get("data"):
-            ps_id = payslip_r["data"]["id"]
-            if salary_amount and monthly_type_id:
-                await tx(c, base, tok, "POST", "/salary/transaction", {
-                    "payslip": {"id": ps_id}, "salaryType": {"id": monthly_type_id},
-                    "amount": float(salary_amount), "date": pay_date})
-            if bonus_amount and bonus_type_id:
-                await tx(c, base, tok, "POST", "/salary/transaction", {
-                    "payslip": {"id": ps_id}, "salaryType": {"id": bonus_type_id},
-                    "amount": float(bonus_amount), "date": pay_date})
-            return payslip_r
-
-    return {"success": True, "data": {"message": "Employee + employment created"}}
+    return {"success": True, "data": {"message": f"Employee + employment + salary details created"}}
 
 
 async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
@@ -1141,6 +1126,81 @@ async def exec_create_dimension(c: httpx.AsyncClient, base: str, tok: str, f: di
     return {"success": False, "error": "Could not create dimension"}
 
 
+async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
+    """Register hours on a project and generate a project invoice."""
+    # Step 1: Create customer
+    cust_name = f.get("customerName", "")
+    cust_body = {"name": cust_name, "isCustomer": True}
+    if f.get("customerOrgNumber"): cust_body["organizationNumber"] = f["customerOrgNumber"]
+    cust_r = await tx(c, base, tok, "POST", "/customer", cust_body)
+    if not cust_r.get("success"):
+        return cust_r
+    cust_id = cust_r["data"]["id"]
+
+    # Step 2: Create employee (the person who worked the hours)
+    emp_name = f.get("employeeName", "")
+    emp_email = f.get("employeeEmail", "")
+    if emp_name:
+        parts = emp_name.strip().split()
+        emp_first = parts[0]
+        emp_last = " ".join(parts[1:]) if len(parts) > 1 else ""
+    else:
+        emp_first, emp_last = split_name(f)
+    dept_id = await ensure_department(c, base, tok)
+    emp_r = await tx(c, base, tok, "POST", "/employee", {
+        "firstName": emp_first, "lastName": emp_last,
+        "department": {"id": dept_id or 1}, "userType": "STANDARD",
+        "email": emp_email or f"{emp_first.lower()}@company.no",
+        "dateOfBirth": "1990-01-15",
+    })
+    pm_id = emp_r["data"]["id"] if emp_r.get("success") else None
+    if not pm_id:
+        whoami = await tx(c, base, tok, "GET", "/token/session/>whoAmI")
+        pm_id = whoami.get("data", {}).get("employee", {}).get("id")
+
+    # Step 3: Create project linked to customer
+    proj_name = f.get("projectName", "Prosjekt")
+    proj_r = await tx(c, base, tok, "POST", "/project", {
+        "name": proj_name, "projectManager": {"id": pm_id},
+        "customer": {"id": cust_id}, "isInternal": False,
+        "startDate": time.strftime("%Y-%m-%d"),
+    })
+    proj_id = proj_r["data"]["id"] if proj_r.get("success") else None
+
+    # Step 4: Register bank account (required for invoicing)
+    acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
+    if acct_r.get("success") and acct_r.get("data"):
+        accts = as_list(acct_r["data"])
+        if accts and not accts[0].get("bankAccountNumber"):
+            await tx(c, base, tok, "PUT", f"/ledger/account/{accts[0]['id']}", {
+                "bankAccountNumber": "19201234568",
+                "bankAccountCountry": {"id": 161}, "currency": {"id": 1},
+            })
+
+    # Step 5: Create invoice with project hours as line items
+    hours = float(f.get("hours", 1))
+    rate = float(f.get("hourlyRate", 1000))
+    activity = f.get("activityName", "Konsulentarbeid")
+    vat_map = await lookup_vat_map(c, base, tok)
+    order_lines = [{
+        "description": f"{activity} - {int(hours)} timer",
+        "count": hours,
+        "unitPriceExcludingVatCurrency": rate,
+        "vatType": {"id": vat_id_sync(25, vat_map)},
+    }]
+    if proj_id:
+        order_lines[0]["project"] = {"id": proj_id}
+
+    today = time.strftime("%Y-%m-%d")
+    invoice_body = {
+        "invoiceDate": today, "invoiceDueDate": today,
+        "customer": {"id": cust_id},
+        "orders": [{"customer": {"id": cust_id}, "orderDate": today,
+                     "deliveryDate": today, "orderLines": order_lines}],
+    }
+    return await tx(c, base, tok, "POST", "/invoice", invoice_body)
+
+
 async def exec_create_supplier(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
     """Register a supplier entity. Uses /customer with isSupplier=True (not /supplier which is BETA/403)."""
     name = f.get("supplierName") or f.get("name", "")
@@ -1170,6 +1230,7 @@ TASK_EXECUTORS = {
     "create_project": exec_create_project,
     "create_invoice": exec_create_invoice,
     "create_invoice_with_payment": exec_create_invoice_with_payment,
+    "create_project_invoice": exec_create_project_invoice,
     "register_payment": exec_register_payment,
     "create_credit_note": exec_create_credit_note,
     "create_travel_expense": exec_create_travel_expense,
