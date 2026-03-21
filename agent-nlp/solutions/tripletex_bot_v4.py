@@ -1745,6 +1745,7 @@ async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: di
     # Build all postings in a single voucher for efficiency
     postings = []
     row = 1
+    acct_cache: dict[int, int] = {}  # account_number -> account_id (avoid duplicate GETs)
     for asset in assets:
         asset_name = asset.get("name", "Eiendel")
         asset_value = float(asset.get("value", 0))
@@ -1768,15 +1769,19 @@ async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: di
             # e.g., 1210 -> 1219, 1230 -> 1239, 1200 -> 1209
             credit_acct_num = (asset_account_num // 10) * 10 + 9
 
-        # Look up the credit (accumulated depreciation) account
-        credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": credit_acct_num})
-        if not credit_acct_r.get("success") or not credit_acct_r.get("data"):
-            # Fallback: try the asset account directly
-            credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": asset_account_num})
+        # Look up the credit (accumulated depreciation) account, with cache
+        if credit_acct_num in acct_cache:
+            credit_acct_id = acct_cache[credit_acct_num]
+        else:
+            credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": credit_acct_num})
             if not credit_acct_r.get("success") or not credit_acct_r.get("data"):
-                log.warning("Year-end: could not find account %d or %d for %s, skipping", credit_acct_num, asset_account_num, asset_name)
-                continue
-        credit_acct_id = as_list(credit_acct_r["data"])[0]["id"]
+                # Fallback: try the asset account directly
+                credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": asset_account_num})
+                if not credit_acct_r.get("success") or not credit_acct_r.get("data"):
+                    log.warning("Year-end: could not find account %d or %d for %s, skipping", credit_acct_num, asset_account_num, asset_name)
+                    continue
+            credit_acct_id = as_list(credit_acct_r["data"])[0]["id"]
+            acct_cache[credit_acct_num] = credit_acct_id
 
         # Debit: depreciation expense
         postings.append({
@@ -2102,6 +2107,17 @@ async def exec_ledger_error_correction(c: httpx.AsyncClient, base: str, tok: str
     voucher_date = f.get("date") or time.strftime("%Y-%m-%d")
     postings = []
     row = 1
+    acct_cache: dict[int, int] = {}  # account_number -> account_id (avoid duplicate GETs)
+
+    async def _get_acct(num: int) -> int | None:
+        if num in acct_cache:
+            return acct_cache[num]
+        r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": num})
+        if r.get("success") and r.get("data"):
+            aid = as_list(r["data"])[0]["id"]
+            acct_cache[num] = aid
+            return aid
+        return None
 
     for err in errors:
         err_type = err.get("type", "")
@@ -2111,84 +2127,60 @@ async def exec_ledger_error_correction(c: httpx.AsyncClient, base: str, tok: str
         desc = err.get("description", "Korreksjonsbilag")
 
         if err_type == "wrong_account" and err_account and correct_account:
-            # Reverse from wrong account, post to correct account
-            wrong_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(err_account)})
-            correct_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(correct_account)})
-            if wrong_acct_r.get("success") and wrong_acct_r.get("data") and correct_acct_r.get("success") and correct_acct_r.get("data"):
-                wrong_id = as_list(wrong_acct_r["data"])[0]["id"]
-                correct_id = as_list(correct_acct_r["data"])[0]["id"]
-                # Credit wrong account (reverse)
+            wrong_id = await _get_acct(int(err_account))
+            correct_id = await _get_acct(int(correct_account))
+            if wrong_id and correct_id:
                 postings.append({"row": row, "date": voucher_date, "account": {"id": wrong_id},
                     "amountGross": -amount, "amountGrossCurrency": -amount,
                     "currency": {"id": 1}, "description": f"Korreksjon: feil konto {err_account}"})
                 row += 1
-                # Debit correct account
                 postings.append({"row": row, "date": voucher_date, "account": {"id": correct_id},
                     "amountGross": amount, "amountGrossCurrency": amount,
                     "currency": {"id": 1}, "description": f"Korreksjon: riktig konto {correct_account}"})
                 row += 1
 
         elif err_type == "duplicate" and err_account:
-            # Reverse the duplicate entry (debit+credit to zero it out)
-            dup_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(err_account)})
-            if dup_acct_r.get("success") and dup_acct_r.get("data"):
-                dup_id = as_list(dup_acct_r["data"])[0]["id"]
-                # Credit to reverse the duplicate debit
+            dup_id = await _get_acct(int(err_account))
+            bank_id = await _get_acct(1920)
+            if dup_id and bank_id:
                 postings.append({"row": row, "date": voucher_date, "account": {"id": dup_id},
                     "amountGross": -amount, "amountGrossCurrency": -amount,
                     "currency": {"id": 1}, "description": f"Korreksjon: duplikat konto {err_account}"})
                 row += 1
-                # Need a balancing entry - use bank account 1920
-                bank_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
-                if bank_r.get("success") and bank_r.get("data"):
-                    bank_id = as_list(bank_r["data"])[0]["id"]
-                    postings.append({"row": row, "date": voucher_date, "account": {"id": bank_id},
-                        "amountGross": amount, "amountGrossCurrency": amount,
-                        "currency": {"id": 1}, "description": f"Korreksjon: duplikat"})
-                    row += 1
+                postings.append({"row": row, "date": voucher_date, "account": {"id": bank_id},
+                    "amountGross": amount, "amountGrossCurrency": amount,
+                    "currency": {"id": 1}, "description": f"Korreksjon: duplikat"})
+                row += 1
 
         elif err_type == "missing_vat" and err_account:
-            # Add the missing VAT posting
-            vat_map = await lookup_vat_map(c, base, tok)
             vat_rate = float(err.get("vatRate", 25))
             vat_amount = round(amount * vat_rate / 100, 2)
-            acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(err_account)})
-            if acct_r.get("success") and acct_r.get("data"):
-                acct_id = as_list(acct_r["data"])[0]["id"]
-                # Debit: VAT on the expense
+            acct_id = await _get_acct(int(err_account))
+            vat_acct_id = await _get_acct(2710) or await _get_acct(2700)
+            if acct_id and vat_acct_id:
                 postings.append({"row": row, "date": voucher_date, "account": {"id": acct_id},
                     "amountGross": vat_amount, "amountGrossCurrency": vat_amount,
                     "currency": {"id": 1}, "description": f"Korreksjon: manglende MVA linje"})
                 row += 1
-                # Credit: input VAT account (2710 for deductible input VAT)
-                vat_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 2710})
-                if not vat_acct_r.get("success") or not vat_acct_r.get("data"):
-                    vat_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 2700})
-                if vat_acct_r.get("success") and vat_acct_r.get("data"):
-                    vat_acct_id = as_list(vat_acct_r["data"])[0]["id"]
-                    postings.append({"row": row, "date": voucher_date, "account": {"id": vat_acct_id},
-                        "amountGross": -vat_amount, "amountGrossCurrency": -vat_amount,
-                        "currency": {"id": 1}, "description": f"Korreksjon: manglende MVA"})
-                    row += 1
+                postings.append({"row": row, "date": voucher_date, "account": {"id": vat_acct_id},
+                    "amountGross": -vat_amount, "amountGrossCurrency": -vat_amount,
+                    "currency": {"id": 1}, "description": f"Korreksjon: manglende MVA"})
+                row += 1
 
         elif err_type == "wrong_amount" and err_account:
-            # Post the difference
             diff = float(err.get("correctAmount", 0)) - amount
             if diff != 0:
-                acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(err_account)})
-                if acct_r.get("success") and acct_r.get("data"):
-                    acct_id = as_list(acct_r["data"])[0]["id"]
+                acct_id = await _get_acct(int(err_account))
+                bank_id = await _get_acct(1920)
+                if acct_id and bank_id:
                     postings.append({"row": row, "date": voucher_date, "account": {"id": acct_id},
                         "amountGross": diff, "amountGrossCurrency": diff,
                         "currency": {"id": 1}, "description": f"Korreksjon: feil belop"})
                     row += 1
-                    bank_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
-                    if bank_r.get("success") and bank_r.get("data"):
-                        bank_id = as_list(bank_r["data"])[0]["id"]
-                        postings.append({"row": row, "date": voucher_date, "account": {"id": bank_id},
-                            "amountGross": -diff, "amountGrossCurrency": -diff,
-                            "currency": {"id": 1}, "description": f"Korreksjon: belop differanse"})
-                        row += 1
+                    postings.append({"row": row, "date": voucher_date, "account": {"id": bank_id},
+                        "amountGross": -diff, "amountGrossCurrency": -diff,
+                        "currency": {"id": 1}, "description": f"Korreksjon: belop differanse"})
+                    row += 1
 
     if not postings:
         return {"success": False, "error": "Could not build correction postings"}
