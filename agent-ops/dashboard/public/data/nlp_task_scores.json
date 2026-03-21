@@ -3,23 +3,23 @@
   "tasks_solved": "18/30",
   "rank": 76,
   "rank_of": 328,
-  "submissions_total": 218,
+  "submissions_total": 222,
   "daily_used": null,
   "daily_limit": null,
   "tasks": [
-    {
-      "task_type": "task_8checks",
-      "best_checks": 8,
-      "total_checks": 8,
-      "best_percentage": 100.0,
-      "attempts": 13
-    },
     {
       "task_type": "task_7checks",
       "best_checks": 7,
       "total_checks": 7,
       "best_percentage": 100.0,
-      "attempts": 5
+      "attempts": 7
+    },
+    {
+      "task_type": "task_8checks",
+      "best_checks": 8,
+      "total_checks": 8,
+      "best_percentage": 100.0,
+      "attempts": 11
     },
     {
       "task_type": "task_13checks",
@@ -30,6 +30,38 @@
     }
   ],
   "recent_results": [
+    {
+      "checks_passed": 7,
+      "total_checks": 7,
+      "percentage": 100.0,
+      "task_header": "Task (7/7)",
+      "time": "02:39 AM",
+      "duration_s": 19.1
+    },
+    {
+      "checks_passed": 8,
+      "total_checks": 8,
+      "percentage": 100.0,
+      "task_header": "Task (8/8)",
+      "time": "02:38 AM",
+      "duration_s": 22.4
+    },
+    {
+      "checks_passed": 7,
+      "total_checks": 7,
+      "percentage": 100.0,
+      "task_header": "Task (7/7)",
+      "time": "02:38 AM",
+      "duration_s": 9.2
+    },
+    {
+      "checks_passed": 8,
+      "total_checks": 8,
+      "percentage": 100.0,
+      "task_header": "Task (8/8)",
+      "time": "02:37 AM",
+      "duration_s": 24.1
+    },
     {
       "checks_passed": 0,
       "total_checks": 8,
@@ -157,39 +189,7 @@
       "task_header": "Task (7/7)",
       "time": "02:07 AM",
       "duration_s": 19.6
-    },
-    {
-      "checks_passed": 8,
-      "total_checks": 8,
-      "percentage": 100.0,
-      "task_header": "Task (8/8)",
-      "time": "02:03 AM",
-      "duration_s": 15.0
-    },
-    {
-      "checks_passed": 2,
-      "total_checks": 8,
-      "percentage": 25.0,
-      "task_header": "Task (2/8)",
-      "time": "02:02 AM",
-      "duration_s": 21.9
-    },
-    {
-      "checks_passed": 8,
-      "total_checks": 8,
-      "percentage": 100.0,
-      "task_header": "Task (8/8)",
-      "time": "02:01 AM",
-      "duration_s": 21.2
-    },
-    {
-      "checks_passed": 0,
-      "total_checks": 8,
-      "percentage": 0.0,
-      "task_header": "Task (0/8)",
-      "time": "02:01 AM",
-      "duration_s": 17.4
     }
   ],
-  "last_fetched": "2026-03-21T01:34:03.615373+00:00"
+  "last_fetched": "2026-03-21T01:39:57.264643+00:00"
 }
