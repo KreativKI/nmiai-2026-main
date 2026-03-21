@@ -155,8 +155,32 @@ The efficiency bonus can DOUBLE tier scores on perfect tasks.
 | Sunday 15:00 | Competition ends |
 
 ## Efficiency Rules (from competition docs)
-- Only WRITE calls (POST/PUT/DELETE/PATCH) count for efficiency
-- GET requests are FREE - read as much as needed
+
+**CRITICAL QUESTION: Do GETs count toward efficiency?**
+- Competition docs say: "How many API calls" (not "write calls")
+- Examples doc says: "Minimize GET calls"
+- Our assumption was "GET is free" -- this MAY BE WRONG
+- If GETs count: our find_customer (3 GETs), ensure_department (1 GET), VAT lookup (1 GET) are all waste
+- NEED TO VERIFY with next submission batch
+
+Other rules:
 - Each 4xx error reduces efficiency bonus
 - Efficiency bonus only applies on PERFECT correctness (1.0)
-- Benchmarks recalculated every 6 hours
+- Benchmarks recalculated every 12 hours
+- Rate limit: 5 per task per day PER TIER (not total)
+
+## Tier 3 -- OPENS TODAY (Saturday)
+
+Tier 3 tasks (3x multiplier, up to 6.0 per task):
+- Bank reconciliation from CSV
+- Error correction in ledger
+- Year-end closing
+- Complex multi-step workflows
+
+**Each perfect Tier 3 task = 6.0 points = three perfect Tier 2 tasks.**
+
+Priority: Build Tier 3 executors with efficiency-first design from the start.
+- Minimum API calls (GETs included, assume they count)
+- Zero 4xx errors
+- Parse CSV/PDF attachments via Gemini multimodal
+- Research Tripletex API endpoints for: bank reconciliation, ledger corrections, year-end
