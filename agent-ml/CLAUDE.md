@@ -338,34 +338,46 @@ This is the single most important technique. More observation seeds = better tra
 
 ## Score Optimization: Current State
 
-Best score: 82.6 (R9). Competitor benchmark: 91.49 avg. Rank ~100/221.
+Best score: 82.6 (R9). Rank ~100/238. Leaderboard = best single round score.
 
-### Architecture (naming convention)
-- **Chef** = the pipeline script (astar_v7.py -> v8 next). Observes, detects regime, predicts, submits.
-- **Brain** = the prediction model (NeighborhoodModelV2 -> V3 next). Transition lookup table.
-- **overnight_runner.py** = the line cook. Runs Chef on GCP, auto-submits every round.
+### CALIBRATION (critical)
+Backtest consistently overshoots real scores by +7 points (std 14.6).
+When backtest says 72, expect ~65 in reality.
+Death rounds overshoot most (+15-27). Growth rounds can undershoot (-5 to -10).
+R9 (our best) was an outlier: backtest said 80, actual was 83.
+RULE: Never trust a backtest improvement until confirmed by actual round score.
 
-### Proven Techniques
-- **Brain V2:** 72K cell transitions, hierarchical lookup (full -> reduced -> minimal -> global)
-- **Regime detection:** death/stable/growth from settlement survival rate (+30 pts on death rounds)
-- **Regime-specific model:** separate Brain per regime (+3.37 avg, growth +8.8)
-- **Reinforcement weighting:** recency decay + regime boost (+1.1 avg)
-- **Temperature scaling:** pred ** (1/T), T=1.12
-- **Spatial smoothing:** Gaussian sigma=0.3
-- **Collapse thresholding:** probs < 0.016 set to floor
-- **Round-specific calibration:** use current round observations to fix blind spots (Settlement->Forest)
-- **Dirichlet-Categorical observation blending:** ps=12
+### What actually worked (R9 = 82.6, our best)
+- V2 NeighborhoodModel (global, NO regime forcing)
+- All 50 queries on seed 0 (deep stacking, multiple samples per cell)
+- Dirichlet blending ps=12
+- T=1.12, collapse=0.016, sigma=0.3
+- Observations dominated the prediction (deep stacking gives probability estimates)
 
-### Key Discovery: Settlement->Forest (R10)
-R10 revealed 35% of settlements become Forest. Historical model predicts 0%. This is a new
-transition type that only appears in death+regrowth rounds. Round-specific calibration fixes it.
+### What hurt (R10-R13 regressions)
+- Regime-specific model forcing (over-corrects, destroyed R9 backtest: 82 -> 53)
+- Spreading queries across 5 seeds (thin coverage, less accurate than deep stack)
+- Round-specific calibration overrides (too aggressive)
+- Entropy-aware temperature (one global T works better)
+- Wrong regime detection (R10: detected growth, was death, -7 point penalty)
 
-### Every Round Cycle (Chef v8 target)
-1. Detect round open (overnight_runner.py, 5-min interval)
-2. Regime detection (5 queries on known settlements)
-3. Observe all seeds (45 queries for full coverage)
-4. Build predictions: regime-specific Brain + weighted training + observations
-5. Round-specific calibration from observations (override blind spots)
+### V3 Regime model: better on average but volatile
+V3 wins 10/13 rounds in simulation (+5.6 avg over V2).
+But V3 destroyed R9 (-29 points) and overshoots death rounds by +20.
+V2 is safer for high scores. V3 is better for consistency.
+Decision: run both on GCP, compare after each round, submit the winner.
+
+### Architecture
+- **Chef** = pipeline script. v9 (V2+smell test) and v8 (V3+regime) run in parallel.
+- **Brain V2** = global transition model. 104K cells from 13 rounds. Safer.
+- **Brain V3** = regime-specific model. Per-terrain alphas. Higher average but volatile.
+- **overnight_v2.py** = autonomous runner on GCP. Handles rounds, self-improves.
+- **churn_v2.py** = continuous param optimization on GCP.
+
+### GCP Resources
+- VM: ml-churn (europe-west1-b), e2-medium, free compute
+- Can use 2 VMs (sharing with CV agent)
+- Cron every 15 min: restarts crashed processes
 6. Validate: floors >= 0.01, normalized, all 5 seeds
 7. Submit all 5 seeds
 8. After round: cache ground truth, retrain Brain, log results
