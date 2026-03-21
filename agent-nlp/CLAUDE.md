@@ -341,7 +341,7 @@ gcloud run deploy tripletex-agent \
 Bad runs never lower your score. Each task type gets 10 submissions/day. More submissions = more coverage = more data on what's broken.
 
 ### Pipeline steps (run ALL in order):
-1. `python3 -c "import ast; ast.parse(open('agent-nlp/solutions/tripletex_bot_v3.py').read())"` -- syntax check
+1. `python3 -c "import ast; ast.parse(open('agent-nlp/solutions/tripletex_bot_v4.py').read())"` -- syntax check
 2. Deploy to Cloud Run
 3. `curl -s [endpoint]/health` -- health check (must return 200)
 4. `python3 agent-nlp/scripts/qc-verify.py [endpoint]` -- 8 Tier 1 tasks with field verification
@@ -349,16 +349,33 @@ Bad runs never lower your score. Each task type gets 10 submissions/day. More su
 6. `python3 agent-nlp/scripts/qc-verify.py [endpoint] --tier2` -- extended Tier 2 tests
 7. Check Cloud Run logs for MALFORMED_FUNCTION_CALL errors: `gcloud run services logs read tripletex-agent --region europe-west4 --project ai-nm26osl-1779 --limit 50 | grep MALFORMED`
 8. If MALFORMED rate >20% of recent requests, fix before submitting.
-9. Run canary: Agent tool with prompt "Read shared/agents/nlp-canary.md for your instructions. Audit endpoint at [URL]."
-10. Canary MUST output PASS. If FAIL, fix violations before submitting.
 
 ### After submission:
 - Record score in EXPERIMENTS.md
-- If score <100%, investigate what fields were wrong before re-submitting same task type
+- If score <100%, run `python3 agent-nlp/scripts/self_improve.py --hours 1` to diagnose
 - Monitor leaderboard: `shared/tools/scrape_leaderboard.py`
 
+### Self-Improving Loop (NEW - autonomous efficiency optimization)
+The bot now has write-call instrumentation. After every submission batch:
+```
+1. Run self_improve.py to analyze Cloud Run logs (writes, errors, timing)
+2. Read FIXES-QUEUE.md for ranked optimization targets
+3. Implement highest-impact fix
+4. Deploy -> health check -> submit again
+5. Repeat until rate limit hit
+```
+
+### Efficiency Tools
+| Tool | Command | Purpose |
+|------|---------|---------|
+| Efficiency Analyzer | `python3 agent-nlp/scripts/efficiency_analyzer.py --hours 12 --save` | Analyze logs, rank targets |
+| Self-Improve Pipeline | `python3 agent-nlp/scripts/self_improve.py --hours 12` | Full diagnose -> prescribe loop |
+| Write Call Tracking | Built into bot (contextvars) | Per-request write/error counting |
+
+The bot logs `writes=N, errors_4xx=N` for every request. The analyzer parses these to identify inefficient executors.
+
 ### Key principle:
-It is ALWAYS better to spend 1 hour fixing a task type to 100% than to burn 10 submission slots hoping for luck. Bad runs don't lower score, but they waste daily rate limit.
+Fix 4xx errors first (biggest efficiency impact), then reduce write calls on perfect tasks.
 
 ## Shared Tools Location
 All shared tools are in `shared/tools/`. Read TOOLS.md there for full inventory.

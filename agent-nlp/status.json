@@ -1,1 +1,38 @@
-{"agent":"agent-nlp","timestamp":"2026-03-20T19:45:00Z","track":"nlp","phase":"validated","state":"active","approach":"C","confidence":0.85,"best_submitted_score":"8/8 on 2 tasks, 6/7, 4/8, 2/7 (payment)","submissions_count":4,"task_scores":{"create_customer":{"score":"8/8","pct":1.0},"unknown_8_8":{"score":"8/8","pct":1.0},"register_payment":{"score":"2/7","pct":0.29,"note":"v4 fixes customer search, should improve"},"auto_6_7":{"score":"6/7","pct":0.86},"auto_4_8":{"score":"4/8","pct":0.5}},"blockers":[],"rules_last_read":"2026-03-20T19:00:00Z","endpoint":"https://tripletex-agent-795548831221.europe-west4.run.app","revision":37,"bot_version":"tripletex_bot_v4.py","qc_status":"8/8 PASS Tier 1","notes":"v4 deployed rev 37. Structured workflows (no function calling). Key fixes: vatType retry (.lower() bug), customer search exact match + org number fallback + full list scan. Pre-submit pipeline operational. Invoice VAT codes rejected by dev sandbox (competition sandboxes likely configured differently). Ready for submission."}
+{
+  "agent": "agent-nlp",
+  "timestamp": "2026-03-21T11:30:00Z",
+  "track": "nlp",
+  "phase": "efficiency_optimization",
+  "state": "active",
+  "approach": "C",
+  "confidence": 0.9,
+  "best_submitted_score": "29.08 (rank #107), estimated 40-43 after overnight batch",
+  "submissions_today": "budget exhausted, waiting for reset or fresh budget",
+  "revision": 67,
+  "bot_version": "tripletex_bot_v4.py (1747 lines, 22 executors)",
+  "endpoint": "https://tripletex-agent-795548831221.europe-west4.run.app",
+  "efficiency_environment": {
+    "write_call_tracking": "active (contextvars, logs writes/errors per request)",
+    "scripts": [
+      "scripts/efficiency_analyzer.py",
+      "scripts/self_improve.py",
+      "scripts/write_call_tracker.py"
+    ],
+    "last_analysis": "81 4xx errors in 177 requests, top offenders: create_invoice(18), create_project_invoice(18), create_project(11)"
+  },
+  "improvements_this_session": [
+    "Efficiency environment built (analyzer + self-improving pipeline)",
+    "Write-call instrumentation in bot (contextvars per-request tracking)",
+    "Look-before-leap employee creation (GET first, POST only if needed)",
+    "VAT cache keyed by (base_url, token) not just base_url",
+    "Broadened email conflict detection (Norwegian + English error messages)",
+    "Fixed process_salary returning fake success (now reports real state)",
+    "Fixed delete_travel_expense exact name match",
+    "Fixed per_diem_days variable shadowing",
+    "Fixed contextvars race condition (shared mutable default)"
+  ],
+  "blockers": [],
+  "rules_last_read": "2026-03-21T11:30:00Z",
+  "qc_status": "8/8 PASS Tier 1 (rev 65), rev 67 deployed but untested on competition",
+  "notes": "Rev 67 has all efficiency fixes. Need submissions to measure actual score delta. Self-improving loop ready: submit -> analyze logs -> self_improve.py -> fix -> deploy -> repeat."
+}

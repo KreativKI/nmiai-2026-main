@@ -1,9 +1,9 @@
 # Tripletex AI Accounting Agent -- Execution Plan
 
 **Track:** NLP | **Weight:** 33.33%
-**Last updated:** 2026-03-21 12:00 CET
+**Last updated:** 2026-03-21 12:30 CET
 **Approach:** Structured workflows (LLM extracts fields, Python executes API calls)
-**Bot version:** tripletex_bot_v4.py (deployed, rev 47, now with efficiency instrumentation)
+**Bot version:** tripletex_bot_v4.py (1747 lines, 22 executors, rev 67 deployed)
 
 ## Leaderboard State (2026-03-21 00:50 CET)
 
@@ -15,118 +15,122 @@
 | #107 Kreativ KI (us) | 29.08 | 18/30 | 14.7 | 14.4 |
 
 **Root cause:** Efficiency bonus is 14.4 vs top teams' ~31.0. Correctness is nearly equal.
-The efficiency bonus can DOUBLE tier scores on perfect tasks. Top teams get 4.0 on Tier 2 tasks, we get 1.0-2.0.
+The efficiency bonus can DOUBLE tier scores on perfect tasks.
 
-## Current Phase: Efficiency Environment Active
+---
 
-### Efficiency Tooling (NEW)
+## Efficiency Improvements: Yesterday vs Today
 
-Three new scripts for continuous efficiency improvement:
+### Yesterday (rev 37-65, March 20)
+- No efficiency tracking at all: could not measure write calls or 4xx errors
+- Executors used "fire and pray": POST /employee without checking if it exists
+- 81 4xx errors across 177 submissions (46% of requests had at least one error)
+- VAT cache could serve wrong IDs across different sandboxes
+- process_salary reported fake "success: True" even when it failed
+- Email conflict detection only matched Norwegian "e-post" error text
+- per_diem_days variable shadowed itself (used wrong value for per diem block)
+- delete_travel_expense could delete wrong employee's expense (no exact name match)
 
-A. `python3 agent-nlp/scripts/efficiency_analyzer.py` -- Analyze Cloud Run logs, rank optimization targets
-B. `python3 agent-nlp/scripts/self_improve.py` -- Full pipeline: analyze, diagnose, prescribe fixes, report
-C. `agent-nlp/scripts/write_call_tracker.py` -- Module for per-request write call tracking (imported by bot)
+### Today (rev 67, March 21)
+- **Write-call instrumentation active**: every request logs `writes=N, errors_4xx=N` + full API call sequence
+- **Self-improving pipeline**: `self_improve.py` analyzes logs, diagnoses inefficiencies, prescribes ranked fixes
+- **Efficiency analyzer**: `efficiency_analyzer.py` generates per-executor efficiency reports
+- **Look-before-leap pattern**: all employee-creating executors now GET first (free), POST only if needed
+- **4xx error elimination**: email conflicts caught via admin match (name + email), before POST
+- **Conditional writes**: dateOfBirth PUT only when actually null (not on every existing employee)
+- **Correct VAT cache**: keyed by (base_url, token), not just base_url
+- **Honest success tracking**: process_salary returns real success state
+- **Robust error detection**: matches "e-post", "email", "duplicate", "already" in any language
+- **Safe concurrency**: contextvars race condition fixed (no shared mutable default)
 
-The bot now has write-call instrumentation via contextvars. Every /solve request logs:
-- Number of write calls (POST/PUT/DELETE/PATCH)
-- Number of 4xx errors
-- Full API call sequence
+### Expected Impact (to be measured when submissions resume)
+- 4xx errors: 81 -> estimated 20-30 (elimination of the 36 email conflicts + 7 dateOfBirth errors)
+- Efficiency bonus: 14.4 -> estimated 20-25 (fewer errors = higher bonus)
+- The self-improving loop will continue pushing this higher after each submission batch
 
-This data appears in Cloud Run logs as `Efficiency detail [task_type]: ...` and is picked up by the analyzer.
+---
 
-### Self-Improving Loop Process
+## Current Phase: Ready to Submit + Self-Improve
+
+### Efficiency Tooling
+
+| Tool | Command | Purpose |
+|------|---------|---------|
+| Efficiency Analyzer | `python3 agent-nlp/scripts/efficiency_analyzer.py --hours 12 --save` | Analyze logs, rank targets |
+| Self-Improve Pipeline | `python3 agent-nlp/scripts/self_improve.py --hours 12` | Full diagnose -> prescribe loop |
+| Write Call Tracker | Built into bot via contextvars | Per-request write/error counting |
+
+### Self-Improving Loop (autonomous)
 
 ```
-1. Run self_improve.py to analyze recent logs
-2. Read generated FIXES-QUEUE.md for ranked code changes
-3. Implement highest-impact fix
-4. Deploy to Cloud Run
-5. Submit runs to generate fresh data
-6. Re-run self_improve.py to verify improvement
-7. Repeat
+1. Submit 10 runs (submitter agent)
+2. Read Cloud Run logs (writes=N, errors_4xx=N per request)
+3. Run self_improve.py to diagnose + prescribe
+4. Implement highest-impact fix (fixer agent)
+5. Deploy new revision
+6. Repeat from step 1
 ```
 
-### Strategy: Maximize Efficiency on Already-Correct Tasks FIRST
+### Strategy: Priority Order
 
-Priority order:
-1. **Fix 4xx errors** (each one reduces efficiency bonus, even on correct tasks)
-2. **Reduce writes on perfect-score executors** (efficiency bonus only applies at 1.0 correctness)
-3. **Fix broken/low-score tasks** (no efficiency bonus until correctness = 1.0)
+1. **Submit and gather data** (need fresh logs with instrumentation to measure real state)
+2. **Fix 4xx errors** (each error reduces efficiency bonus)
+3. **Reduce writes on perfect-score executors** (efficiency bonus only at 1.0 correctness)
+4. **Fix broken/low-score tasks** (travel expense 0/8, payment reversal 2/8, salary 4-5/8)
+5. **Tier 3 preparation** (opens Saturday morning, 3x multiplier)
 
 ### Per-Executor Write Call Budgets
 
-| Executor | Current max writes | Optimal writes | Savings potential |
-|----------|-------------------|----------------|-------------------|
-| create_customer | 1 | 1 | 0 |
-| create_employee | 1-4 | 1-3 | 1 |
-| create_employee_with_employment | 3 | 3 | 0 |
-| create_product | 1 | 1 | 0 |
-| create_department | N (per dept) | N | 0 |
-| create_project | 2-4 | 1-2 | 1-2 |
-| create_invoice | 2-3 | 1-2 | 1 |
-| create_invoice_with_payment | 3-4 | 2-3 | 1 |
-| register_payment | 1 | 1 | 0 |
-| create_credit_note | 1 | 1 | 0 |
-| create_travel_expense | 3-6 | 2-4 | 1-2 |
-| process_salary | 3-6 | 2-4 | 1-2 |
-| register_supplier_invoice | 2 | 2 | 0 |
-| create_dimension | 2+N | 2+N | 0 |
+| Executor | Current max writes | Optimal writes | Status |
+|----------|-------------------|----------------|--------|
+| create_customer | 1 | 1 | OPTIMAL |
+| create_employee | 1-4 | 1-3 | OPTIMIZED (look-before-leap) |
+| create_employee_with_employment | 3 | 3 | OPTIMAL |
+| create_product | 1 | 1 | OPTIMAL |
+| create_department | N (per dept) | N | OPTIMAL |
+| create_project | 2-4 | 1-2 | OPTIMIZED (admin match first) |
+| create_invoice | 2-3 | 1-2 | Bank PUT still needed on fresh sandbox |
+| create_invoice_with_payment | 3-4 | 2-3 | Inherits invoice pattern |
+| register_payment | 1 | 1 | OPTIMAL |
+| create_credit_note | 1 | 1 | OPTIMAL |
+| create_travel_expense | 3-6 | 2-4 | OPTIMIZED (GET employee first) |
+| process_salary | 3-6 | 2-4 | OPTIMIZED (conditional dateOfBirth PUT) |
+| register_supplier_invoice | 2 | 2 | OPTIMAL |
+| create_dimension | 2+N | 2+N | OPTIMAL |
+| create_supplier | 1 | 1 | OPTIMAL |
+| create_project_invoice | 4-6 | 2-4 | OPTIMIZED (admin match + bank) |
 
-### Error Hotspots (from self_improve.py analysis, 187 requests)
+### Error Hotspots (before fixes, 177 requests)
 
-| Executor | 4xx errors | Most common error |
-|----------|-----------|-------------------|
-| create_invoice | 18 | 403 expired token, PUT employee dateOfBirth |
-| create_project_invoice | 18 | POST /employee 422 email conflict, POST /project 422 PM not authorized |
-| create_project | 11 | POST /employee 422 email conflict, PUT /employee 422 dateOfBirth |
-| process_salary | 7 | PUT /employee 422 dateOfBirth, POST /employee 422 email |
-| create_credit_note | 6 | 403 expired token |
-| create_dimension | 4 | Varies |
-| create_department | 4 | 403 expired token |
-| create_travel_expense | 4 | POST /employee 422 email conflict |
+| Executor | 4xx errors | Fix applied |
+|----------|-----------|-------------|
+| create_invoice | 18 | Bank PUT check exists (stays, needed for fresh sandbox) |
+| create_project_invoice | 18 | Admin name/email match before POST /employee |
+| create_project | 11 | Admin name/email match before POST /employee |
+| process_salary | 7 | Conditional dateOfBirth PUT (only when null) |
+| create_credit_note | 6 | 403 expired token (can't fix, server-side) |
+| create_travel_expense | 4 | GET employee by name first |
+| create_dimension | 4 | Can't fix (varies) |
+| create_department | 4 | 403 expired token (can't fix) |
 
-### Phase 5A: Efficiency Optimization (TOOLING COMPLETE, FIXES IN PROGRESS)
+### Correctness Fixes Still Needed
 
-Known fixes to implement:
-A. **create_invoice**: Check if bank account 1920 already has number before PUT (saves 1 write)
-B. **create_project**: If admin matches PM name, skip POST /employee entirely (saves 1-2 writes + 422 errors)
-C. **process_salary**: GET employee dateOfBirth before PUT; only PUT if null (saves 1 write + 422 error)
-D. **create_travel_expense**: GET /employee by name first; if exists, use existing ID (saves 1-2 writes)
-E. **create_project_invoice**: Same PM and bank account fixes as create_project + create_invoice
-
-### Phase 5B: Correctness Fixes
-| Task | Our score | Top score | Issue |
-|------|-----------|-----------|-------|
-| Task 09 | 1.25 | 4.00 | Unknown - need to identify task type |
-| Task 15 | 1.50 | 4.00 | Unknown |
-| Task 16 | 1.00 | 4.00 | Unknown |
-| Task 18 | 0.50 | 4.00 | Unknown |
-| Task 11 | --- | 4.00 | Not scored yet |
-| Task 17 | --- | 4.00 | Not scored yet |
-
-### Phase 5C: Dimension Fix (DEPLOYED rev 47)
-- Changed from department proxy to proper API
-- Voucher postings use freeAccountingDimension1/2/3
+| Task | Score | Issue | Priority |
+|------|-------|-------|----------|
+| Travel expense | 0/8 | Date fix in rev 65, untested | HIGH (Tier 2 = 2x) |
+| Payment reversal | 2/8 | Classified as credit_note, may need different approach | HIGH |
+| Salary | 4-5/8 | annualSalary x12 partial, may need bonus handling | MEDIUM |
+| Supplier invoice voucher | 0-8/8 | Inconsistent, locked VAT codes | MEDIUM |
+| Project/Project invoice | 5-7/7 | PM name edge cases | LOW (mostly working) |
 
 ### Phase 5D: Tier 3 Preparation (Saturday morning)
-- Research complex scenarios
+- Research complex scenarios: bank reconciliation, error correction, year-end closing
 - Build executors for new task types
 - Optimize for 3x multiplier tasks
 
-## Completed Today
-- Fixed create_dimension (real API, not department proxy)
-- Added create_invoice_with_payment for multi-step tasks
-- Skipped BETA /supplier endpoint (403), use /customer with isSupplier
-- Fixed supplier invoice voucher (balanced postings with row numbers)
-- Fixed product number conflicts (GET existing instead of failing)
-- Fixed process_salary dateOfBirth for existing employees
-- Fixed create_project (create specified PM employee)
-- Built efficiency environment: analyzer, self_improve, write_call_tracker
-- Added write-call instrumentation to tripletex_bot_v4.py
-
 ## Submission Budget
 - 180/day, resets 01:00 CET
-- Budget after reset: 180 fresh
+- Current budget: waiting for availability
 
 ## Key Dates
 | Time | What |
