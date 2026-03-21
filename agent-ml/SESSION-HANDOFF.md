@@ -1,33 +1,42 @@
-# ML Session Handoff -- 2026-03-21 19:50 CET
+# ML Session Handoff -- 2026-03-21 22:15 CET
 
-## Score: 169.6 weighted (R15=81.6). Rank 167. Top 1: 196.6.
+## Score: R17=67.9 (weighted 155.7). R18 submitted (pending).
 
-## What's Running (DON'T TOUCH, both autonomous)
-- ml-brain: overnight_v4 (V4 32-feat, handles rounds, caches data, rebuilds dataset)
-- ml-churn: churn_v4 (32-feat hyperparameter search)
-- Both have cron watchdogs. Both use reviewed + simplified code.
+## What's Running
+- ml-brain: overnight_v4 restarting via cron with 51-feature build_dataset.py
+- Will resubmit R18 with 51 features when it restarts
+- Hard constraints (port-coastal, ruin-cap) already in overnight_v4
 
 ## What Happened This Session
-- Built Brain V4 (LightGBM, 32 features from replay data). +6.2 over V3 on real data.
-- Discovered /replay API: FREE year-by-year simulation data. 80 replays cached.
-- Built master dataset (102K rows x 32 features).
-- R15: 81.6 (V4 + deep stack). R16: 57.0 (chaotic round, model struggled).
-- Audit scored operations 3/10. Fixed: deployed overnight_v4 + updated churn_v4.
-- Full Boris workflow on all 3 core files (review + simplify + validate).
+- Built deep_analysis.py: validated 8 hypotheses on 80 replays
+  - Empty never becomes Forest, Ports 100% coastal, Ruins 1yr lifespan
+  - Transition matrix reveals Settlement->Ruin->Forest/Empty/Settlement lifecycle
+- Extended build_dataset.py: 32 -> 51 features
+  - Year-10 wealth/defense, Year-25 full stats, survival tracking
+  - Round-level trajectory features (growth rates, wealth decay, faction consolidation)
+- Built evaluation framework (evaluate.py): leave-one-round-out CV
+- Built transition_model.py: 1.77M transitions, 4-level hierarchical fallback
+- Tested 3 models in tournament:
+  - 51-feat regressors: 78.1 (WINNER)
+  - Multiclass LightGBM: 26.3 (FAILED - argmax destroys probability info)
+  - CA-Markov: 19.0 (FAILED - static neighborhoods, averaged transitions)
+- Deployed 51-feature build_dataset.py to GCP
+- Plan went through 4 audit rounds before approval
 
-## NEXT SESSION PRIORITY: Deep Analysis
-The competition briefing identified hidden rules from 8 rounds.
-We have 16 rounds of replays now. These rules are UNVALIDATED.
+## Key Learning
+Multiclass classification is WRONG for probabilistic prediction with KL scoring.
+The ground truth is a probability distribution, not a hard class. Regressing
+each class probability independently (6 regressors) then floor+renormalize
+preserves the distribution information that the scoring formula rewards.
 
-File: /Users/jcfrugaard/Downloads/OVERSEER-BRIEFING-ASTAR-DEEP-ANALYSIS.md
+## Data Status
+- 85 replays locally (17 rounds, R17 seed4 missing)
+- 17 ground truth files
+- All synced to GCP
 
-Task: write deep_analysis.py, run on GCP, validate all hypotheses.
-Results feed into V4 hard constraints and feature engineering.
-See plan.md for the 8 hypotheses.
-
-## Key Learnings
-- R9 and R15 scored 80+ because dynamics were PREDICTABLE (clear growth)
-- R16 scored 57 because dynamics were CHAOTIC (ambiguous, mixed outcomes)
-- Score depends more on hidden parameters than model quality
-- Deep-stacked seed can score WORSE than model-only on chaotic rounds (R16)
-- 50 trees beats 200 trees (less overfitting with small training data)
+## Next Session
+- Verify R18 resubmission with 51 features worked
+- Check churn_v4 compatibility with 51 features (may need update)
+- Consider: can we improve further? Feature importance analysis would show
+  which of the 51 features actually matter
+- Feature freeze Sunday 09:00 CET
