@@ -42,7 +42,7 @@ ML_LEADERBOARD_URL = "https://api.ainm.no/astar-island/leaderboard"
 NLP_LEADERBOARD_URL = "https://api.ainm.no/tripletex/leaderboard"
 
 DEFAULT_OUTPUT = "agent-ops/dashboard/public/data/leaderboard.json"
-MAX_SNAPSHOTS = 100
+MAX_SNAPSHOTS = 30
 
 
 def fetch_json(url: str, timeout: int = 15) -> list | dict | None:
