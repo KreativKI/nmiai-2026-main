@@ -1,54 +1,90 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="color-scheme:dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>CV Labeler</title>
+<meta name="theme-color" content="#0a0e14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Space+Grotesk:wght@700;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0a0e14;--bg2:#131820;--bg3:#1c2430;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--amber:#f59e0b;--text:#e8ecf1;--muted:#6b7a8d;--border:rgba(255,255,255,0.08)}
+:root{--bg:#0a0e14;--bg2:#131820;--bg3:#1c2430;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--amber:#f59e0b;--text:#e8ecf1;--muted:#6b7a8d;--border:rgba(255,255,255,0.08);--glow:0 0 12px rgba(34,197,94,0.3)}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:none}
-h1,h2{font-family:'Space Grotesk',sans-serif}
+h1,h2{font-family:'Space Grotesk',sans-serif;letter-spacing:-0.02em}
 
-.topbar{height:44px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 8px;gap:8px;flex-shrink:0}
-.stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+/* Bars with gradient depth */
+.topbar{height:44px;background:linear-gradient(180deg,#161d27 0%,var(--bg2) 100%);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 8px;gap:8px;flex-shrink:0}
+.stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:radial-gradient(ellipse at center,#0d1219 0%,var(--bg) 70%)}
 canvas{display:block;touch-action:none}
-.bottombar{background:var(--bg2);border-top:1px solid var(--border);display:flex;flex-wrap:wrap;align-items:center;padding:6px 8px;gap:6px;flex-shrink:0}
+.bottombar{background:linear-gradient(0deg,#161d27 0%,var(--bg2) 100%);border-top:1px solid var(--border);display:flex;flex-wrap:wrap;align-items:center;padding:6px 8px;gap:6px;flex-shrink:0}
 
-.btn{padding:8px 16px;border:none;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;cursor:pointer;text-transform:uppercase;min-height:44px;min-width:44px;display:flex;align-items:center;justify-content:center;gap:4px}
-.btn-green{background:var(--green);color:#000}
-.btn-red{background:var(--red);color:#fff}
-.btn-blue{background:var(--blue);color:#fff}
-.btn-amber{background:var(--amber);color:#000}
-.btn-ghost{background:var(--bg3);color:var(--text)}
-.btn:active{filter:brightness(0.85)}
+/* Buttons with transitions */
+.btn{padding:8px 16px;border:none;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;cursor:pointer;text-transform:uppercase;min-height:44px;min-width:44px;display:flex;align-items:center;justify-content:center;gap:4px;transition:transform 0.1s,filter 0.1s,box-shadow 0.15s}
+.btn-green{background:var(--green);color:#000;box-shadow:0 2px 8px rgba(34,197,94,0.25)}
+.btn-red{background:var(--red);color:#fff;box-shadow:0 2px 8px rgba(239,68,68,0.2)}
+.btn-blue{background:var(--blue);color:#fff;box-shadow:0 2px 8px rgba(59,130,246,0.2)}
+.btn-amber{background:var(--amber);color:#000;box-shadow:0 2px 8px rgba(245,158,11,0.2)}
+.btn-ghost{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+.btn-destructive{background:transparent;color:var(--red);border:1px solid rgba(239,68,68,0.4)}
+.btn-destructive:active{background:rgba(239,68,68,0.15)}
+.btn:active{transform:scale(0.95);filter:brightness(0.9)}
+.btn-primary{padding:10px 24px;font-size:14px;border-radius:8px;letter-spacing:0.02em}
 
-.overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;padding:20px}
+/* Overlays with animation */
+.overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;padding:20px;animation:fadeIn 0.2s ease-out}
 .overlay.hidden{display:none}
-.folder-input{background:var(--bg3);border:2px solid var(--border);color:var(--text);padding:12px;font-family:'JetBrains Mono',monospace;font-size:14px;border-radius:6px;width:100%;max-width:500px}
-.folder-input:focus{outline:none;border-color:var(--green)}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+.folder-input{background:var(--bg3);border:2px solid var(--border);color:var(--text);padding:12px;font-family:'JetBrains Mono',monospace;font-size:14px;border-radius:8px;width:100%;max-width:500px;transition:border-color 0.2s,box-shadow 0.2s}
+.folder-input:focus{outline:none;border-color:var(--green);box-shadow:var(--glow)}
 
 .folder-list{list-style:none;width:100%;max-width:500px;margin-top:12px;max-height:40vh;overflow-y:auto}
-.folder-item{padding:10px 12px;background:var(--bg3);border-radius:4px;margin-bottom:4px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px;min-height:44px}
-.folder-item:active{background:#2a3444}
+.folder-item{padding:10px 12px;background:var(--bg3);border-radius:6px;margin-bottom:4px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px;min-height:44px;transition:background 0.15s,transform 0.1s;border:1px solid transparent}
+.folder-item:active{background:#2a3444;transform:scale(0.98)}
 .folder-item.has-images{border-left:3px solid var(--green)}
 
-.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;width:100%;max-width:1200px}
-.gallery-card{cursor:pointer;background:var(--bg3);border-radius:4px;overflow:hidden;position:relative}
-.gallery-card:active{outline:2px solid var(--green)}
+/* Gallery with interaction states */
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;width:100%;max-width:1200px}
+.gallery-card{cursor:pointer;background:var(--bg3);border-radius:6px;overflow:hidden;position:relative;transition:transform 0.15s,box-shadow 0.15s;border:2px solid transparent}
+.gallery-card:active{transform:scale(0.96);box-shadow:0 0 0 2px var(--green)}
 .gallery-card img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
-.gallery-card .dot{position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%}
-.gallery-card .lbl{padding:2px 4px;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gallery-card .dot{position:absolute;top:6px;right:6px;width:12px;height:12px;border-radius:50%;border:2px solid rgba(0,0,0,0.5);box-shadow:0 1px 3px rgba(0,0,0,0.4)}
+.gallery-card .lbl{padding:3px 6px;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.gallery-card[data-status="delete"]{opacity:0.5;border-color:rgba(239,68,68,0.3)}
 
-#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--green);color:var(--text);padding:8px 16px;font-size:12px;border-radius:6px;pointer-events:none;opacity:0;transition:opacity 0.2s;z-index:200}
-#toast.show{opacity:1}
+/* Toast with slide-up animation */
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(8px);background:rgba(28,36,48,0.95);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--green);color:var(--text);padding:10px 20px;font-size:12px;border-radius:20px;pointer-events:none;opacity:0;transition:opacity 0.2s,transform 0.2s;z-index:200}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-.tap-dot{position:absolute;width:20px;height:20px;border-radius:50%;background:var(--green);border:2px solid #fff;margin:-10px 0 0 -10px;pointer-events:none;z-index:10}
+.tap-dot{position:absolute;width:20px;height:20px;border-radius:50%;background:var(--green);border:2px solid #fff;margin:-10px 0 0 -10px;pointer-events:none;z-index:10;box-shadow:var(--glow)}
 
-.mode-indicator{background:var(--bg3);color:var(--amber);padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600;text-transform:uppercase}
+.mode-indicator{background:var(--bg3);color:var(--amber);padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600;text-transform:uppercase;border:1px solid rgba(245,158,11,0.2)}
+
+/* Stage navigation arrows - glassmorphism */
+.stage-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:10;width:40px;height:80px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(10,14,20,0.5);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);color:rgba(255,255,255,0.7);font-size:22px;user-select:none;-webkit-user-select:none;transition:background 0.15s,color 0.15s}
+.stage-nav:active{background:rgba(10,14,20,0.8);color:#fff}
+.stage-nav-left{left:0;border-radius:0 8px 8px 0}
+.stage-nav-right{right:0;border-radius:8px 0 0 8px;background:rgba(34,197,94,0.3)}
+.stage-nav-right:active{background:rgba(34,197,94,0.5)}
+
+/* Progress bar - visible everywhere */
+.progress-wrap{flex-shrink:0;text-align:right}
+.progress-track{width:80px;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,#16a34a,var(--green));width:0%;transition:width 0.3s;box-shadow:var(--glow);border-radius:3px}
+
+/* Done overlay */
+.done-title{font-size:32px;margin-bottom:4px;background:linear-gradient(135deg,var(--green),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.done-check{width:48px;height:48px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;margin-bottom:12px;box-shadow:0 0 24px rgba(34,197,94,0.3);animation:popIn 0.3s ease-out}
+@keyframes popIn{from{transform:scale(0.5);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* Confirm dialog */
+.confirm-card{background:linear-gradient(180deg,#1a2233 0%,var(--bg2) 100%);border-radius:12px;padding:28px;max-width:400px;text-align:center;border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+
+@media(prefers-reduced-motion:reduce){.overlay,.done-check{animation:none}.btn,.folder-item,.gallery-card,.stage-nav,#toast,.folder-input{transition:none}}
 
 @media(max-width:768px){
     .topbar{height:40px;padding:0 6px;gap:4px}
@@ -63,7 +99,7 @@ canvas{display:block;touch-action:none}
 <div id="folder-overlay" class="overlay">
     <h2 style="font-size:24px;margin-bottom:16px">CV LABELER</h2>
     <div style="display:flex;gap:6px;width:100%;max-width:500px">
-        <input type="text" id="folder-input" class="folder-input" placeholder="/path/to/images" autofocus>
+        <input type="text" id="folder-input" class="folder-input" placeholder="/path/to/images…" aria-label="Image folder path" autofocus>
         <button onclick="browseFolder()" class="btn btn-blue">Browse</button>
     </div>
     <p id="folder-error" style="color:var(--red);font-size:12px;margin-top:6px;display:none"></p>
@@ -94,7 +130,8 @@ canvas{display:block;touch-action:none}
 
 <!-- DONE -->
 <div id="done-overlay" class="overlay hidden">
-    <h2 style="font-size:36px;margin-bottom:8px">BATCH COMPLETE</h2>
+    <div class="done-check" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+    <h2 class="done-title">BATCH COMPLETE</h2>
     <p id="final-stats" style="color:var(--muted);font-size:14px;margin-bottom:20px"></p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
         <button onclick="goHome()" class="btn btn-blue">Review</button>
@@ -105,7 +142,7 @@ canvas{display:block;touch-action:none}
 
 <!-- CONFIRM POPUP -->
 <div id="confirm-overlay" class="overlay hidden" style="background:rgba(0,0,0,0.85)">
-    <div style="background:var(--bg2);border-radius:8px;padding:24px;max-width:400px;text-align:center">
+    <div class="confirm-card">
         <h2 style="font-size:20px;margin-bottom:12px" id="confirm-title">Next Batch?</h2>
         <p style="color:var(--muted);margin-bottom:20px" id="confirm-message">This will send the current batch to the CV agent for training and load the next batch.</p>
         <div style="display:flex;gap:8px;justify-content:center">
@@ -117,8 +154,8 @@ canvas{display:block;touch-action:none}
 
 <!-- MAIN UI -->
 <div class="topbar">
-    <button onclick="goHome()" class="btn btn-ghost" style="padding:4px 8px;min-width:36px">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    <button onclick="goHome()" class="btn btn-ghost" style="padding:4px 8px;min-width:36px" aria-label="Gallery">
+        <svg width="18" height="18" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
     </button>
     <div style="min-width:0;flex:1">
         <div id="product-name" style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">---</div>
@@ -126,24 +163,24 @@ canvas{display:block;touch-action:none}
     </div>
     <span id="image-counter" style="font-family:'Space Grotesk';font-weight:800;font-size:16px;flex-shrink:0">-/-</span>
     <span id="mode-label" class="mode-indicator">TAP</span>
-    <div style="flex-shrink:0;text-align:right" class="hide-mobile">
+    <div class="progress-wrap">
         <div id="progress-text" style="color:var(--muted);font-size:10px">0 labeled</div>
-        <div style="width:80px;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden"><div id="progress-bar" style="height:100%;background:var(--green);width:0%;transition:width 0.3s"></div></div>
+        <div class="progress-track"><div id="progress-bar" class="progress-fill"></div></div>
     </div>
     <div id="timer-display" style="color:var(--amber);font-size:13px;font-weight:600;flex-shrink:0">00:00</div>
 </div>
 
 <div class="stage" id="stage">
-    <div onclick="prevImage()" style="position:absolute;left:0;top:50%;transform:translateY(-50%);z-index:10;width:48px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(0,0,0,0.4);border-radius:0 8px 8px 0;color:#fff;font-size:28px;user-select:none;-webkit-user-select:none" aria-label="Previous">&#9664;</div>
+    <div onclick="prevImage()" class="stage-nav stage-nav-left" aria-label="Previous">&#9664;</div>
     <canvas id="c"></canvas>
-    <div onclick="saveAndNext()" style="position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:10;width:48px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(34,197,94,0.5);border-radius:8px 0 0 8px;color:#fff;font-size:28px;user-select:none;-webkit-user-select:none" aria-label="Save and next">&#9654;</div>
+    <div onclick="saveAndNext()" class="stage-nav stage-nav-right" aria-label="Save and next">&#9654;</div>
     <div id="tap-dot-1" class="tap-dot" style="display:none"></div>
 </div>
 
 <div class="bottombar">
-    <button onclick="saveAndNext()" class="btn btn-green">Save &#10132;</button>
+    <button onclick="saveAndNext()" class="btn btn-green btn-primary">Save &#10132;</button>
     <button onclick="skipImage()" class="btn btn-red">Skip</button>
-    <button onclick="markDelete()" class="btn btn-ghost" style="color:var(--red);border:1px solid var(--red)">&#10005; Bad</button>
+    <button onclick="markDelete()" class="btn btn-destructive">&#10005; Bad</button>
     <button onclick="snapBox()" class="btn btn-amber">Snap</button>
     <button onclick="undoAction()" class="btn btn-ghost">Undo</button>
     <button onclick="toggleMode()" class="btn btn-ghost" id="mode-btn">Mode: Tap</button>
@@ -152,7 +189,7 @@ canvas{display:block;touch-action:none}
     <button onclick="nextImageNav()" class="btn btn-ghost" style="padding:4px 12px">&#9654;</button>
 </div>
 
-<div id="toast"></div>
+<div id="toast" aria-live="polite"></div>
 
 <script>
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d'),stage=document.getElementById('stage');
