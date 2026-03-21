@@ -1,199 +1,132 @@
 # Tripletex AI Accounting Agent -- Execution Plan
 
 **Track:** NLP | **Weight:** 33.33%
-**Last updated:** 2026-03-21 13:30 CET
+**Last updated:** 2026-03-21 18:30 CET
 **Approach:** Structured workflows (LLM extracts fields, Python executes API calls)
-**Bot version:** tripletex_bot_v4.py (2280 lines, 26 executors, rev 70 deployed)
-**Efficiency plan:** See EFFICIENCY-PLAN.md for full strategy
+**Bot version:** tripletex_bot_v4.py (~2500 lines, 27 executors, rev 79 deployed)
+**Time remaining:** ~20.5 hours (deadline Sunday 15:00 CET)
 
-## Leaderboard State (2026-03-21 00:50 CET)
+## Leaderboard State (2026-03-21 00:50 CET, needs refresh)
 
 | Team | Score | Tasks | Correctness | Efficiency |
 |------|-------|-------|-------------|------------|
 | #1 Propulsion Optimizers | 46.70 | 18/30 | 14.8 | 31.9 |
-| #2 Proof Left to the Reader | 46.17 | 18/30 | 15.5 | 30.7 |
-| #3 Slop Overflow | 46.13 | 18/30 | 16.0 | 30.1 |
 | #107 Kreativ KI (us) | 29.08 | 18/30 | 14.7 | 14.4 |
 
-**Root cause:** Efficiency bonus is 14.4 vs top teams' ~31.0. Correctness is nearly equal.
-The efficiency bonus can DOUBLE tier scores on perfect tasks.
+**Gap: +18 points needed.** Audit insight: correctness gains are faster than efficiency gains.
 
 ---
 
-## Efficiency Improvements: Yesterday vs Today
+## Strategy (NEW -- from audit round 2)
 
-### Yesterday (rev 37-65, March 20)
-- No efficiency tracking at all: could not measure write calls or 4xx errors
-- Executors used "fire and pray": POST /employee without checking if it exists
-- 81 4xx errors across 177 submissions (46% of requests had at least one error)
-- VAT cache could serve wrong IDs across different sandboxes
-- process_salary reported fake "success: True" even when it failed
-- Email conflict detection only matched Norwegian "e-post" error text
-- per_diem_days variable shadowed itself (used wrong value for per diem block)
-- delete_travel_expense could delete wrong employee's expense (no exact name match)
+**Priority 1: Fix tasks scoring 0% to score something**
+Any score > 0 is free points. Tasks currently at 0:
+- Bank reconciliation (0/10): matching bug fixed in rev 72, supplier creation added
+- Year-end closing variants (0/10): some variants fail (monthly closing, missing fields)
+- Ledger error correction (0/10 on some): classified as unknown on some prompts
+- Overdue invoice reminder (0/10): was double-booking, fixed in rev 79
+- Analyze ledger (0/10 on some): activity endpoint 422, fixed in rev 76
 
-### Today (rev 67, March 21)
-- **Write-call instrumentation active**: every request logs `writes=N, errors_4xx=N` + full API call sequence
-- **Self-improving pipeline**: `self_improve.py` analyzes logs, diagnoses inefficiencies, prescribes ranked fixes
-- **Efficiency analyzer**: `efficiency_analyzer.py` generates per-executor efficiency reports
-- **Look-before-leap pattern**: all employee-creating executors now GET first (free), POST only if needed
-- **4xx error elimination**: email conflicts caught via admin match (name + email), before POST
-- **Conditional writes**: dateOfBirth PUT only when actually null (not on every existing employee)
-- **Correct VAT cache**: keyed by (base_url, token), not just base_url
-- **Honest success tracking**: process_salary returns real success state
-- **Robust error detection**: matches "e-post", "email", "duplicate", "already" in any language
-- **Safe concurrency**: contextvars race condition fixed (no shared mutable default)
+**Priority 2: Fix tasks scoring 20-70% to 100% (unlocks efficiency bonus)**
+These are worth the MOST because going from partial to perfect unlocks 2x multiplier:
+- create_employee_with_employment: 41-59% (missing personnummer, stillingskode, dept name)
+  - Fixed in rev 73: added nationalIdentityNumber, occupationCode, dept by name
+- register_payment with currency: 20% (agio/disagio voucher failing)
+  - Fixed in rev 72: added customer ID to account 1500 postings
+- Supplier invoice: 0-75% (account number validation, VAT handling)
+  - Fixed in rev 74: reject org numbers as account numbers
+- process_salary: was multiplying annual salary x12 unconditionally
+  - Fixed in rev 79: salary >= 100K treated as annual
+- Travel expense: 56% (5/8), missing some fields
+- Year-end closing: 20% (2/10), accumulated depreciation account fixed in rev 72
 
-### Expected Impact (to be measured when submissions resume)
-- 4xx errors: 81 -> estimated 20-30 (elimination of the 36 email conflicts + 7 dateOfBirth errors)
-- Efficiency bonus: 14.4 -> estimated 20-25 (fewer errors = higher bonus)
-- The self-improving loop will continue pushing this higher after each submission batch
+**Priority 3: Optimize API calls for efficiency bonus**
+Only matters on tasks with 100% correctness. Done via two audit rounds:
+- Hardcoded: VAT IDs, payment type IDs, input VAT IDs (saves 6+ GETs per request)
+- POST-first: customer creation, department creation (skip unnecessary GETs on fresh sandbox)
+- 403 abort: prevents cascading errors from expired tokens
+- Account caching: year_end_closing and ledger_error_correction
+- Total call tracking: logs ALL API calls, not just writes
 
 ---
 
-## Current Phase: Ready to Submit + Self-Improve
+## Revisions Today (rev 65 -> 79, 14 deployments)
 
-### Efficiency Tooling
+| Rev | Changes | Impact |
+|-----|---------|--------|
+| 66 | Look-before-leap employee creation | -36 email conflict errors |
+| 67 | Boris review: contextvars fix, VAT cache, email detection | Correctness |
+| 68 | 403 abort, dept cache | Prevent cascading errors |
+| 69 | Tier 3: analyze_ledger_create_projects | New task type |
+| 70 | Tier 3: year_end_closing, bank_reconciliation, overdue_invoice_reminder | 3 new task types |
+| 71 | Fix bank_reconciliation 400, year_end accumulated depreciation, ledger_error_correction | 4th Tier 3 type |
+| 72 | Fix analyze_ledger 400, bank_recon matching, currency voucher customer ref | Tier 3 bugs |
+| 73 | find_customer 1 GET, personnummer, stillingskode, dept by name, userType | Efficiency + correctness |
+| 74 | Supplier invoice account validation | Silent failure fix |
+| 75 | Account lookup caching | -50% GETs in year_end/ledger_error |
+| 76 | Fix overdue_invoice 400, analyze_ledger activity endpoint | Tier 3 bugs |
+| 77 | **AUDIT 1**: Hardcode VAT/payment/dept, POST-first patterns, total call tracker | -30-50% API calls |
+| 78 | Review fixes: dept number 9999, missed payment type hardcodes | Cleanup |
+| 79 | **AUDIT 2**: Salary x12 fix, double-booking fix, dueDate+30, more POST-first | Correctness |
 
-| Tool | Command | Purpose |
-|------|---------|---------|
-| Efficiency Analyzer | `python3 agent-nlp/scripts/efficiency_analyzer.py --hours 12 --save` | Analyze logs, rank targets |
-| Self-Improve Pipeline | `python3 agent-nlp/scripts/self_improve.py --hours 12` | Full diagnose -> prescribe loop |
-| Write Call Tracker | Built into bot via contextvars | Per-request write/error counting |
-
-### Self-Improving Loop (autonomous)
-
-```
-1. Submit 10 runs (submitter agent)
-2. Read Cloud Run logs (writes=N, errors_4xx=N per request)
-3. Run self_improve.py to diagnose + prescribe
-4. Implement highest-impact fix (fixer agent)
-5. Deploy new revision
-6. Repeat from step 1
-```
-
-### Strategy: Priority Order
-
-1. **Submit and gather data** (need fresh logs with instrumentation to measure real state)
-2. **Fix 4xx errors** (each error reduces efficiency bonus)
-3. **Reduce writes on perfect-score executors** (efficiency bonus only at 1.0 correctness)
-4. **Fix broken/low-score tasks** (travel expense 0/8, payment reversal 2/8, salary 4-5/8)
-5. **Tier 3 preparation** (opens Saturday morning, 3x multiplier)
-
-### Per-Executor Write Call Budgets
-
-| Executor | Current max writes | Optimal writes | Status |
-|----------|-------------------|----------------|--------|
-| create_customer | 1 | 1 | OPTIMAL |
-| create_employee | 1-4 | 1-3 | OPTIMIZED (look-before-leap) |
-| create_employee_with_employment | 3 | 3 | OPTIMAL |
-| create_product | 1 | 1 | OPTIMAL |
-| create_department | N (per dept) | N | OPTIMAL |
-| create_project | 2-4 | 1-2 | OPTIMIZED (admin match first) |
-| create_invoice | 2-3 | 1-2 | Bank PUT still needed on fresh sandbox |
-| create_invoice_with_payment | 3-4 | 2-3 | Inherits invoice pattern |
-| register_payment | 1 | 1 | OPTIMAL |
-| create_credit_note | 1 | 1 | OPTIMAL |
-| create_travel_expense | 3-6 | 2-4 | OPTIMIZED (GET employee first) |
-| process_salary | 3-6 | 2-4 | OPTIMIZED (conditional dateOfBirth PUT) |
-| register_supplier_invoice | 2 | 2 | OPTIMAL |
-| create_dimension | 2+N | 2+N | OPTIMAL |
-| create_supplier | 1 | 1 | OPTIMAL |
-| create_project_invoice | 4-6 | 2-4 | OPTIMIZED (admin match + bank) |
-
-### Efficiency Fixes Applied (rev 65-68)
-
-| Rev | Fix | Impact |
-|-----|-----|--------|
-| 66 | Look-before-leap: GET employee before POST | Eliminates ~36 email conflict 422s |
-| 66 | Conditional dateOfBirth PUT (only when null) | Eliminates ~7 dateOfBirth 422s |
-| 67 | Broadened email conflict detection (4 keywords) | Catches English + Norwegian errors |
-| 67 | VAT cache keyed by (base_url, token) | Prevents cross-sandbox VAT mismatch |
-| 67 | process_salary returns real success state | Honest efficiency tracking |
-| 67 | Fixed contextvars race condition | Safe under concurrent requests |
-| 68 | Abort writes on proxy token expiry (403) | Prevents cascading 4xx errors |
-| 68 | Per-request dept cache (contextvars) | Avoids duplicate POST /department |
-
-### Error Hotspots (before fixes, 177 requests)
-
-| Executor | 4xx errors | Fix applied |
-|----------|-----------|-------------|
-| create_invoice | 18 | Bank PUT check exists (stays, needed for fresh sandbox) |
-| create_project_invoice | 18 | Admin name/email match before POST /employee |
-| create_project | 11 | Admin name/email match before POST /employee |
-| process_salary | 7 | Conditional dateOfBirth PUT (only when null) |
-| create_credit_note | 6 | 403 expired token (can't fix, server-side) |
-| create_travel_expense | 4 | GET employee by name first |
-| create_dimension | 4 | Can't fix (varies) |
-| create_department | 4 | 403 expired token (can't fix) |
-
-### Correctness Fixes Still Needed
-
-| Task | Score | Issue | Priority |
-|------|-------|-------|----------|
-| Travel expense | 0/8 | Date fix in rev 65, untested | HIGH (Tier 2 = 2x) |
-| Payment reversal | 2/8 | Classified as credit_note, may need different approach | HIGH |
-| Salary | 4-5/8 | annualSalary x12 partial, may need bonus handling | MEDIUM |
-| Supplier invoice voucher | 0-8/8 | Inconsistent, locked VAT codes | MEDIUM |
-| Project/Project invoice | 5-7/7 | PM name edge cases | LOW (mostly working) |
-
-### Phase 5D: Tier 3 Preparation (Saturday morning)
-- Research complex scenarios: bank reconciliation, error correction, year-end closing
-- Build executors for new task types
-- Optimize for 3x multiplier tasks
+---
 
 ## Submission Budget
-- 180/day, resets 01:00 CET
-- Current budget: waiting for availability
+
+| Window | Budget | Used | Remaining |
+|--------|--------|------|-----------|
+| Today (resets 01:00 CET) | 300 | 229 | 71 |
+| Tomorrow (01:00-15:00 CET) | 300 | 0 | 300 |
+| **Total remaining** | | | **371** |
+
+Rate limit: 5 per task per day per tier.
+
+---
+
+## What to Fix Next (ranked by point impact)
+
+### Immediate (before next submission batch)
+
+A. **Identify which task types we have ZERO score on** -- need Cloud Run logs showing task_type for each 0/10 result. Each new non-zero task type is free points.
+
+B. **Travel expense still at 5/8** -- need to check what 3 fields are wrong. Likely: costs not being posted correctly, or missing per diem details.
+
+C. **Test the salary x12 fix (rev 79)** -- was a confirmed bug, should improve process_salary scores immediately.
+
+### Tomorrow morning (with fresh 300 submissions)
+
+D. **Bulk submit 30-50 to cover all task types** -- platform weights toward less-attempted types, so this naturally covers gaps.
+
+E. **Analyze results, fix the biggest 0-score types** -- iterate: submit -> analyze -> fix -> deploy -> submit.
+
+F. **Feature freeze Sunday 09:00** -- last 6 hours for bug fixes only.
+
+---
 
 ## Key Dates
+
 | Time | What |
 |------|------|
-| Daily 01:00 CET | Rate limits reset |
-| Saturday morning | Tier 3 opens (3x multiplier) |
-| Sunday 09:00 | Feature freeze |
-| Sunday 15:00 | Competition ends |
+| Now (18:30 CET Sat) | Fix correctness gaps, submit strategically |
+| 01:00 CET Sun | Rate limits reset, 300 fresh submissions |
+| 09:00 CET Sun | FEATURE FREEZE |
+| 14:45 CET Sun | Repo goes public |
+| 15:00 CET Sun | COMPETITION ENDS |
 
-## Efficiency Rules (from competition docs)
+---
 
-**CRITICAL QUESTION: Do GETs count toward efficiency?**
-- Competition docs say: "How many API calls" (not "write calls")
-- Examples doc says: "Minimize GET calls"
-- Our assumption was "GET is free" -- this MAY BE WRONG
-- If GETs count: our find_customer (3 GETs), ensure_department (1 GET), VAT lookup (1 GET) are all waste
-- NEED TO VERIFY with next submission batch
+## Efficiency Rules (confirmed by audit)
 
-Other rules:
-- Each 4xx error reduces efficiency bonus
-- Efficiency bonus only applies on PERFECT correctness (1.0)
-- Benchmarks recalculated every 12 hours
-- Rate limit: 5 per task per day PER TIER (not total)
+- **ALL API calls count** (GETs + writes). Competition docs: "How many API calls."
+- Each 4xx error reduces efficiency bonus.
+- Efficiency bonus ONLY applies at 100% correctness.
+- Benchmarks recalculated every 12 hours.
+- Rate limit: 5 per task per day PER TIER, 300 total/day.
 
-## Tier 3 -- OPENS TODAY (Saturday)
+## 27 Executors (rev 79)
 
-Tier 3 tasks (3x multiplier, up to 6.0 per task):
-- Bank reconciliation from CSV
-- Error correction in ledger
-- Year-end closing
-- Complex multi-step workflows
+**Tier 1/2 (22):** create_customer, create_employee, create_employee_with_employment, create_product, create_department, create_project, create_invoice, create_invoice_with_payment, create_project_invoice, register_payment, create_credit_note, create_travel_expense, delete_employee, delete_travel_expense, update_customer, update_employee, create_contact, enable_module, process_salary, register_supplier_invoice, create_dimension, create_supplier
 
-**Each perfect Tier 3 task = 6.0 points = three perfect Tier 2 tasks.**
+**Tier 3 (5):** analyze_ledger_create_projects, year_end_closing, bank_reconciliation, overdue_invoice_reminder, ledger_error_correction
 
-Priority: Build Tier 3 executors with efficiency-first design from the start.
-- Minimum API calls (GETs included, assume they count)
-- Zero 4xx errors
-- Parse CSV/PDF attachments via Gemini multimodal
-- Research Tripletex API endpoints for: bank reconciliation, ledger corrections, year-end
-
-### First Tier 3 Task Seen (2026-03-21 12:03 CET)
-**Prompt (French):** "Analyze ledger, find 3 expense accounts with biggest Jan->Feb increase, create internal project for each, create activity for each"
-**Result:** 0/10 -- Gemini extracted task_type=create_project with empty fields (no executor for this)
-**What it needs:**
-1. GET /ledger/posting (with date filters for Jan and Feb 2026)
-2. Aggregate by account, calculate increase
-3. Find top 3 accounts
-4. Create 3 projects (POST /project x3)
-5. Create 3 activities (POST /project/activity or similar x3)
-**Executor built:** exec_analyze_ledger_create_projects (rev 69)
-**API budget:** 8 calls total (2 GETs + 6 writes: 3 POST project + 3 POST activity)
-**Implementation:** Single GET for all postings (4000-7999 expense range), aggregate in Python, create projects + activities
+**Fallback:** Gemini agent loop for unknown task types
