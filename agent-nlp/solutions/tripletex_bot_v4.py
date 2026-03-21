@@ -1712,11 +1712,16 @@ async def exec_analyze_ledger_create_projects(c: httpx.AsyncClient, base: str, t
         })
         if proj_r.get("success") and proj_r.get("data"):
             proj_id = proj_r["data"]["id"]
-            # Create a project-specific activity linked to this project
-            await tx(c, base, tok, "POST", "/project/projectActivity", {
-                "project": {"id": proj_id},
-                "activity": {"name": proj_name},
+            # Create activity for this project (try /activity first, fallback to /project/projectActivity)
+            act_r = await tx(c, base, tok, "POST", "/activity", {
+                "name": proj_name,
             })
+            if not act_r.get("success"):
+                # Fallback: try project-specific activity endpoint
+                await tx(c, base, tok, "POST", "/project/projectActivity", {
+                    "project": {"id": proj_id},
+                    "activity": {"name": proj_name},
+                })
             last_result = proj_r
 
     return last_result
@@ -2013,7 +2018,6 @@ async def exec_overdue_invoice_reminder(c: httpx.AsyncClient, base: str, tok: st
         "invoiceDateFrom": "2020-01-01",
         "invoiceDateTo": today,
         "count": 50,
-        "fields": "id,invoiceNumber,invoiceDueDate,customer(id;name),amount,amountOutstanding",
     })
     overdue_inv = None
     customer_id = None
