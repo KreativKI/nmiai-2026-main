@@ -66,7 +66,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - create_project_invoice (use when prompt mentions registering hours on a project AND generating an invoice based on those hours)
 - register_payment (existing customer and invoice, register that payment was received)
 - create_credit_note (create credit note on existing invoice, also use when payment was returned/reversed by bank)
-- create_travel_expense (use when prompt mentions reiseregning/travel expense/travel report, even if it also says to create an employee first)
+- create_travel_expense (use when prompt mentions reiseregning/travel expense/travel report, even if it also says to create an employee first. Extract perDiemDays and perDiemRate if daily allowance/dagpenger/ajudas de custo is mentioned)
 - delete_employee
 - delete_travel_expense
 - update_customer
@@ -105,7 +105,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - invoiceDate, dueDate, customerName, customerOrgNumber
 - items (array of {description, quantity, unitPrice, vatRate})
 - amount, paymentDate, reason
-- title, costs (array of {description, amount, date})
+- title, costs (array of {description, amount, date}), perDiemDays, perDiemRate, travelLocation
 - salary, baseSalary, bonus, bonusAmount, employmentPercentage
 - userType (if admin/kontoadministrator mentioned: "STANDARD", otherwise omit)
 - targetEntity (for updates: which entity to find)
@@ -785,7 +785,22 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
         return te_r
     te_id = te_r["data"]["id"]
 
-    # Step 4: Add each cost separately
+    # Step 4: Add per diem compensation if specified
+    per_diem_days = f.get("perDiemDays")
+    per_diem_rate = f.get("perDiemRate")
+    if per_diem_days:
+        pd_body = {
+            "travelExpense": {"id": te_id},
+            "count": int(per_diem_days),
+            "location": f.get("travelLocation", "Norge"),
+            "address": f.get("travelLocation", ""),
+            "overnightAccommodation": "HOTEL",
+        }
+        if per_diem_rate:
+            pd_body["rate"] = float(per_diem_rate)
+        await tx(c, base, tok, "POST", "/travelExpense/perDiemCompensation", pd_body)
+
+    # Step 5: Add each cost separately
     costs = f.get("costs", [])
     for cost in costs:
         cost_body = {
@@ -796,9 +811,7 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
             "date": cost.get("date", time.strftime("%Y-%m-%d")),
             "comments": cost.get("description", ""),
         }
-        cost_r = await tx(c, base, tok, "POST", "/travelExpense/cost", cost_body)
-        if not cost_r.get("success"):
-            log.warning("Travel expense cost failed: %s", cost_r.get("error"))
+        await tx(c, base, tok, "POST", "/travelExpense/cost", cost_body)
 
     return te_r
 
