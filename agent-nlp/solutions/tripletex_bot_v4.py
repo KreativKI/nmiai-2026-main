@@ -578,7 +578,9 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
 
     salary = f.get("salary")
     if salary is not None:
-        details_body["annualSalary"] = float(salary)
+        sal = float(salary)
+        # If salary looks annual (>= 100000), use directly. If monthly, multiply by 12.
+        details_body["annualSalary"] = sal if sal >= 100000 else sal * 12
 
     await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
     return emp_r  # Return employee result, not details result
@@ -741,10 +743,11 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             return cust_r
 
     # Step 2: Register bank account (REQUIRED - invoices fail without it)
+    # GET account ID (can't hardcode, changes per sandbox) then PUT unconditionally (skip conditional check)
     acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
     if acct_r.get("success") and acct_r.get("data"):
         accts = as_list(acct_r["data"])
-        if accts and not accts[0].get("bankAccountNumber"):
+        if accts:
             await tx(c, base, tok, "PUT", f"/ledger/account/{accts[0]['id']}", {
                 "bankAccountNumber": "19201234568",
                 "bankAccountCountry": {"id": 161},
@@ -752,8 +755,10 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             })
 
     # Step 3: Build order lines
+    from datetime import datetime, timedelta
     today = f.get("invoiceDate", time.strftime("%Y-%m-%d"))
-    due = f.get("dueDate", today)
+    default_due = (datetime.strptime(today, "%Y-%m-%d") + timedelta(days=30)).strftime("%Y-%m-%d")
+    due = f.get("dueDate", default_due)
     items = f.get("items", [])
     if not items:
         # Single line item from flat fields
@@ -1142,16 +1147,17 @@ async def exec_update_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
 
 
 async def exec_create_contact(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    # Find or create customer (using exact match)
+    # Create customer directly (fresh sandbox, skip GET)
     cust_name = f.get("customerName", "")
-    existing = await find_customer(c, base, tok, cust_name)
-    if existing["success"]:
-        cust_id = existing["id"]
-    else:
-        cust_r = await tx(c, base, tok, "POST", "/customer", {"name": cust_name, "isCustomer": True})
-        if not cust_r.get("success"):
-            return cust_r
+    cust_r = await tx(c, base, tok, "POST", "/customer", {"name": cust_name, "isCustomer": True})
+    if cust_r.get("success"):
         cust_id = cust_r["data"]["id"]
+    else:
+        existing = await find_customer(c, base, tok, cust_name)
+        if existing["success"]:
+            cust_id = existing["id"]
+        else:
+            return cust_r
 
     body = {
         "firstName": f.get("contactFirstName") or f.get("firstName", ""),
@@ -1257,8 +1263,12 @@ async def exec_process_salary(c: httpx.AsyncClient, base: str, tok: str, f: dict
             details_body = {"employment": {"id": employment_id}, "date": start_date,
                             "employmentType": "ORDINARY", "percentageOfFullTimeEquivalent": 100.0}
             if salary_amount is not None:
-                # Monthly salary -> annualSalary (multiply by 12)
-                details_body["annualSalary"] = float(salary_amount) * 12
+                sal = float(salary_amount)
+                # If salary looks annual (>= 100000), use directly. If monthly (<100000), multiply by 12.
+                if sal >= 100000:
+                    details_body["annualSalary"] = sal
+                else:
+                    details_body["annualSalary"] = sal * 12
             await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
 
     overall_success = emp_id is not None and employment_id is not None
@@ -1433,18 +1443,19 @@ async def exec_create_dimension(c: httpx.AsyncClient, base: str, tok: str, f: di
 
 async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
     """Register hours on a project and generate a project invoice."""
-    # Step 1: Find or create customer
+    # Step 1: Create customer directly (fresh sandbox, skip GET)
     cust_name = f.get("customerName", "")
-    existing = await find_customer(c, base, tok, cust_name, f.get("customerOrgNumber"))
-    if existing["success"]:
-        cust_id = existing["id"]
-    else:
-        cust_body = {"name": cust_name, "isCustomer": True}
-        if f.get("customerOrgNumber"): cust_body["organizationNumber"] = f["customerOrgNumber"]
-        cust_r = await tx(c, base, tok, "POST", "/customer", cust_body)
-        if not cust_r.get("success"):
-            return cust_r
+    cust_body = {"name": cust_name, "isCustomer": True}
+    if f.get("customerOrgNumber"): cust_body["organizationNumber"] = f["customerOrgNumber"]
+    cust_r = await tx(c, base, tok, "POST", "/customer", cust_body)
+    if cust_r.get("success"):
         cust_id = cust_r["data"]["id"]
+    else:
+        existing = await find_customer(c, base, tok, cust_name, f.get("customerOrgNumber"))
+        if existing["success"]:
+            cust_id = existing["id"]
+        else:
+            return cust_r
 
     # Step 2: Get admin and check if admin IS the PM (common competition pattern)
     whoami = await tx(c, base, tok, "GET", "/token/session/>whoAmI")
@@ -2032,26 +2043,7 @@ async def exec_overdue_invoice_reminder(c: httpx.AsyncClient, base: str, tok: st
         return {"success": False, "error": "No overdue invoice found"}
     overdue_inv_id = overdue_inv["id"]
 
-    # Step 2: Post reminder fee voucher (debit 1500 AR, credit 3400 reminder income)
-    debit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": debit_account_num})
-    credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": credit_account_num})
-    if debit_acct_r.get("success") and debit_acct_r.get("data") and credit_acct_r.get("success") and credit_acct_r.get("data"):
-        debit_id = as_list(debit_acct_r["data"])[0]["id"]
-        credit_id = as_list(credit_acct_r["data"])[0]["id"]
-        await tx(c, base, tok, "POST", "/ledger/voucher", {
-            "date": today,
-            "description": f"Purregebyr faktura {overdue_inv.get('invoiceNumber', overdue_inv_id)}",
-            "postings": [
-                {"row": 1, "date": today, "account": {"id": debit_id},
-                 "amountGross": reminder_fee, "amountGrossCurrency": reminder_fee,
-                 "currency": {"id": 1}, "description": "Purregebyr"},
-                {"row": 2, "date": today, "account": {"id": credit_id},
-                 "amountGross": -reminder_fee, "amountGrossCurrency": -reminder_fee,
-                 "currency": {"id": 1}, "description": "Purregebyr inntekt"},
-            ],
-        })
-
-    # Step 3: Create reminder invoice for the fee (if customer found)
+    # Step 2: Create reminder invoice for the fee (skip voucher to avoid double-booking)
     if customer_id:
         # Register bank account for invoicing
         acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
