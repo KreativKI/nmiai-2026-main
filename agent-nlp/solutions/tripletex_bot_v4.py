@@ -1184,31 +1184,39 @@ async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str,
             return cust_r
         cust_id = cust_r["data"]["id"]
 
-    # Step 2: Create employee (PM or the person who worked the hours)
+    # Step 2: Get admin and check if admin IS the PM (common competition pattern)
+    whoami = await tx(c, base, tok, "GET", "/token/session/>whoAmI")
+    admin_emp = whoami.get("data", {}).get("employee", {})
+    admin_id = admin_emp.get("id")
+    pm_id = None
+
     emp_name = f.get("employeeName") or f.get("projectManagerName", "")
     emp_email = f.get("employeeEmail") or f.get("projectManagerEmail", "")
-    if emp_name:
+
+    if emp_name and admin_id:
+        admin_name = f"{admin_emp.get('firstName', '')} {admin_emp.get('lastName', '')}".strip()
+        if emp_name.lower() == admin_name.lower():
+            pm_id = admin_id
+
+    if not pm_id and emp_name:
         parts = emp_name.strip().split()
         emp_first = parts[0]
         emp_last = " ".join(parts[1:]) if len(parts) > 1 else ""
-    else:
-        emp_first, emp_last = split_name(f)
-    dept_id = await ensure_department(c, base, tok)
-    emp_body = {
-        "firstName": emp_first, "lastName": emp_last,
-        "department": {"id": dept_id or 1}, "userType": "STANDARD",
-        "email": emp_email or f"{emp_first.lower()}@company.no",
-        "dateOfBirth": "1990-01-15",
-    }
-    emp_r = await tx(c, base, tok, "POST", "/employee", emp_body)
-    if not emp_r.get("success") and "e-post" in str(emp_r.get("error", "")).lower():
-        # Email conflict - try with unique suffix
-        emp_body["email"] = f"{emp_first.lower()}.{int(time.time()) % 10000}@company.no"
+        dept_id = await ensure_department(c, base, tok)
+        emp_body = {
+            "firstName": emp_first, "lastName": emp_last,
+            "department": {"id": dept_id or 1}, "userType": "EXTENDED",
+            "email": emp_email or f"{emp_first.lower()}@company.no",
+            "dateOfBirth": "1990-01-15",
+        }
         emp_r = await tx(c, base, tok, "POST", "/employee", emp_body)
-    pm_id = emp_r["data"]["id"] if emp_r.get("success") else None
+        if not emp_r.get("success") and "e-post" in str(emp_r.get("error", "")).lower():
+            pm_id = admin_id  # Email conflict = admin IS this person
+        elif emp_r.get("success"):
+            pm_id = emp_r["data"]["id"]
+
     if not pm_id:
-        whoami = await tx(c, base, tok, "GET", "/token/session/>whoAmI")
-        pm_id = whoami.get("data", {}).get("employee", {}).get("id")
+        pm_id = admin_id
 
     # Step 3: Create project linked to customer
     proj_name = f.get("projectName", "Prosjekt")
