@@ -31,26 +31,48 @@ More synthetic data = diminishing returns UNLESS the synthetic data matches test
 
 ## New Strategy: Realistic Shelf Generation (iterative, each submission builds on the last)
 
-### Phase 1: Gemini Shelf Generation for 116 Weak Categories (~2h, 3 VMs)
-Use Gemini to generate each weak product ON A REALISTIC NORWEGIAN GROCERY SHELF.
-Not white backgrounds. Not paste-on-shelf. Actual shelf scenes.
+### Phase 1: Gemini 3.1 Flash Multi-Reference Shelf Generation (~5h, 2 VMs parallel)
+Use Gemini 3.1 Flash ("Nano Banana") with up to 10 REFERENCE IMAGES per product.
+Feed the model actual product photos (front, back, left, right, main) plus shelf crops,
+then generate the product ON A REALISTIC NORWEGIAN GROCERY SHELF.
 
-Prompt pattern: "This exact product [{name}] sitting on a partly stocked Norwegian grocery store shelf, front label clearly visible, realistic store lighting, between other products."
+**Tested and confirmed:** 5/5 images generated successfully. 36s average per image.
+Multi-reference produces much more accurate product appearance than text-only prompts.
 
-Split across 3 VMs (cv-train-1, cv-train-3, cv-train-4):
-- 10 variations per product for the 54 "seen once" categories = 540 images
-- 5 variations per product for the 62 "somewhat known" categories = 310 images
-- Total: ~850 new REALISTIC shelf images
+**Approach:**
+- Feed all available reference photos (product studio shots + training shelf crops)
+- Prompt: "Generate this EXACT product on a Norwegian grocery shelf, front label visible"
+- Vary: shelf position, lighting, surrounding products, camera angle
+
+**Split across 2 VMs (rate limit is 60 RPM per project, we use ~4 RPM):**
+
+| VM | Categories | Products | Images | Time |
+|----|-----------|----------|--------|------|
+| cv-train-1 | 0-177 (weak ones) | ~67 | ~497 | ~5h |
+| cv-train-3 | 178-355 (weak ones) | ~67 | ~497 | ~5h |
+| **Total** | | **134** | **994** | **~5h** |
+
+**Generation config per product tier:**
+- 54 "seen once" products: 10 variations each = 540 images
+- 18 "barely known" (2 imgs): 8 variations each = 144 images
+- 62 "somewhat known" (3-9 imgs): 5 variations each = 310 images
 
 ### Phase 2: Retrain on Real + Realistic Synthetic (~4h, 1 VM with GPU)
 Combine:
 - 208 real images (train split)
-- ~850 Gemini realistic shelf images (Phase 1)
-- Keep existing 315 copy-paste + 331 Gemini white-bg as secondary data
-- Total: ~1700 images, but the new 850 are high-quality shelf scenes
+- ~994 Gemini realistic shelf images (Phase 1, HIGH QUALITY)
+- Optionally keep existing copy-paste + Gemini white-bg as secondary data
+- Total: ~1200-1700 images, with the new 994 being realistic shelf scenes
 
 Train YOLO11m with aggressive augmentation, 200 epochs.
 Use the SAME proper train/val split (40 real images held out).
+
+**Timeline:**
+- Generation done: ~12:00-13:00 CET Saturday
+- Retrain done: ~17:00 CET Saturday
+- Evaluate + submit: Saturday evening
+- Iterate if needed: Sunday morning (6 fresh slots)
+- Deadline: Sunday 15:00 CET
 
 ### Phase 3: Evaluate + Submit
 - Run honest eval on val set
