@@ -1,14 +1,14 @@
 # NorgesGruppen Object Detection — Plan
 
 **Track:** CV | **Task:** Grocery Shelf Detection | **Weight:** 33.33%
-**Last updated:** 2026-03-21 08:30 CET
+**Last updated:** 2026-03-21 14:15 CET
 
 ## Current State
 - **Leaderboard:** 0.6584 (YOLO11m maxdata, 854 images)
 - **Previous:** 0.6475 (YOLO11m, 348 images)
 - **Val-to-leaderboard ratio:** ~0.807 (val 0.816 gave 0.6584)
 - **Submissions left today:** 4 of 6 (resets 01:00 CET)
-- **Deadline:** Sunday 15:00 CET (~31 hours remaining)
+- **Deadline:** Sunday 15:00 CET (~25 hours remaining)
 
 ## Key Insight: Synthetic Data Quality Matters More Than Quantity
 Going from 348 to 854 images only moved leaderboard +0.011. The 500 extra synthetic images (copy-paste + Gemini white-background) inflate val scores but don't teach the model what real test shelves look like. We need REALISTIC shelf images, not more of the same.
@@ -44,18 +44,21 @@ Multi-reference produces much more accurate product appearance than text-only pr
 - Prompt: "Generate this EXACT product on a Norwegian grocery shelf, front label visible"
 - Vary: shelf position, lighting, surrounding products, camera angle
 
-**Split across 2 VMs (rate limit is 60 RPM per project, we use ~4 RPM):**
+**RUNNING on 2 VMs (started 14:00 CET Saturday):**
 
-| VM | Categories | Products | Images | Time |
-|----|-----------|----------|--------|------|
-| cv-train-1 | 0-177 (weak ones) | ~67 | ~497 | ~5h |
-| cv-train-3 | 178-355 (weak ones) | ~67 | ~497 | ~5h |
-| **Total** | | **134** | **994** | **~5h** |
+| VM | Split | Categories | Images | ETA |
+|----|-------|-----------|--------|-----|
+| cv-train-1 | 0 (weakest) | 55 (41 seen-once, 13 barely-known, 1 somewhat-known) | 519 | ~17:00 CET |
+| cv-train-4 | 1 (somewhat-known) | 55 (all somewhat-known) | 275 | ~17:00 CET |
+| **Total** | | **110** | **794** | **~3h** |
 
-**Generation config per product tier:**
-- 54 "seen once" products: 10 variations each = 540 images
-- 18 "barely known" (2 imgs): 8 variations each = 144 images
-- 62 "somewhat known" (3-9 imgs): 5 variations each = 310 images
+cv-train-3 deleted (GPU stockout in europe-west1-b).
+
+**Actual tier counts (verified from annotations):**
+- 41 seen-once products (38 with reference images): 10 variations each = 380 images
+- 13 barely-known (11 with ref): 8 variations each = 88 images
+- 56 somewhat-known (47 with ref): 5 variations each = 235 images
+- Well-known: SKIPPED (already 10+ training examples)
 
 ### Phase 2: Label the Generated Images
 Two paths depending on whether Butler's labeling tool + JC's time works out:
@@ -88,10 +91,11 @@ Combine:
 Train YOLO11m with aggressive augmentation, 200 epochs.
 Use the SAME proper train/val split (40 real images held out).
 
-**Timeline:**
-- Generation done: ~18:00 CET Saturday (2 VMs, ~10h)
-- Labeling: Saturday evening (JC labels priority products, auto-label the rest)
-- Retrain: Saturday night (~4h)
+**Timeline (UPDATED):**
+- Generation done: ~17:00 CET Saturday (2 VMs, ~3h from 14:00)
+- Auto-labeling: ~17:30 CET (run YOLO on generated images, ~30 min)
+- JC labels priority products: Saturday evening IF Butler GUI ready
+- Retrain: Saturday evening (~4h on cv-train-1 with GPU)
 - Evaluate + submit: Sunday morning
 - Iterate if needed: Sunday (6 fresh slots)
 - Deadline: Sunday 15:00 CET
@@ -120,16 +124,18 @@ Use the SAME proper train/val split (40 real images held out).
 | Seen once | 54 | 1 each | Generate 10 shelf variations each (PRIORITY) |
 
 ## In-Flight Work
-- **Butler agent:** Building web labeling GUI for JC (assignment in intelligence/for-ops-agent/)
-- **Gemini generation:** NOT YET STARTED. Start in next session.
+- **Gemini generation:** RUNNING on cv-train-1 (split 0) + cv-train-4 (split 1). ETA ~17:00 CET.
+- **Butler agent:** Check if labeling GUI is ready (assignment in intelligence/for-ops-agent/)
+- **Auto-labeling script:** TODO: write after generation completes
+- **Labeling strategy:** Hybrid (Path C): JC labels priority products if Butler GUI ready, auto-label the rest
 
-## GCP VMs Available
+## GCP VMs
 | VM | Zone | Status |
 |----|------|--------|
-| cv-train-1 | europe-west1-c | IDLE (has all data, models, Gemini ADC) -- USE FOR GENERATION |
-| cv-train-3 | europe-west1-b | IDLE -- USE FOR GENERATION |
-| cv-train-4 | europe-west3-a | IDLE -- available for training later |
+| cv-train-1 | europe-west1-c | GENERATING (split 0, 519 images) |
+| cv-train-4 | europe-west3-a | GENERATING (split 1, 275 images) |
 | ml-churn | europe-west1-b | ML agent (don't touch) |
+| cv-train-3 | ~~deleted~~ | GPU stockout, cannot restart |
 
 ## Validated ZIPs Ready
 - `submission_maxdata.zip` -- YOLO11m, 854 imgs, val 0.816, leaderboard 0.6584
