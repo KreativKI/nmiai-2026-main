@@ -1,9 +1,10 @@
 # Tripletex AI Accounting Agent -- Execution Plan
 
 **Track:** NLP | **Weight:** 33.33%
-**Last updated:** 2026-03-21 12:30 CET
+**Last updated:** 2026-03-21 13:30 CET
 **Approach:** Structured workflows (LLM extracts fields, Python executes API calls)
-**Bot version:** tripletex_bot_v4.py (1747 lines, 22 executors, rev 67 deployed)
+**Bot version:** tripletex_bot_v4.py (~1760 lines, 22 executors, rev 68 deployed)
+**Efficiency plan:** See EFFICIENCY-PLAN.md for full strategy
 
 ## Leaderboard State (2026-03-21 00:50 CET)
 
@@ -99,6 +100,19 @@ The efficiency bonus can DOUBLE tier scores on perfect tasks.
 | create_dimension | 2+N | 2+N | OPTIMAL |
 | create_supplier | 1 | 1 | OPTIMAL |
 | create_project_invoice | 4-6 | 2-4 | OPTIMIZED (admin match + bank) |
+
+### Efficiency Fixes Applied (rev 65-68)
+
+| Rev | Fix | Impact |
+|-----|-----|--------|
+| 66 | Look-before-leap: GET employee before POST | Eliminates ~36 email conflict 422s |
+| 66 | Conditional dateOfBirth PUT (only when null) | Eliminates ~7 dateOfBirth 422s |
+| 67 | Broadened email conflict detection (4 keywords) | Catches English + Norwegian errors |
+| 67 | VAT cache keyed by (base_url, token) | Prevents cross-sandbox VAT mismatch |
+| 67 | process_salary returns real success state | Honest efficiency tracking |
+| 67 | Fixed contextvars race condition | Safe under concurrent requests |
+| 68 | Abort writes on proxy token expiry (403) | Prevents cascading 4xx errors |
+| 68 | Per-request dept cache (contextvars) | Avoids duplicate POST /department |
 
 ### Error Hotspots (before fixes, 177 requests)
 
