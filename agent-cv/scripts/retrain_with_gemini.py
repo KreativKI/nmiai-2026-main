@@ -44,10 +44,12 @@ def main():
     parser.add_argument("--output", type=str, required=True)
     parser.add_argument("--val-ratio", type=float, default=0.15,
                         help="Fraction of real images for validation")
-    parser.add_argument("--epochs", type=int, default=200)
+    parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--batch", type=int, default=4)
     parser.add_argument("--imgsz", type=int, default=1280)
-    parser.add_argument("--model", type=str, default="yolo11m.pt")
+    parser.add_argument("--model", type=str,
+                        default=str(Path.home() / "retrain/yolo11m_maxdata_200ep/weights/best.pt"),
+                        help="Fine-tune from best existing weights, NOT yolo11m.pt")
     parser.add_argument("--train-only", action="store_true",
                         help="Skip dataset prep, go straight to training")
     args = parser.parse_args()
@@ -182,12 +184,12 @@ def main():
         batch=args.batch,
         device="cuda",
         optimizer="AdamW",
-        lr0=0.001,
+        lr0=0.0005,
         lrf=0.01,
-        warmup_epochs=5,
-        mosaic=1.0,
-        mixup=0.3,
-        copy_paste=0.3,
+        warmup_epochs=3,
+        mosaic=0.5,
+        mixup=0.1,
+        copy_paste=0.0,  # Disabled: hurts rare-product classification
         hsv_h=0.02,
         hsv_s=0.7,
         hsv_v=0.4,

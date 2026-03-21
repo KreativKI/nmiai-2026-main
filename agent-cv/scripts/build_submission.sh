@@ -86,28 +86,35 @@ def decode_yolo(output, scale, pad, orig_h, orig_w, conf_thresh=0.25):
     boxes = np.stack([x1, y1, x2, y2], axis=1)
     return boxes, max_scores, class_ids
 
-def nms(boxes, scores, iou_threshold=0.5):
+def nms_per_class(boxes, scores, labels, iou_thresh=0.5):
     if len(boxes) == 0:
-        return []
-    x1 = boxes[:, 0]; y1 = boxes[:, 1]
-    x2 = boxes[:, 2]; y2 = boxes[:, 3]
-    areas = (x2 - x1) * (y2 - y1)
-    order = scores.argsort()[::-1]
-    keep = []
-    while len(order) > 0:
-        i = order[0]
-        keep.append(i)
-        if len(order) == 1:
-            break
-        xx1 = np.maximum(x1[i], x1[order[1:]])
-        yy1 = np.maximum(y1[i], y1[order[1:]])
-        xx2 = np.minimum(x2[i], x2[order[1:]])
-        yy2 = np.minimum(y2[i], y2[order[1:]])
-        inter = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
-        iou = inter / (areas[i] + areas[order[1:]] - inter + 1e-6)
-        inds = np.where(iou <= iou_threshold)[0]
-        order = order[inds + 1]
-    return keep
+        return np.zeros((0, 4)), np.array([]), np.array([])
+    keep_all = []
+    for cls_id in np.unique(labels):
+        cls_mask = labels == cls_id
+        cls_idx = np.where(cls_mask)[0]
+        cls_boxes = boxes[cls_mask]
+        cls_scores = scores[cls_mask]
+        order = cls_scores.argsort()[::-1]
+        keep = []
+        while len(order) > 0:
+            i = order[0]
+            keep.append(cls_idx[i])
+            if len(order) == 1:
+                break
+            xx1 = np.maximum(cls_boxes[i, 0], cls_boxes[order[1:], 0])
+            yy1 = np.maximum(cls_boxes[i, 1], cls_boxes[order[1:], 1])
+            xx2 = np.minimum(cls_boxes[i, 2], cls_boxes[order[1:], 2])
+            yy2 = np.minimum(cls_boxes[i, 3], cls_boxes[order[1:], 3])
+            inter = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
+            a1 = (cls_boxes[i, 2] - cls_boxes[i, 0]) * (cls_boxes[i, 3] - cls_boxes[i, 1])
+            a2 = (cls_boxes[order[1:], 2] - cls_boxes[order[1:], 0]) * (cls_boxes[order[1:], 3] - cls_boxes[order[1:], 1])
+            iou = inter / (a1 + a2 - inter + 1e-6)
+            inds = np.where(iou <= iou_thresh)[0]
+            order = order[inds + 1]
+        keep_all.extend(keep)
+    keep_all = sorted(keep_all)
+    return boxes[keep_all], scores[keep_all], labels[keep_all]
 
 def main():
     parser = argparse.ArgumentParser()
@@ -133,10 +140,10 @@ def main():
         output = session.run(None, {input_name: blob})
         boxes, scores, class_ids = decode_yolo(output, scale, pad, orig_h, orig_w, CONF_THRESHOLD)
         if len(boxes) > 0:
-            keep = nms(boxes, scores, IOU_THRESHOLD)
-            boxes = boxes[keep][:MAX_DETECTIONS]
-            scores = scores[keep][:MAX_DETECTIONS]
-            class_ids = class_ids[keep][:MAX_DETECTIONS]
+            boxes, scores, class_ids = nms_per_class(boxes, scores, class_ids, IOU_THRESHOLD)
+            boxes = boxes[:MAX_DETECTIONS]
+            scores = scores[:MAX_DETECTIONS]
+            class_ids = class_ids[:MAX_DETECTIONS]
             for box, score, cls_id in zip(boxes, scores, class_ids):
                 x1, y1, x2, y2 = box
                 results.append({

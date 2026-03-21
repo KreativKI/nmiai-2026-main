@@ -1,8 +1,7 @@
-"""NorgesGruppen Object Detection — DINOv2 Crop-and-Classify.
+"""NorgesGruppen Object Detection — YOLO11m Only.
 
-Two-stage pipeline:
-1. YOLO11m detects product bounding boxes
-2. DINOv2 ViT-S classifies each crop via kNN against product gallery
+Single-stage detection: YOLO detects and classifies products.
+No DINOv2, no SAHI. Fast, reliable.
 
 SAFE IMPORTS ONLY. Blocked modules = instant ban.
 """
@@ -15,23 +14,14 @@ import numpy as np
 import onnxruntime as ort
 
 
-# --- Configuration ---
 YOLO_MODEL = "best.onnx"
-DINO_MODEL = "dinov2_vits.onnx"
-GALLERY_FILE = "gallery.npy"
-GALLERY_LABELS_FILE = "gallery_labels.json"
 YOLO_INPUT_SIZE = 1280
-DINO_INPUT_SIZE = 518
-CONF_THRESHOLD = 0.25      # Filter noise (was 0.05, caused 1159 dets/img timeout)
+CONF_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.5
-MAX_DETECTIONS = 200       # Cap per image to stay under 300s timeout with DINOv2
-SAHI_MIN_DIM = 2000        # Only slice images larger than this
-SAHI_OVERLAP = 0.2         # Tile overlap ratio
-SAHI_TILE_SIZE = 1280      # Tile size in original image pixels
+MAX_DETECTIONS = 500
 
 
 def letterbox(img, new_shape=1280):
-    """Resize with letterboxing."""
     h, w = img.shape[:2]
     scale = min(new_shape / h, new_shape / w)
     new_h, new_w = int(h * scale), int(w * scale)
@@ -45,8 +35,7 @@ def letterbox(img, new_shape=1280):
     return padded, scale, (top, left)
 
 
-def decode_yolo(output, scale, pad, orig_h, orig_w, conf_thresh=0.05):
-    """Decode YOLO11 output to boxes in original coords."""
+def decode_yolo(output, scale, pad, orig_h, orig_w, conf_thresh):
     preds = output[0].T
     boxes = preds[:, :4]
     scores = preds[:, 4:]
@@ -54,9 +43,7 @@ def decode_yolo(output, scale, pad, orig_h, orig_w, conf_thresh=0.05):
     confidences = np.max(scores, axis=1)
 
     mask = confidences >= conf_thresh
-    boxes = boxes[mask]
-    class_ids = class_ids[mask]
-    confidences = confidences[mask]
+    boxes, class_ids, confidences = boxes[mask], class_ids[mask], confidences[mask]
 
     if len(boxes) == 0:
         return np.zeros((0, 4)), np.array([]), np.array([])
@@ -76,7 +63,6 @@ def decode_yolo(output, scale, pad, orig_h, orig_w, conf_thresh=0.05):
 
 
 def nms_per_class(boxes, scores, labels, iou_thresh=0.5):
-    """Per-class NMS."""
     if len(boxes) == 0:
         return np.zeros((0, 4)), np.array([]), np.array([])
     keep_all = []
@@ -104,130 +90,8 @@ def nms_per_class(boxes, scores, labels, iou_thresh=0.5):
             remaining = np.where(iou <= iou_thresh)[0]
             order = order[remaining + 1]
         keep_all.extend(keep)
-    keep_all = np.array(keep_all)
-    return boxes[keep_all], scores[keep_all], labels[keep_all]
-
-
-def generate_tiles(img_h, img_w, tile_size=1280, overlap=0.2):
-    """Generate tile coordinates (x1, y1, x2, y2) for sliced inference."""
-    step = int(tile_size * (1 - overlap))
-    tiles = []
-    for y in range(0, img_h, step):
-        for x in range(0, img_w, step):
-            x2 = min(x + tile_size, img_w)
-            y2 = min(y + tile_size, img_h)
-            x1 = max(0, x2 - tile_size)
-            y1 = max(0, y2 - tile_size)
-            tiles.append((x1, y1, x2, y2))
-    # Deduplicate tiles that end up identical (happens at image edges)
-    return list(dict.fromkeys(tiles))
-
-
-def detect_with_sahi(img, yolo_sess, yolo_input_name, orig_h, orig_w):
-    """Run YOLO on full image + overlapping tiles, merge with NMS."""
-    all_boxes = []
-    all_scores = []
-    all_labels = []
-
-    # Full-image detection
-    img_lb, scale, pad = letterbox(img, YOLO_INPUT_SIZE)
-    img_rgb = cv2.cvtColor(img_lb, cv2.COLOR_BGR2RGB)
-    img_norm = img_rgb.astype(np.float32) / 255.0
-    img_batch = np.transpose(img_norm, (2, 0, 1))[np.newaxis, ...]
-    yolo_out = yolo_sess.run(None, {yolo_input_name: img_batch})
-    boxes, scores, labels = decode_yolo(
-        yolo_out[0], scale, pad, orig_h, orig_w, CONF_THRESHOLD)
-    if len(boxes) > 0:
-        all_boxes.append(boxes)
-        all_scores.append(scores)
-        all_labels.append(labels)
-
-    # Tiled detection only for large images
-    if max(orig_h, orig_w) >= SAHI_MIN_DIM:
-        tiles = generate_tiles(orig_h, orig_w, SAHI_TILE_SIZE, SAHI_OVERLAP)
-        for tx1, ty1, tx2, ty2 in tiles:
-            tile = img[ty1:ty2, tx1:tx2]
-            tile_h, tile_w = tile.shape[:2]
-            t_lb, t_scale, t_pad = letterbox(tile, YOLO_INPUT_SIZE)
-            t_rgb = cv2.cvtColor(t_lb, cv2.COLOR_BGR2RGB)
-            t_norm = t_rgb.astype(np.float32) / 255.0
-            t_batch = np.transpose(t_norm, (2, 0, 1))[np.newaxis, ...]
-            t_out = yolo_sess.run(None, {yolo_input_name: t_batch})
-            t_boxes, t_scores, t_labels = decode_yolo(
-                t_out[0], t_scale, t_pad, tile_h, tile_w, CONF_THRESHOLD)
-            if len(t_boxes) > 0:
-                # Offset boxes to full image coordinates
-                t_boxes[:, 0] += tx1
-                t_boxes[:, 1] += ty1
-                t_boxes[:, 2] += tx1
-                t_boxes[:, 3] += ty1
-                all_boxes.append(t_boxes)
-                all_scores.append(t_scores)
-                all_labels.append(t_labels)
-
-    if len(all_boxes) == 0:
-        return np.zeros((0, 4)), np.array([]), np.array([])
-
-    merged_boxes = np.concatenate(all_boxes)
-    merged_scores = np.concatenate(all_scores)
-    merged_labels = np.concatenate(all_labels)
-
-    boxes, scores, labels = nms_per_class(merged_boxes, merged_scores, merged_labels, IOU_THRESHOLD)
-
-    # Cap detections to stay under 300s timeout (each needs DINOv2 inference)
-    if len(scores) > MAX_DETECTIONS:
-        top_idx = np.argsort(scores)[-MAX_DETECTIONS:]
-        boxes = boxes[top_idx]
-        scores = scores[top_idx]
-        labels = labels[top_idx]
-
-    return boxes, scores, labels
-
-
-def preprocess_crop_for_dino(crop_bgr, size=518):
-    """Preprocess a crop for DINOv2: resize, normalize with ImageNet stats."""
-    crop_rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
-    crop_resized = cv2.resize(crop_rgb, (size, size), interpolation=cv2.INTER_LINEAR)
-    crop_float = crop_resized.astype(np.float32) / 255.0
-    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-    std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-    crop_norm = (crop_float - mean) / std
-    return np.transpose(crop_norm, (2, 0, 1))[np.newaxis, ...].astype(np.float32)
-
-
-def classify_crops(dino_session, dino_input_name, crops_bgr, gallery, gallery_labels, top_k=5):
-    """Classify cropped detections using DINOv2 + weighted kNN against gallery."""
-    if len(crops_bgr) == 0:
-        return np.array([]), np.array([])
-
-    embeddings = []
-    for crop in crops_bgr:
-        inp = preprocess_crop_for_dino(crop, DINO_INPUT_SIZE)
-        emb = dino_session.run(None, {dino_input_name: inp})[0].flatten()
-        emb = emb / (np.linalg.norm(emb) + 1e-8)
-        embeddings.append(emb)
-
-    embeddings = np.array(embeddings)
-    similarities = embeddings @ gallery.T  # (N, G)
-
-    # Top-K weighted voting: sum similarity weights per class across top-K matches
-    top_k_idx = np.argsort(similarities, axis=1)[:, -top_k:]  # (N, K)
-    best_labels = []
-    best_scores = []
-    for i in range(len(embeddings)):
-        k_indices = top_k_idx[i]
-        k_sims = similarities[i, k_indices]
-        k_labels = gallery_labels[k_indices]
-        # Accumulate similarity weight per class
-        class_votes = {}
-        for label, sim in zip(k_labels, k_sims):
-            label = int(label)
-            class_votes[label] = class_votes.get(label, 0.0) + float(sim)
-        winner = max(class_votes, key=class_votes.get)
-        best_labels.append(winner)
-        best_scores.append(class_votes[winner] / top_k)  # Normalized confidence
-
-    return np.array(best_labels, dtype=np.int32), np.array(best_scores, dtype=np.float32)
+    idx = np.array(keep_all)
+    return boxes[idx], scores[idx], labels[idx]
 
 
 def main():
@@ -240,17 +104,9 @@ def main():
     output_path = Path(args.output)
     model_dir = Path(__file__).parent
 
-    # Load models
     providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
     yolo_sess = ort.InferenceSession(str(model_dir / YOLO_MODEL), providers=providers)
-    dino_sess = ort.InferenceSession(str(model_dir / DINO_MODEL), providers=providers)
     yolo_input = yolo_sess.get_inputs()[0].name
-    dino_input = dino_sess.get_inputs()[0].name
-
-    # Load gallery: .npy for embeddings, .json for labels
-    gallery = np.load(str(model_dir / GALLERY_FILE))
-    with open(model_dir / GALLERY_LABELS_FILE, "r") as f:
-        gallery_labels = np.array(json.load(f), dtype=np.int32)
 
     predictions = []
     image_files = sorted(input_dir.glob("*.jpg"))
@@ -267,48 +123,34 @@ def main():
             continue
         orig_h, orig_w = img.shape[:2]
 
-        # Stage 1: YOLO detection (full image + SAHI tiles for large images)
-        boxes, det_scores, yolo_labels = detect_with_sahi(
-            img, yolo_sess, yolo_input, orig_h, orig_w)
+        img_lb, scale, pad = letterbox(img, YOLO_INPUT_SIZE)
+        img_rgb = cv2.cvtColor(img_lb, cv2.COLOR_BGR2RGB)
+        img_norm = img_rgb.astype(np.float32) / 255.0
+        img_batch = np.transpose(img_norm, (2, 0, 1))[np.newaxis, ...]
+
+        yolo_out = yolo_sess.run(None, {yolo_input: img_batch})
+        boxes, scores, labels = decode_yolo(
+            yolo_out[0], scale, pad, orig_h, orig_w, CONF_THRESHOLD)
 
         if len(boxes) == 0:
             continue
 
-        # Stage 2: Crop and classify with DINOv2
-        crops = []
-        for box in boxes:
-            x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
-            x1 = max(0, x1)
-            y1 = max(0, y1)
-            x2 = min(orig_w, x2)
-            y2 = min(orig_h, y2)
-            if x2 - x1 < 5 or y2 - y1 < 5:
-                crops.append(np.zeros((10, 10, 3), dtype=np.uint8))
-                continue
-            crop = img[y1:y2, x1:x2]
-            crops.append(crop)
+        boxes, scores, labels = nms_per_class(boxes, scores, labels, IOU_THRESHOLD)
 
-        dino_labels, dino_scores = classify_crops(
-            dino_sess, dino_input, crops, gallery, gallery_labels)
+        if len(scores) > MAX_DETECTIONS:
+            top_idx = np.argsort(scores)[-MAX_DETECTIONS:]
+            boxes = boxes[top_idx]
+            scores = scores[top_idx]
+            labels = labels[top_idx]
 
-        for i, (box, det_score) in enumerate(zip(boxes, det_scores)):
+        for box, score, label in zip(boxes, scores, labels):
             x1, y1, x2, y2 = box
-
-            # Use DINOv2 for category, keep detection score for ranking.
-            # Detection mAP (70%) ignores category, so preserving det_score
-            # keeps detection ranking intact. DINOv2 category improves
-            # classification mAP (30%).
-            if len(dino_labels) > i and dino_scores[i] > 0.3:
-                cat_id = int(dino_labels[i])
-            else:
-                cat_id = int(yolo_labels[i])
-
             predictions.append({
                 "image_id": image_id,
-                "category_id": cat_id,
+                "category_id": int(label),
                 "bbox": [round(float(x1), 2), round(float(y1), 2),
                          round(float(x2 - x1), 2), round(float(y2 - y1), 2)],
-                "score": round(float(det_score), 4),
+                "score": round(float(score), 4),
             })
 
     parent = output_path.parent
