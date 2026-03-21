@@ -1,0 +1,43 @@
+{
+  "correlations": {
+    "obs_settle_growth vs settle_growth_y25": {
+      "r2": 0.8072,
+      "decision": "APPROVED"
+    },
+    "obs_settle_growth vs settle_growth_y10": {
+      "r2": 0.6604,
+      "decision": "APPROVED"
+    },
+    "obs_settle_growth vs wealth_decay_y10": {
+      "r2": 0.1726,
+      "decision": "REJECTED"
+    },
+    "obs_settle_growth vs wealth_decay_y25": {
+      "r2": 0.0166,
+      "decision": "REJECTED"
+    },
+    "obs_settle_growth vs faction_consol_y10": {
+      "r2": 0.576,
+      "decision": "APPROVED"
+    },
+    "obs_settle_growth vs pop_trend_y10": {
+      "r2": 0.0898,
+      "decision": "REJECTED"
+    },
+    "obs_settle_growth vs food_trend_y10": {
+      "r2": 0.0813,
+      "decision": "REJECTED"
+    },
+    "obs_forest_ratio vs settle_growth_y25": {
+      "r2": 0.7753,
+      "decision": "APPROVED"
+    }
+  },
+  "regime_thresholds": {
+    "feature": "obs_settle_growth",
+    "death_below": 0.9,
+    "growth_above": 1.4,
+    "accuracy": 0.774
+  },
+  "n_data_points": 84
+}
