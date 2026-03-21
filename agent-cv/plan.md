@@ -1,14 +1,14 @@
 # NorgesGruppen Object Detection — Plan
 
 **Track:** CV | **Task:** Grocery Shelf Detection | **Weight:** 33.33%
-**Last updated:** 2026-03-21 14:15 CET
+**Last updated:** 2026-03-21 16:15 CET
 
 ## Current State
 - **Leaderboard:** 0.6584 (YOLO11m maxdata, 854 images)
 - **Previous:** 0.6475 (YOLO11m, 348 images)
 - **Val-to-leaderboard ratio:** ~0.807 (val 0.816 gave 0.6584)
 - **Submissions left today:** 4 of 6 (resets 01:00 CET)
-- **Deadline:** Sunday 15:00 CET (~25 hours remaining)
+- **Deadline:** Sunday 15:00 CET (~23 hours remaining)
 
 ## Key Insight: Synthetic Data Quality Matters More Than Quantity
 Going from 348 to 854 images only moved leaderboard +0.011. The 500 extra synthetic images (copy-paste + Gemini white-background) inflate val scores but don't teach the model what real test shelves look like. We need REALISTIC shelf images, not more of the same.
@@ -46,13 +46,13 @@ Multi-reference produces much more accurate product appearance than text-only pr
 
 **RUNNING on 2 VMs (started 14:00 CET Saturday):**
 
-| VM | Split | Categories | Images | ETA |
-|----|-------|-----------|--------|-----|
-| cv-train-1 | 0 (weakest) | 55 (41 seen-once, 13 barely-known, 1 somewhat-known) | 519 | ~17:00 CET |
-| cv-train-4 | 1 (somewhat-known) | 55 (all somewhat-known) | 275 | ~17:00 CET |
-| **Total** | | **110** | **794** | **~3h** |
+| VM | Split | Categories | Images | Progress | ETA |
+|----|-------|-----------|--------|----------|-----|
+| cv-train-1 | 0 (weakest) | 55 (41 seen-once, 13 barely-known, 1 somewhat-known) | 519 | 169/519 (16/55 cats) | ~19:45 CET |
+| cv-train-4 | 1 (somewhat-known) | 55 (all somewhat-known) | 275 | 175/275 (35/55 cats) | ~17:15 CET |
+| **Total** | | **110** | **794** | 344/794 | |
 
-cv-train-3 deleted (GPU stockout in europe-west1-b).
+100% success rate, zero errors. cv-train-3 deleted (GPU stockout in europe-west1-b).
 
 **Actual tier counts (verified from annotations):**
 - 41 seen-once products (38 with reference images): 10 variations each = 380 images
@@ -63,24 +63,16 @@ cv-train-3 deleted (GPU stockout in europe-west1-b).
 ### Phase 2: Label the Generated Images
 Two paths depending on whether Butler's labeling tool + JC's time works out:
 
-**Path A: Human-in-the-loop (preferred)**
-- Butler is building a web labeling GUI (assignment sent)
-- JC draws one bounding box per image (category pre-filled from filename)
-- Output: human-quality YOLO labels
-- Time: ~3-4h for ~2000 images (5-10 sec per image with pre-suggested boxes)
-- This gives the BEST labels but depends on JC having time
+**DECIDED: Path C Hybrid (JC manual target + YOLO second pass)**
 
-**Path B: Auto-labeling (backup if JC can't label all images)**
-- Run our existing trained YOLO model on each generated image
-- It detects products and creates pseudo-labels automatically
-- Filter: only keep detections where confidence > 0.5 AND the detected category matches the product we generated
-- This is circular (training on own predictions) but the new SHELF CONTEXT is still novel
-- Quality: ~70% as good as human labels, but zero JC time needed
+JC tested labeling 10 images: 90/100 quality, workflow validated.
+Auto-label quality measured on real images: 93.9% detect, 92.2% classify (well-known), 37% classify (rare).
 
-**Path C: Hybrid (most likely)**
-- JC labels the 54 "seen once" products (540 images, ~1.5h)
-- Auto-label the remaining 1610 images with Path B
-- Best products get human labels, rest get good-enough auto-labels
+**Step 1:** JC manually labels the TARGET product in each image (one bounding box per image, category pre-filled from filename). Batches of 100 images prepared by `prepare_label_batches.py`.
+**Step 2:** `yolo_second_pass.py` auto-labels OTHER shelf products in each image (the surrounding products that aren't the target).
+**Step 3:** Combine human labels + auto-labels into training set.
+
+This gives human-quality labels on the products that matter most (rare categories) and free bonus labels on the surrounding shelf context.
 
 ### Phase 3: Retrain on Real + Labeled Synthetic (~4h, 1 VM with GPU)
 Combine:
@@ -91,13 +83,16 @@ Combine:
 Train YOLO11m with aggressive augmentation, 200 epochs.
 Use the SAME proper train/val split (40 real images held out).
 
-**Timeline (UPDATED):**
-- Generation done: ~17:00 CET Saturday (2 VMs, ~3h from 14:00)
-- Auto-labeling: ~17:30 CET (run YOLO on generated images, ~30 min)
-- JC labels priority products: Saturday evening IF Butler GUI ready
-- Retrain: Saturday evening (~4h on cv-train-1 with GPU)
+**Timeline (UPDATED 16:15 CET):**
+- cv-train-4 generation done: ~17:15 CET Saturday
+- First batch of 100 images ready for JC: ~17:30 CET
+- cv-train-1 generation done: ~19:45 CET Saturday
+- JC labeling: Saturday evening (batches of 100, one bbox per image)
+- YOLO second pass: after JC labeling
+- Retrain on GCP: Saturday night (~4h on cv-train-1 with GPU)
 - Evaluate + submit: Sunday morning
 - Iterate if needed: Sunday (6 fresh slots)
+- Feature freeze: Sunday 09:00
 - Deadline: Sunday 15:00 CET
 
 ### Phase 4: Evaluate + Submit
@@ -123,11 +118,29 @@ Use the SAME proper train/val split (40 real images held out).
 | Barely known (2) | 18 | 2 each | Generate 10 shelf variations each |
 | Seen once | 54 | 1 each | Generate 10 shelf variations each (PRIORITY) |
 
+## Completed This Session (14:15-16:15 CET)
+- **Confidence sweep:** optimal conf=0.28 (marginal +0.001 vs 0.25, not worth a submission)
+- **IOU sweep:** optimal iou=0.45 (negligible difference from 0.50)
+- **Confusion analysis:** top confusions are similar product variants (Evergood coffees, egg cartons, knekkebrод flavors, AXA musli variants)
+- **Grounding DINO tested:** FAILED (40% on Norwegian products, text prompts useless)
+- **Gemini bbox test:** 50% return rate, 60% accuracy of those returned, not reliable
+- **Auto-label quality measured:** 93.9% detect, 92.2% classify (well-known), 37% classify (rare)
+- **JC test-labeled 10 images:** 90/100 quality, workflow validated
+- **Labeling decision:** JC manually labels target product (one box), YOLO auto-labels other shelf products as second pass
+
 ## In-Flight Work
-- **Gemini generation:** RUNNING on cv-train-1 (split 0) + cv-train-4 (split 1). ETA ~17:00 CET.
-- **Butler agent:** Check if labeling GUI is ready (assignment in intelligence/for-ops-agent/)
-- **Auto-labeling script:** TODO: write after generation completes
-- **Labeling strategy:** Hybrid (Path C): JC labels priority products if Butler GUI ready, auto-label the rest
+- **Gemini generation:** RUNNING on cv-train-1 (split 0, 169/519) + cv-train-4 (split 1, 175/275). 100% success rate, zero errors.
+- **cv-train-4 ETA:** ~17:15 CET (first batch of 100 images ready for JC ~17:30)
+- **cv-train-1 ETA:** ~19:45 CET
+- **Labeling strategy:** Decided: JC labels target product, YOLO second pass labels surrounding products
+
+## Scripts Ready
+- `gemini_shelf_gen.py` (RUNNING on 2 VMs)
+- `prepare_label_batches.py` (batches of 100 for JC)
+- `auto_label_gemini.py` (backup auto-labeling)
+- `yolo_second_pass.py` (auto-label OTHER products after JC labels target)
+- `retrain_with_gemini.py` (one-click retrain pipeline)
+- `conf_sweep.py`, `iou_sweep.py`, `category_analysis.py` (analysis tools)
 
 ## GCP VMs
 | VM | Zone | Status |
@@ -145,6 +158,8 @@ Use the SAME proper train/val split (40 real images held out).
 ## What NOT to Do
 - No more SAHI (proven: hurts)
 - No DINOv2 at inference (proven: hurts)
+- No Grounding DINO (proven: fails on Norwegian products, 40% accuracy)
+- No Gemini bbox labeling (unreliable: 50% return rate, 60% accuracy, ~30% usable)
 - No mass random copy-paste (diminishing returns on leaderboard)
 - No rotation augmentation on products (makes labels unreadable)
 - Don't trust val scores alone. Use calibration ratio ~0.80-0.85.
