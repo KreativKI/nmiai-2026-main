@@ -22,7 +22,7 @@ SIMPLIFY: Run code-simplifier:code-simplifier agent (fresh context)
 VALIDATE: Run build-validator agent (fresh context)
 COMMIT:  Only after all three agents pass
 ```
-Steps 4-6 are SEPARATE AGENTS with fresh context each. Run in parallel.
+Steps 4-6 are SEPARATE AGENTS with fresh context each. Run SEQUENTIALLY: fix review bugs before simplify, simplify before validate.
 "Too small to bother" and "time pressure" are not valid reasons to skip.
 
 ---
