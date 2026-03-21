@@ -991,7 +991,12 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
     org_number = f.get("orgNumber") or f.get("supplierOrgNumber")
     total_incl_vat = float(f.get("amount") or f.get("totalAmount") or f.get("invoiceAmount") or 0)
     vat_rate = float(f.get("vatRate", 25))
-    expense_account_number = int(f.get("account") or f.get("accountNumber") or 6300)
+    # Parse account number safely (LLM may put description in 'account' field)
+    raw_acct = f.get("accountNumber") or f.get("account") or "6300"
+    try:
+        expense_account_number = int(raw_acct)
+    except (ValueError, TypeError):
+        expense_account_number = 6300
     invoice_number = f.get("invoiceNumber") or ""
     invoice_date = f.get("invoiceDate") or f.get("date") or time.strftime("%Y-%m-%d")
     description = f.get("description") or f"Leverandorfaktura {invoice_number} fra {supplier_name}"
@@ -1163,12 +1168,17 @@ async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str,
     else:
         emp_first, emp_last = split_name(f)
     dept_id = await ensure_department(c, base, tok)
-    emp_r = await tx(c, base, tok, "POST", "/employee", {
+    emp_body = {
         "firstName": emp_first, "lastName": emp_last,
         "department": {"id": dept_id or 1}, "userType": "STANDARD",
         "email": emp_email or f"{emp_first.lower()}@company.no",
         "dateOfBirth": "1990-01-15",
-    })
+    }
+    emp_r = await tx(c, base, tok, "POST", "/employee", emp_body)
+    if not emp_r.get("success") and "e-post" in str(emp_r.get("error", "")).lower():
+        # Email conflict - try with unique suffix
+        emp_body["email"] = f"{emp_first.lower()}.{int(time.time()) % 10000}@company.no"
+        emp_r = await tx(c, base, tok, "POST", "/employee", emp_body)
     pm_id = emp_r["data"]["id"] if emp_r.get("success") else None
     if not pm_id:
         whoami = await tx(c, base, tok, "GET", "/token/session/>whoAmI")
@@ -1204,15 +1214,18 @@ async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str,
         "unitPriceExcludingVatCurrency": rate,
         "vatType": {"id": vat_id_sync(25, vat_map)},
     }]
-    if proj_id:
-        order_lines[0]["project"] = {"id": proj_id}
+    # Note: 'project' field does NOT exist on order lines. Project is linked via the order.
 
     today = time.strftime("%Y-%m-%d")
+    order_body = {"customer": {"id": cust_id}, "orderDate": today,
+                  "deliveryDate": today, "orderLines": order_lines}
+    if proj_id:
+        order_body["project"] = {"id": proj_id}
+
     invoice_body = {
         "invoiceDate": today, "invoiceDueDate": today,
         "customer": {"id": cust_id},
-        "orders": [{"customer": {"id": cust_id}, "orderDate": today,
-                     "deliveryDate": today, "orderLines": order_lines}],
+        "orders": [order_body],
     }
     return await tx(c, base, tok, "POST", "/invoice", invoice_body)
 
