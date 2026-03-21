@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full overflow-hidden">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JC | Shelf Labeler Pro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@200;300;400&family=Space+Grotesk:wght@700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com/4.0.0-alpha.26"></script>
+    <style>
+        :root {
+            --bg-950: oklch(12% 0.01 260);
+            --bg-900: oklch(16% 0.02 260);
+            --bg-800: oklch(22% 0.02 260);
+            --accent-green: oklch(75% 0.18 145);
+            --accent-green-muted: oklch(75% 0.18 145 / 0.2);
+            --accent-red: oklch(65% 0.22 25);
+            --accent-blue: oklch(70% 0.15 250);
+            --text-main: oklch(98% 0.01 260);
+            --text-muted: oklch(65% 0.01 260);
+            --noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        body {
+            background-color: var(--bg-950);
+            background-image: var(--noise), linear-gradient(to bottom, var(--bg-950), var(--bg-900));
+            background-blend-mode: overlay;
+            color: var(--text-main);
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 200;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            user-select: none;
+        }
+
+        h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; font-weight: 800; }
+
+        .top-bar { height: 56px; border-bottom: 1px solid oklch(100% 0 0 / 0.1); background: var(--bg-950); }
+        .bottom-bar { height: 48px; border-top: 1px solid oklch(100% 0 0 / 0.1); background: var(--bg-950); }
+        .canvas-container { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        
+        canvas { 
+            display: block; 
+            box-shadow: 0 0 40px oklch(0% 0 0 / 0.5); 
+            image-rendering: pixelated;
+            cursor: crosshair;
+            opacity: 1;
+            visibility: visible;
+            transform: none;
+        }
+
+        .btn {
+            padding: 4px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            transition: all 150ms ease;
+            border-radius: 2px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-green { background: var(--accent-green); color: var(--bg-950); }
+        .btn-green:hover { filter: brightness(1.1); }
+        .btn-red { background: var(--accent-red); color: white; }
+        .btn-red:hover { filter: brightness(1.1); }
+        .btn-blue { background: var(--accent-blue); color: white; }
+        .btn-blue:hover { filter: brightness(1.1); }
+
+        .toggle-switch {
+            width: 32px;
+            height: 16px;
+            background: var(--bg-800);
+            border-radius: 8px;
+            position: relative;
+            cursor: pointer;
+            transition: 150ms;
+        }
+        .toggle-switch.active { background: var(--accent-green); }
+        .toggle-knob {
+            width: 12px;
+            height: 12px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: 150ms transform;
+        }
+        .toggle-switch.active .toggle-knob { transform: translateX(16px); }
+
+        .pulsing-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.9); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.5; }
+            100% { transform: scale(0.9); opacity: 1; }
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 64px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-800);
+            border: 1px solid var(--accent-green);
+            padding: 8px 16px;
+            font-size: 12px;
+            z-index: 100;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: 200ms opacity, 0s visibility 200ms;
+        }
+
+        #done-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-950);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        :focus-visible { outline: 2px solid var(--accent-green); outline-offset: 2px; }
+    </style>
+</head>
+<body>
+
+    <nav class="top-bar flex items-center px-4 justify-between" aria-label="Tool bar">
+        <div class="flex items-center gap-4">
+            <h1 id="product-name" class="text-2xl" style="color: var(--text-main)">---</h1>
+            <img id="ref-photo" src="" alt="Reference" class="w-12 h-12 object-cover rounded border border-white/20 hidden">
+        </div>
+
+        <div id="coords-display" class="text-[13px] tracking-tight" style="color: var(--accent-green)">
+            cx: 0.000  cy: 0.000  w: 0.000  h: 0.000
+        </div>
+
+        <div class="w-64">
+            <div id="progress-text" class="text-[11px] text-right text-muted mb-1 uppercase tracking-widest">0 labeled | 0 skipped | 0 remaining</div>
+            <div class="w-full h-1 rounded-full overflow-hidden" style="background: oklch(100% 0 0 / 0.1)">
+                <div id="progress-bar" class="h-full bg-[oklch(75%_0.18_145)]" style="width: 0%"></div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="canvas-container" id="main-stage">
+        <canvas id="label-canvas" width="800" height="600"></canvas>
+    </main>
+
+    <footer class="bottom-bar flex items-center px-4 justify-between">
+        <div class="flex items-center gap-2">
+            <button onclick="saveLabel()" class="btn btn-green" aria-label="Save and next">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Save & Next
+            </button>
+            <button onclick="skipImage()" class="btn btn-red" aria-label="Skip image">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                Skip
+            </button>
+            <button onclick="resetBox()" class="btn btn-blue" aria-label="Reset box">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M2.5 2v6h6M2.5 8l3.5-3.5A9 9 0 1 1 2.5 15"></path></svg>
+                Reset
+            </button>
+        </div>
+
+        <div class="flex items-center gap-3 text-[12px] font-bold">
+            <span class="text-muted uppercase">YOLO Auto-Label</span>
+            <div id="auto-label-toggle" class="toggle-switch" onclick="toggleAutoLabel()" role="switch" aria-checked="false">
+                <div class="toggle-knob"></div>
+            </div>
+            <div id="pulse-indicator" class="hidden">
+                <div class="pulsing-dot"></div>
+                <span style="color: var(--accent-green)">QUEUE ACTIVE</span>
+            </div>
+        </div>
+
+        <div class="text-[11px] text-muted tracking-tighter uppercase flex gap-4">
+            <span>[Enter] Save</span>
+            <span>[S] Skip</span>
+            <span>[R] Reset</span>
+            <span>[+/-] Resize</span>
+        </div>
+    </footer>
+
+    <div id="toast" role="status">Auto-label queued</div>
+
+    <div id="done-overlay">
+        <h2 class="text-7xl mb-4" style="color: var(--text-main)">ALL DONE</h2>
+        <div id="final-stats" class="text-xl text-muted tracking-widest uppercase"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('label-canvas');
+        const ctx = canvas.getContext('2d');
+        const stage = document.getElementById('main-stage');
+
+        let currentImage = null;
+        let img = new Image();
+        let imgLoaded = false;
+        let autoLabelEnabled = false;
+
+        let bbox = { cx: 0.5, cy: 0.5, w: 0.5, h: 0.5 };
+        let suggestedBbox = { cx: 0.5, cy: 0.5, w: 0.5, h: 0.5 };
+
+        let dragging = false;
+        let dragType = null; // 'move', 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w', 'new'
+        let dragStart = { x: 0, y: 0 };
+        let bboxAtDragStart = null;
+
+        const HANDLE_SIZE = 8;
+        const MIN_SIZE = 0.02;
+        const rootStyles = getComputedStyle(document.documentElement);
+        const COLOR_GREEN = rootStyles.getPropertyValue('--accent-green');
+        const COLOR_BLUE = rootStyles.getPropertyValue('--accent-blue');
+
+        async function fetchJSON(url, opts = {}) {
+            try {
+                const response = await fetch(url, {
+                    ...opts,
+                    headers: { 'Content-Type': 'application/json', ...opts.headers }
+                });
+                return await response.json();
+            } catch (e) {
+                console.error("Fetch error:", e);
+                return null;
+            }
+        }
+
+        async function updateProgress() {
+            const status = await fetchJSON('/api/status');
+            if (!status) return;
+            document.getElementById('progress-text').innerText = 
+                `${status.labeled} labeled | ${status.skipped} skipped | ${status.remaining} remaining`;
+            const pct = status.total > 0 ? ((status.labeled + status.skipped) / status.total) * 100 : 0;
+            document.getElementById('progress-bar').style.width = pct + '%';
+            
+            if (status.remaining === 0 && status.total > 0) {
+                document.getElementById('done-overlay').style.display = 'flex';
+                document.getElementById('final-stats').innerText = 
+                    `${status.labeled} labels completed | ${status.skipped} skipped`;
+            }
+        }
+
+        async function loadNext() {
+            const data = await fetchJSON('/api/next');
+            if (!data) return;
+            if (data.done) {
+                updateProgress();
+                return;
+            }
+
+            currentImage = data;
+            document.getElementById('product-name').innerText = data.product_name;
+            
+            const ref = document.getElementById('ref-photo');
+            if (data.reference_url) {
+                ref.src = data.reference_url;
+                ref.classList.remove('hidden');
+            } else {
+                ref.classList.add('hidden');
+            }
+
+            img = new Image();
+            img.onload = () => {
+                imgLoaded = true;
+                resizeCanvas();
+                
+                const src = data.suggested_bbox || { cx: 0.5, cy: 0.5, w: 0.5, h: 0.5 };
+                bbox = { ...src };
+                suggestedBbox = { ...src };
+                draw();
+            };
+            img.src = data.image_url;
+            updateProgress();
+        }
+
+        async function saveLabel() {
+            if (!currentImage) return;
+            await fetchJSON('/api/label', {
+                method: 'POST',
+                body: JSON.stringify({
+                    filename: currentImage.filename,
+                    category_id: currentImage.category_id,
+                    bbox: bbox
+                })
+            });
+
+            if (autoLabelEnabled) {
+                await fetchJSON('/api/auto-label', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        filename: currentImage.filename,
+                        category_id: currentImage.category_id,
+                        bbox: bbox
+                    })
+                });
+                showToast("Auto-label queued");
+            }
+
+            loadNext();
+        }
+
+        async function skipImage() {
+            if (!currentImage) return;
+            await fetchJSON('/api/skip', {
+                method: 'POST',
+                body: JSON.stringify({ filename: currentImage.filename })
+            });
+            loadNext();
+        }
+
+        function resizeCanvas() {
+            if (!imgLoaded) return;
+            const availableW = stage.clientWidth - 40;
+            const availableH = stage.clientHeight - 40;
+            const imgAR = img.width / img.height;
+            const containerAR = availableW / availableH;
+
+            if (containerAR > imgAR) {
+                canvas.height = availableH;
+                canvas.width = availableH * imgAR;
+            } else {
+                canvas.width = availableW;
+                canvas.height = availableW / imgAR;
+            }
+            draw();
+        }
+
+        function draw() {
+            if (!imgLoaded) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            const x1 = (bbox.cx - bbox.w / 2) * canvas.width;
+            const y1 = (bbox.cy - bbox.h / 2) * canvas.height;
+            const x2 = (bbox.cx + bbox.w / 2) * canvas.width;
+            const y2 = (bbox.cy + bbox.h / 2) * canvas.height;
+            const bw = x2 - x1;
+            const bh = y2 - y1;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+            ctx.fillRect(0, 0, canvas.width, y1);
+            ctx.fillRect(0, y2, canvas.width, canvas.height - y2);
+            ctx.fillRect(0, y1, x1, y2 - y1);
+            ctx.fillRect(x2, y1, canvas.width - x2, y2 - y1);
+
+            ctx.strokeStyle = COLOR_GREEN;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x1, y1, bw, bh);
+
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x1, bbox.cy * canvas.height);
+            ctx.lineTo(x2, bbox.cy * canvas.height);
+            ctx.moveTo(bbox.cx * canvas.width, y1);
+            ctx.lineTo(bbox.cx * canvas.width, y2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            ctx.fillStyle = COLOR_GREEN;
+            ctx.fillRect(x1 - 4, y1 - 4, 8, 8); // nw
+            ctx.fillRect(x2 - 4, y1 - 4, 8, 8); // ne
+            ctx.fillRect(x1 - 4, y2 - 4, 8, 8); // sw
+            ctx.fillRect(x2 - 4, y2 - 4, 8, 8); // se
+
+            ctx.fillStyle = COLOR_BLUE;
+            ctx.fillRect(bbox.cx * canvas.width - 4, y1 - 4, 8, 8); // n
+            ctx.fillRect(bbox.cx * canvas.width - 4, y2 - 4, 8, 8); // s
+            ctx.fillRect(x1 - 4, bbox.cy * canvas.height - 4, 8, 8); // w
+            ctx.fillRect(x2 - 4, bbox.cy * canvas.height - 4, 8, 8); // e
+
+            document.getElementById('coords-display').innerText =
+                `cx: ${bbox.cx.toFixed(3)}  cy: ${bbox.cy.toFixed(3)}  w: ${bbox.w.toFixed(3)}  h: ${bbox.h.toFixed(3)}`;
+        }
+
+        function getHandleAt(nx, ny) {
+            const px = nx * canvas.width;
+            const py = ny * canvas.height;
+            const x1 = (bbox.cx - bbox.w / 2) * canvas.width;
+            const y1 = (bbox.cy - bbox.h / 2) * canvas.height;
+            const x2 = (bbox.cx + bbox.w / 2) * canvas.width;
+            const y2 = (bbox.cy + bbox.h / 2) * canvas.height;
+            const mx = bbox.cx * canvas.width;
+            const my = bbox.cy * canvas.height;
+
+            const dist = (ax, ay, bx, by) => Math.sqrt((ax - bx)**2 + (ay - by)**2);
+            const threshold = 12;
+
+            if (dist(px, py, x1, y1) < threshold) return 'nw';
+            if (dist(px, py, x2, y1) < threshold) return 'ne';
+            if (dist(px, py, x1, y2) < threshold) return 'sw';
+            if (dist(px, py, x2, y2) < threshold) return 'se';
+            if (dist(px, py, mx, y1) < threshold) return 'n';
+            if (dist(px, py, mx, y2) < threshold) return 's';
+            if (dist(px, py, x1, my) < threshold) return 'w';
+            if (dist(px, py, x2, my) < threshold) return 'e';
+
+            if (nx > bbox.cx - bbox.w/2 && nx < bbox.cx + bbox.w/2 &&
+                ny > bbox.cy - bbox.h/2 && ny < bbox.cy + bbox.h/2) return 'move';
+
+            return 'new';
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const nx = (e.clientX - rect.left) / canvas.width;
+            const ny = (e.clientY - rect.top) / canvas.height;
+
+            dragging = true;
+            dragType = getHandleAt(nx, ny);
+            dragStart = { x: nx, y: ny };
+            bboxAtDragStart = { ...bbox };
+
+            if (dragType === 'new') {
+                bbox = { cx: nx, cy: ny, w: 0.01, h: 0.01 };
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const nx = Math.max(0, Math.min(1, (e.clientX - rect.left) / canvas.width));
+            const ny = Math.max(0, Math.min(1, (e.clientY - rect.top) / canvas.height));
+
+            if (!dragging) {
+                const cursors = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize',
+                                  n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', move: 'grab' };
+                canvas.style.cursor = cursors[getHandleAt(nx, ny)] || 'crosshair';
+                return;
+            }
+
+            const dx = nx - dragStart.x;
+            const dy = ny - dragStart.y;
+
+            if (dragType === 'move') {
+                bbox.cx = Math.max(bbox.w / 2, Math.min(1 - bbox.w / 2, bboxAtDragStart.cx + dx));
+                bbox.cy = Math.max(bbox.h / 2, Math.min(1 - bbox.h / 2, bboxAtDragStart.cy + dy));
+            } else if (dragType === 'new') {
+                const left = Math.min(dragStart.x, nx);
+                const right = Math.max(dragStart.x, nx);
+                const top = Math.min(dragStart.y, ny);
+                const bottom = Math.max(dragStart.y, ny);
+                bbox.w = Math.max(MIN_SIZE, right - left);
+                bbox.h = Math.max(MIN_SIZE, bottom - top);
+                bbox.cx = left + bbox.w / 2;
+                bbox.cy = top + bbox.h / 2;
+            } else {
+                let x1 = bboxAtDragStart.cx - bboxAtDragStart.w / 2;
+                let x2 = bboxAtDragStart.cx + bboxAtDragStart.w / 2;
+                let y1 = bboxAtDragStart.cy - bboxAtDragStart.h / 2;
+                let y2 = bboxAtDragStart.cy + bboxAtDragStart.h / 2;
+
+                if (dragType.includes('n')) y1 = Math.min(y2 - MIN_SIZE, ny);
+                if (dragType.includes('s')) y2 = Math.max(y1 + MIN_SIZE, ny);
+                if (dragType.includes('w')) x1 = Math.min(x2 - MIN_SIZE, nx);
+                if (dragType.includes('e')) x2 = Math.max(x1 + MIN_SIZE, nx);
+
+                bbox.w = x2 - x1;
+                bbox.h = y2 - y1;
+                bbox.cx = x1 + bbox.w / 2;
+                bbox.cy = y1 + bbox.h / 2;
+            }
+
+            draw();
+        });
+
+        window.addEventListener('mouseup', () => {
+            dragging = false;
+        });
+
+        function resetBox() {
+            bbox = { ...suggestedBbox };
+            draw();
+        }
+
+        function resizeBoxBy(delta) {
+            bbox.w = Math.max(MIN_SIZE, Math.min(1, bbox.w + delta));
+            bbox.h = Math.max(MIN_SIZE, Math.min(1, bbox.h + delta));
+            bbox.cx = Math.max(bbox.w / 2, Math.min(1 - bbox.w / 2, bbox.cx));
+            bbox.cy = Math.max(bbox.h / 2, Math.min(1 - bbox.h / 2, bbox.cy));
+            draw();
+        }
+
+        function toggleAutoLabel() {
+            autoLabelEnabled = !autoLabelEnabled;
+            document.getElementById('auto-label-toggle').classList.toggle('active', autoLabelEnabled);
+            document.getElementById('auto-label-toggle').setAttribute('aria-checked', String(autoLabelEnabled));
+            document.getElementById('pulse-indicator').classList.toggle('hidden', !autoLabelEnabled);
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.style.opacity = '1';
+            t.style.visibility = 'visible';
+            t.style.transition = '200ms opacity';
+            setTimeout(() => { t.style.opacity = '0'; t.style.visibility = 'hidden'; t.style.transition = '200ms opacity, 0s visibility 200ms'; }, 2000);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === 'ArrowRight') {
+                saveLabel();
+            } else if (e.key.toLowerCase() === 's') {
+                skipImage();
+            } else if (e.key.toLowerCase() === 'r') {
+                resetBox();
+            } else if (e.key === '+' || e.key === '=') {
+                resizeBoxBy(0.02);
+            } else if (e.key === '-' || e.key === '_') {
+                resizeBoxBy(-0.02);
+            }
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+        loadNext();
+
+    </script>
+</body>
+</html>
