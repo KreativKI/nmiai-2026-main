@@ -1,34 +1,42 @@
 ---
 from: nlp-agent
-timestamp: 2026-03-21 03:15 CET
+timestamp: 2026-03-21 03:50 CET
 ---
 
-## NLP Status Update (batch 15 complete)
+## NLP Status Update (batch 23 complete)
 
-**Rev:** 58 deployed
-**Submissions today:** 62/180 used, 118 remaining
-**Estimated score:** ~33-35 (up from 29.08 at session start)
+**Rev:** 63 deployed
+**Submissions today:** 94/180 used, 86 remaining
+**Estimated score:** ~35-38 (up from 29.08 at session start)
 
-### Key Wins This Session (cumulative)
-- Dimension: 0/13 -> 13/13 (correct API: accountingDimensionName/Value)
-- Supplier: 0/8 -> 8/8 (POST /supplier is NOT BETA, confirmed in Swagger)
-- Invoice efficiency: removed bank account retry, product retry
-- Project PM: admin=PM pattern (competition creates admin with PM email)
-- Salary: removed non-existent payslip endpoints, fixed duplicate details
-- Supplier invoice crash: safe int parsing for account numbers
+### Session Summary (2026-03-21 00:30 - 03:50 CET)
+23 batches submitted (92 submissions). Massive code improvements.
 
-### Remaining Issues
-1. Travel expense: 0/8 (per diem needs perDiemCompensation, not cost)
-2. Supplier invoice voucher: 0/8 despite success (scoring might not check vouchers)
-3. Some invoice tasks: 6/7 (86%) - one field wrong, need to identify which
-4. Token expiry: 1 batch hit 403 from platform (not our bug)
+### Confirmed Wins
+- Dimension: 0/13 -> 13/13 (2x confirmed, accountingDimensionName API)
+- Supplier entity: 0/8 -> 8/8 (POST /supplier is NOT BETA)
+- Many task types now scoring 100%: customer, employee, product, department, invoice, credit note, register_payment, dimension, supplier
 
-### Tier 3 Status
-Tier 3 should be opening now. Haven't seen any Tier 3 tasks yet in submissions.
-Will continue iterating and watch for new task patterns.
+### Remaining Issues (ranked by impact)
+1. **Salary (process_salary)**: 0/8. Monthly salary needs ×12 for annualSalary. Fix deployed in rev 61, not yet confirmed by scoring.
+2. **Travel expense**: 0/8. All APIs succeed but scored 0. Per diem compensation endpoint works (201). Something in the data is wrong.
+3. **Supplier invoice voucher**: 0-8/8. Inconsistent. Some succeed, some fail on VAT type lock. Fixed vatType removal in rev 63.
+4. **Payment reversal** (classified as credit_note): 2/8. Credit note partially handles it but isn't the right approach.
+5. **Project invoice**: 4-50%. PM access issues (email conflict with admin). Fixed admin=PM pattern in rev 62.
+6. **Project PM**: 5-7/7. Email conflict, admin fallback. Fixed in rev 58.
+
+### Efficiency Status
+Removed many unnecessary write calls and 4xx errors:
+- Removed bank account retry, vatType retry on products
+- GET-first for products (avoid "number in use" 422)
+- Removed non-existent salary endpoints (no more 500 errors)
+- Using POST /supplier directly instead of /customer fallback
+
+### Tier 3
+No Tier 3 tasks observed yet in submissions. Watching for them.
 
 ### Next Steps
-1. Fix travel expense (per diem compensation API)
-2. Investigate invoice 6/7 partial scores
-3. Watch for Tier 3 tasks in next batches
-4. Continue efficiency optimization
+1. Continue iterate/submit loop (86 slots remaining)
+2. Focus on understanding travel expense scoring
+3. Watch for Tier 3 tasks
+4. Consider context rotation if needed
