@@ -109,7 +109,9 @@ def main():
     yolo_input = yolo_sess.get_inputs()[0].name
 
     predictions = []
-    image_files = sorted(input_dir.glob("*.jpg"))
+    image_files = sorted(
+        [f for f in input_dir.iterdir() if f.suffix.lower() in (".jpg", ".jpeg", ".png")]
+    )
 
     for img_path in image_files:
         stem = img_path.stem

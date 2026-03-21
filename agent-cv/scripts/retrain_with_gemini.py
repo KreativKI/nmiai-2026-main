@@ -45,7 +45,7 @@ def main():
     parser.add_argument("--val-ratio", type=float, default=0.15,
                         help="Fraction of real images for validation")
     parser.add_argument("--epochs", type=int, default=50)
-    parser.add_argument("--batch", type=int, default=4)
+    parser.add_argument("--batch", type=int, default=8)
     parser.add_argument("--imgsz", type=int, default=1280)
     parser.add_argument("--model", type=str,
                         default=str(Path.home() / "retrain/yolo11m_maxdata_200ep/weights/best.pt"),
@@ -184,20 +184,24 @@ def main():
         batch=args.batch,
         device="cuda",
         optimizer="AdamW",
-        lr0=0.0005,
+        lr0=0.0003,
         lrf=0.01,
-        warmup_epochs=3,
+        warmup_epochs=5,
+        warmup_momentum=0.5,
         mosaic=0.5,
-        mixup=0.1,
-        copy_paste=0.0,  # Disabled: hurts rare-product classification
-        hsv_h=0.02,
-        hsv_s=0.7,
-        hsv_v=0.4,
-        degrees=5,
-        translate=0.15,
-        scale=0.5,
-        fliplr=0.5,
-        erasing=0.3,
+        close_mosaic=10,
+        mixup=0.05,
+        copy_paste=0.0,
+        hsv_h=0.015,
+        hsv_s=0.3,
+        hsv_v=0.3,
+        degrees=0,       # No rotation: preserves text readability
+        translate=0.1,
+        scale=0.3,
+        fliplr=0.0,      # No flip: text becomes unreadable, kills classification
+        erasing=0.1,
+        patience=10,
+        amp=True,
         project=str(output),
         name="yolo11m_gemini",
         exist_ok=True,
