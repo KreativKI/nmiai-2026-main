@@ -1,0 +1,95 @@
+{
+  "regime_assignments": {
+    "1": "stable",
+    "2": "growth",
+    "3": "death",
+    "4": "death",
+    "5": "stable",
+    "6": "growth",
+    "7": "growth",
+    "8": "death",
+    "9": "death"
+  },
+  "per_round": {
+    "1": {
+      "regime": "stable",
+      "regime_model_score": 65.8,
+      "global_model_score": 71.08,
+      "delta": -5.28
+    },
+    "2": {
+      "regime": "growth",
+      "regime_model_score": 76.49,
+      "global_model_score": 69.49,
+      "delta": 6.99
+    },
+    "3": {
+      "regime": "death",
+      "regime_model_score": 61.55,
+      "global_model_score": 41.22,
+      "delta": 20.32
+    },
+    "4": {
+      "regime": "death",
+      "regime_model_score": 81.87,
+      "global_model_score": 84.61,
+      "delta": -2.74
+    },
+    "5": {
+      "regime": "stable",
+      "regime_model_score": 73.12,
+      "global_model_score": 74.45,
+      "delta": -1.33
+    },
+    "6": {
+      "regime": "growth",
+      "regime_model_score": 60.11,
+      "global_model_score": 49.42,
+      "delta": 10.69
+    },
+    "7": {
+      "regime": "growth",
+      "regime_model_score": 58.22,
+      "global_model_score": 49.45,
+      "delta": 8.77
+    },
+    "8": {
+      "regime": "death",
+      "regime_model_score": 82.32,
+      "global_model_score": 67.01,
+      "delta": 15.32
+    },
+    "9": {
+      "regime": "death",
+      "regime_model_score": 59.14,
+      "global_model_score": 81.57,
+      "delta": -22.43
+    }
+  },
+  "per_regime_avg": {
+    "death": {
+      "regime_model": 71.22,
+      "global": 68.6,
+      "delta": 2.62,
+      "n_rounds": 4
+    },
+    "stable": {
+      "regime_model": 69.46,
+      "global": 72.77,
+      "delta": -3.3,
+      "n_rounds": 2
+    },
+    "growth": {
+      "regime_model": 64.94,
+      "global": 56.12,
+      "delta": 8.82,
+      "n_rounds": 3
+    }
+  },
+  "overall": {
+    "regime_model": 68.73,
+    "global": 65.37,
+    "delta": 3.37
+  },
+  "recommendation": "USE_REGIME_MODEL"
+}
