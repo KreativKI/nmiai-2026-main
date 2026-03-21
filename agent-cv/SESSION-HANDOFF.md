@@ -1,30 +1,32 @@
-# CV Session Handoff — 2026-03-20 22:15 CET
+# CV Session Handoff — 2026-03-21 02:45 CET
 
-## Current Best: 0.5756 (baseline YOLO-only, submission #2)
+## Leaderboard: 0.6475 (up from 0.5756, +0.072)
 
-## What Was Proven This Session
-- SAHI loses on all tests (-0.039 vs baseline)
-- DINOv2 one-shot kNN loses (-0.039 vs baseline)
-- Baseline YOLO-only at conf=0.15 is strongest on training data
-- All audits ran on GCP with cv_judge.py
+## Validated ZIPs Ready for JC
+A. `submission_aggressive_v2_final.zip` -- YOLO11m, val 0.767, leaderboard 0.6475 (CONFIRMED)
+B. `submission_yolo11l.zip` -- YOLO11l, val 0.780 (best val so far), pipeline+canary PASS
 
-## Gemini Generation Running on GCP
-cv-train-1 is generating Gemini product photos for all 321 remaining categories.
-Check: `gcloud compute ssh cv-train-1 --zone=europe-west1-c --project=ai-nm26osl-1779 --command="tail -5 ~/synthetic_all/generation.log"`
-When done: download gallery, rebuild with multiple embeddings per class (not averaged), re-test DINOv2.
+## GCP VMs Running
+| VM | Zone | Model | Epoch | Best Val mAP50 | ETA |
+|----|------|-------|-------|----------------|-----|
+| cv-train-1 | europe-west1-c | YOLO11m maxdata (854 imgs, 200ep) | 57/200 | 0.770 | ~06:00 |
+| cv-train-3 | europe-west1-b | YOLO11l | DONE | 0.780 | ZIP ready |
+| cv-train-4 | europe-west3-a | YOLO26m (348 imgs, 120ep) | 25/120 | 0.132 (slow) | ~04:00 |
 
-## GCP VMs
-- cv-train-1: europe-west1-c, RUNNING (Gemini generation + has all weights/data)
-- cv-train-2: DELETED
+## Check Commands
+```bash
+# cv-train-1 (maxdata)
+gcloud compute ssh cv-train-1 --zone=europe-west1-c --project=ai-nm26osl-1779 --command="grep -oP '\d+/200' ~/train_maxdata.log | tail -1; sort -t, -k8 -rn ~/retrain/yolo11m_maxdata_200ep/results.csv | head -1"
 
-## Key Files
-- `agent-cv/submission_sahi.zip` — YOLO+SAHI (don't submit, loses)
-- `agent-cv/submission.zip` — DINOv2 pipeline (don't submit, loses)
-- Baseline ZIP: `nmiai-2026-main/agent-cv/submissions/submission_yolo11m_v2.zip` (current best)
-- All audit results on GCP at `~/audit/`
+# cv-train-4 (yolo26)
+gcloud compute ssh cv-train-4 --zone=europe-west3-a --project=ai-nm26osl-1779 --command="grep -oP '\d+/120' ~/train_yolo26m.log | tail -1; tail -1 ~/retrain/yolo26m_aggressive/results.csv"
+```
 
-## Next Steps
-1. Check if Gemini generation finished, download results
-2. Build multi-sample gallery (many embeddings per class, not one averaged)
-3. Re-audit DINOv2 with richer gallery against baseline
-4. Try conf threshold sweep (0.10, 0.12, 0.15, 0.20) on baseline
+## When Models Finish
+For each model, run quick_submit.sh then canary agent.
+
+## Key Insight
+More data = less overfitting = higher leaderboard. Gap shrank from 0.38 to 0.12.
+
+## 6 Saturday Submission Slots (after 01:00 CET reset)
+Priority: YOLO11l (0.780 val) > maxdata when ready > YOLO26 if decent
