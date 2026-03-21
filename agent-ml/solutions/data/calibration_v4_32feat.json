@@ -1,0 +1,103 @@
+{
+  "model": "V4_32feat_50trees",
+  "rounds": [
+    {
+      "round": 10,
+      "regime": "death",
+      "backtest": 71.7,
+      "actual": 50.2,
+      "error": 21.5
+    },
+    {
+      "round": 11,
+      "regime": "growth",
+      "backtest": 75.4,
+      "actual": 69.0,
+      "error": 6.4
+    },
+    {
+      "round": 12,
+      "regime": "growth",
+      "backtest": 60.6,
+      "actual": 49.7,
+      "error": 10.9
+    },
+    {
+      "round": 13,
+      "regime": "death",
+      "backtest": 86.7,
+      "actual": 63.3,
+      "error": 23.4
+    },
+    {
+      "round": 14,
+      "regime": "growth",
+      "backtest": 55.6,
+      "actual": 67.8,
+      "error": -12.2
+    },
+    {
+      "round": 15,
+      "regime": "death",
+      "backtest": 87.2,
+      "actual": 81.6,
+      "error": 5.6
+    },
+    {
+      "round": 3,
+      "regime": "death",
+      "backtest": 68.7,
+      "actual": 39.7,
+      "error": 29.0
+    },
+    {
+      "round": 4,
+      "regime": "death",
+      "backtest": 77.4,
+      "actual": 71.8,
+      "error": 5.6
+    },
+    {
+      "round": 5,
+      "regime": "stable",
+      "backtest": 81.0,
+      "actual": 67.6,
+      "error": 13.4
+    },
+    {
+      "round": 6,
+      "regime": "growth",
+      "backtest": 77.1,
+      "actual": 70.4,
+      "error": 6.7
+    },
+    {
+      "round": 7,
+      "regime": "growth",
+      "backtest": 70.7,
+      "actual": 55.1,
+      "error": 15.6
+    },
+    {
+      "round": 8,
+      "regime": "death",
+      "backtest": 80.0,
+      "actual": 61.8,
+      "error": 18.2
+    },
+    {
+      "round": 9,
+      "regime": "death",
+      "backtest": 88.8,
+      "actual": 82.6,
+      "error": 6.2
+    }
+  ],
+  "regime_offsets": {
+    "death": 15.6,
+    "growth": 5.5,
+    "stable": 13.4
+  },
+  "overall_offset": 11.6,
+  "note": "error = backtest - actual. Positive = backtest overshoots."
+}
