@@ -3,10 +3,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 // --- Types ---
 
 interface AgentStatus {
+  // status.json files use "timestamp", not "last_updated"
+  timestamp?: string;
   last_updated?: string;
   score?: number;
   phase?: string;
   state?: string;
+  best_submitted_score?: number;
+  notes?: string;
 }
 
 type AgentState = "active" | "idle" | "unknown";
@@ -89,11 +93,13 @@ function determineState(status: AgentStatus | null): {
   agentState: AgentState;
   minutesAgo: number | null;
 } {
-  if (!status?.last_updated) {
+  // status.json uses "timestamp" field, fall back to "last_updated"
+  const rawTs = status?.timestamp ?? status?.last_updated;
+  if (!rawTs) {
     return { agentState: "unknown", minutesAgo: null };
   }
 
-  const ts = parseTimestamp(status.last_updated);
+  const ts = parseTimestamp(rawTs);
   if (!ts) {
     return { agentState: "unknown", minutesAgo: null };
   }
@@ -194,10 +200,8 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
     ? "animate-pulse border-2 border-red-400"
     : "border border-white/40";
 
-  const lastActivity =
-    agent.status?.last_updated != null
-      ? parseTimestamp(agent.status.last_updated)
-      : null;
+  const rawTs = agent.status?.timestamp ?? agent.status?.last_updated;
+  const lastActivity = rawTs != null ? parseTimestamp(rawTs) : null;
 
   const phaseText =
     agent.status?.phase ?? agent.status?.state ?? null;
