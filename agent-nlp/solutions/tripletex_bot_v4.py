@@ -26,13 +26,17 @@ import httpx
 _write_count: contextvars.ContextVar[int] = contextvars.ContextVar("write_count", default=0)
 _error_4xx_count: contextvars.ContextVar[int] = contextvars.ContextVar("error_4xx_count", default=0)
 _call_log: contextvars.ContextVar[list | None] = contextvars.ContextVar("call_log", default=None)
+_abort_writes: contextvars.ContextVar[bool] = contextvars.ContextVar("abort_writes", default=False)
+_dept_cache: contextvars.ContextVar[int | None] = contextvars.ContextVar("dept_cache", default=None)
 
 
 def _reset_tracker() -> None:
-    """Reset per-request write call counters."""
+    """Reset per-request write call counters, abort flag, and dept cache."""
     _write_count.set(0)
     _error_4xx_count.set(0)
     _call_log.set([])
+    _abort_writes.set(False)
+    _dept_cache.set(None)
 
 
 def _record_call(method: str, path: str, status_code: int) -> None:
@@ -217,15 +221,22 @@ def as_list(data) -> list:
     return data if isinstance(data, list) else [data]
 
 
+
 async def ensure_department(c: httpx.AsyncClient, base: str, tok: str) -> int | None:
-    """Find first existing department or create a default one. Returns dept ID or None."""
+    """Find first existing department or create a default one. Returns dept ID or None.
+    Cached per-request via contextvars to avoid duplicate creation."""
+    cached = _dept_cache.get(None)
+    if cached is not None:
+        return cached
     dept_r = await tx(c, base, tok, "GET", "/department", params={"count": 1})
     if dept_r.get("success") and dept_r.get("data"):
         depts = as_list(dept_r["data"])
         if depts:
+            _dept_cache.set(depts[0]["id"])
             return depts[0]["id"]
     dept_r = await tx(c, base, tok, "POST", "/department", {"name": "Avdeling", "departmentNumber": 1})
     if dept_r.get("success"):
+        _dept_cache.set(dept_r["data"]["id"])
         return dept_r["data"]["id"]
     return None
 
@@ -301,7 +312,13 @@ async def tx(
     body: dict | None = None,
     params: dict | None = None,
 ) -> dict[str, Any]:
-    """Execute a Tripletex API call. Returns parsed response."""
+    """Execute a Tripletex API call. Returns parsed response.
+    Aborts write calls after a 403 (expired token) to prevent cascading errors."""
+    # Early abort: if token is expired, don't waste more write calls
+    if _abort_writes.get(False) and method.upper() in ("POST", "PUT", "DELETE", "PATCH"):
+        log.warning("ABORT: skipping %s %s (token expired, preventing cascading 4xx)", method, path)
+        return {"error": {"message": "Aborted: proxy token expired"}, "status_code": 403, "success": False}
+
     url = f"{base_url}{path}"
     auth = httpx.BasicAuth(username="0", password=token)
 
@@ -335,6 +352,12 @@ async def tx(
         else:
             result["error"] = data
             log.warning("API %s %s -> %d: %s", method, path, response.status_code, str(data)[:300])
+            # Set abort flag ONLY on proxy token expiry (not BETA 403s)
+            if response.status_code == 403:
+                err_str = str(data).lower()
+                if "expired" in err_str or "invalid" in err_str or "nmiai-proxy" in err_str:
+                    _abort_writes.set(True)
+                    log.warning("ABORT: proxy token expired, blocking further writes")
 
         return result
 
