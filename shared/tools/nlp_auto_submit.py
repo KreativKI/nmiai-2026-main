@@ -37,10 +37,10 @@ except ImportError:
     print("ERROR: playwright required. Install: pip install playwright && playwright install chromium")
     raise SystemExit(1)
 
-# Competition limits (2026-03-21: platform enforces 180/day, docs said 300)
-DAILY_BUDGET = 180
-AUTO_LIMIT = 135    # 75% of 180
-PER_TASK_LIMIT = 10 # 10 per task type per day (verified team)
+# Competition limits (2026-03-21: platform enforces 300/day, 5 per task per tier)
+DAILY_BUDGET = 300
+AUTO_LIMIT = 225    # 75% of 300
+PER_TASK_LIMIT = 5  # 5 per task type per day per tier (verified team)
 DEFAULT_DELAY = 5
 
 # URLs

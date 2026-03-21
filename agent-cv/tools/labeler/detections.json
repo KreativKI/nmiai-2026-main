@@ -1,0 +1,224 @@
+{
+  "cat_017_shelf_v00.jpg": {
+    "cx": 0.5,
+    "cy": 0.4445,
+    "w": 0.484,
+    "h": 0.511,
+    "confidence": 0.9,
+    "model": "gemini"
+  },
+  "cat_017_shelf_v01.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_017_shelf_v02.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_017_shelf_v03.jpg": {
+    "cx": 0.489,
+    "cy": 0.4,
+    "w": 0.422,
+    "h": 0.61,
+    "confidence": 0.9,
+    "model": "gemini"
+  },
+  "cat_017_shelf_v04.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_051_shelf_v00.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_051_shelf_v01.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_051_shelf_v02.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_051_shelf_v03.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_051_shelf_v04.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_077_shelf_v00.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_077_shelf_v01.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_077_shelf_v02.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_077_shelf_v03.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_077_shelf_v04.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_114_shelf_v00.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_114_shelf_v01.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_114_shelf_v02.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_114_shelf_v03.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_114_shelf_v04.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_119_shelf_v00.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_119_shelf_v01.jpg": {
+    "cx": 0.5,
+    "cy": 0.385,
+    "w": 0.256,
+    "h": 0.186,
+    "confidence": 0.9,
+    "model": "gemini"
+  },
+  "cat_119_shelf_v02.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_119_shelf_v03.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  },
+  "cat_119_shelf_v04.jpg": {
+    "cx": 0.5,
+    "cy": 0.5,
+    "w": 0.5,
+    "h": 0.5,
+    "confidence": 0.0,
+    "model": "gemini",
+    "error": "'int' object has no attribute 'get'"
+  }
+}
