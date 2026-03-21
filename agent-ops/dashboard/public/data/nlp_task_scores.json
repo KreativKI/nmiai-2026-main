@@ -1,9 +1,9 @@
 {
-  "total_score": 31.2,
+  "total_score": 34.7,
   "tasks_solved": "18/30",
-  "rank": 100,
+  "rank": 76,
   "rank_of": 328,
-  "submissions_total": 210,
+  "submissions_total": 218,
   "daily_used": null,
   "daily_limit": null,
   "tasks": [
@@ -12,17 +12,88 @@
       "best_checks": 8,
       "total_checks": 8,
       "best_percentage": 100.0,
-      "attempts": 12
+      "attempts": 13
     },
     {
       "task_type": "task_7checks",
       "best_checks": 7,
       "total_checks": 7,
       "best_percentage": 100.0,
-      "attempts": 8
+      "attempts": 5
+    },
+    {
+      "task_type": "task_13checks",
+      "best_checks": 13,
+      "total_checks": 13,
+      "best_percentage": 100.0,
+      "attempts": 2
     }
   ],
   "recent_results": [
+    {
+      "checks_passed": 0,
+      "total_checks": 8,
+      "percentage": 0.0,
+      "task_header": "Task (0/8)",
+      "time": "02:27 AM",
+      "duration_s": 10.9
+    },
+    {
+      "checks_passed": 7,
+      "total_checks": 7,
+      "percentage": 100.0,
+      "task_header": "Task (7/7)",
+      "time": "02:26 AM",
+      "duration_s": 11.2
+    },
+    {
+      "checks_passed": 13,
+      "total_checks": 13,
+      "percentage": 100.0,
+      "task_header": "Task (13/13)",
+      "time": "02:26 AM",
+      "duration_s": 14.9
+    },
+    {
+      "checks_passed": 8,
+      "total_checks": 8,
+      "percentage": 100.0,
+      "task_header": "Task (8/8)",
+      "time": "02:26 AM",
+      "duration_s": 8.7
+    },
+    {
+      "checks_passed": 8,
+      "total_checks": 8,
+      "percentage": 100.0,
+      "task_header": "Task (8/8)",
+      "time": "02:21 AM",
+      "duration_s": 21.4
+    },
+    {
+      "checks_passed": 7,
+      "total_checks": 7,
+      "percentage": 100.0,
+      "task_header": "Task (7/7)",
+      "time": "02:21 AM",
+      "duration_s": 18.4
+    },
+    {
+      "checks_passed": 8,
+      "total_checks": 8,
+      "percentage": 100.0,
+      "task_header": "Task (8/8)",
+      "time": "02:21 AM",
+      "duration_s": 6.5
+    },
+    {
+      "checks_passed": 6,
+      "total_checks": 13,
+      "percentage": 46.0,
+      "task_header": "Task (6/13)",
+      "time": "02:20 AM",
+      "duration_s": 21.8
+    },
     {
       "checks_passed": 8,
       "total_checks": 8,
@@ -118,71 +189,7 @@
       "task_header": "Task (0/8)",
       "time": "02:01 AM",
       "duration_s": 17.4
-    },
-    {
-      "checks_passed": 4,
-      "total_checks": 8,
-      "percentage": 50.0,
-      "task_header": "Task (4/8)",
-      "time": "01:52 AM",
-      "duration_s": 28.7
-    },
-    {
-      "checks_passed": 5,
-      "total_checks": 7,
-      "percentage": 71.0,
-      "task_header": "Task (5/7)",
-      "time": "01:52 AM",
-      "duration_s": 15.5
-    },
-    {
-      "checks_passed": 1,
-      "total_checks": 8,
-      "percentage": 13.0,
-      "task_header": "Task (1/8)",
-      "time": "01:51 AM",
-      "duration_s": 10.4
-    },
-    {
-      "checks_passed": 6,
-      "total_checks": 7,
-      "percentage": 86.0,
-      "task_header": "Task (6/7)",
-      "time": "01:51 AM",
-      "duration_s": 17.2
-    },
-    {
-      "checks_passed": 8,
-      "total_checks": 8,
-      "percentage": 100.0,
-      "task_header": "Task (8/8)",
-      "time": "01:46 AM",
-      "duration_s": 11.8
-    },
-    {
-      "checks_passed": 7,
-      "total_checks": 7,
-      "percentage": 100.0,
-      "task_header": "Task (7/7)",
-      "time": "01:46 AM",
-      "duration_s": 8.9
-    },
-    {
-      "checks_passed": 7,
-      "total_checks": 7,
-      "percentage": 100.0,
-      "task_header": "Task (7/7)",
-      "time": "01:45 AM",
-      "duration_s": 17.1
-    },
-    {
-      "checks_passed": 0,
-      "total_checks": 7,
-      "percentage": 0.0,
-      "task_header": "Task (0/7)",
-      "time": "01:45 AM",
-      "duration_s": 13.2
     }
   ],
-  "last_fetched": "2026-03-21T01:19:16.120861+00:00"
+  "last_fetched": "2026-03-21T01:34:03.615373+00:00"
 }
