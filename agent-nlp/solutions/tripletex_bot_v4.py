@@ -993,7 +993,8 @@ async def exec_process_salary(c: httpx.AsyncClient, base: str, tok: str, f: dict
             details_body = {"employment": {"id": employment_id}, "date": start_date,
                             "employmentType": "ORDINARY", "percentageOfFullTimeEquivalent": 100.0}
             if salary_amount is not None:
-                details_body["annualSalary"] = float(salary_amount)
+                # Monthly salary -> annualSalary (multiply by 12)
+                details_body["annualSalary"] = float(salary_amount) * 12
             await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
 
     # Employment details were already created with salary in the block above (if employment was new).
