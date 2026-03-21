@@ -14,13 +14,14 @@ If the answer is unclear, choose the faster option.
 Norway is CET (UTC+1) until March 29. NOT UTC+2. When reporting times to JC: `OSLO = timezone(timedelta(hours=1))`
 
 ## Autonomous Execution Mode (ACTIVE)
-You have standing orders in `intelligence/for-nlp-agent/CONSOLIDATED-ORDERS.md`. Execute them phase by phase without asking JC for permission. Do NOT stop to ask "what should I do?" -- your phases are defined, execute them.
+Full autonomy for code, deploy, commit. Work continuously on improving efficiency and correctness.
 
 Rules:
-- Start Phase 1, finish it, commit, move to Phase 2, and so on
-- Report results to `intelligence/for-overseer/nlp-status.md` after each phase (3 lines: what you did, score delta, next phase)
-- Only STOP and ask if: a phase produces a score regression, or something is fundamentally broken (deploy fails, endpoint down)
-- Between phases: check your inbox for new orders, then continue
+- Code -> Boris review -> deploy -> commit -> repeat. No stopping to ask questions.
+- NEVER run the auto-submitter or spend submissions without JC's explicit approval.
+- NEVER ask "should I submit?" or "ready for submissions?" -- JC will initiate when ready.
+- When improvements are ready for testing, update plan.md with what changed and wait.
+- Only STOP if something is fundamentally broken (deploy fails, endpoint down).
 
 ## Scope Restrictions
 You only need to read files in:
@@ -127,16 +128,18 @@ No exceptions. Every iteration: **Plan -> Build -> Review -> Commit.**
 ---
 
 ## Boris Workflow (mandatory, every change)
+Each step is a SEPARATE agent with fresh context. Never use boris-workflow subagent.
 ```
-EXPLORE: What is the current bottleneck? (read MEMORY.md, check scores)
-PLAN:    What change addresses this? (2-3 sentences in MEMORY.md)
-CODE:    Implement the change
-REVIEW:  code-reviewer validates (bugs, security, logic)
-SIMPLIFY: code-simplifier cleans up
-VALIDATE: build-validator + run test suite, check score delta
-COMMIT:  If improved, commit with score delta in message
+EXPLORE: Read files, logs, scores. Identify the bottleneck.
+PLAN:    Write down: what change, why, expected impact.
+CODE:    Implement the change.
+REVIEW:  Launch feature-dev:code-reviewer agent (fresh session, independent review).
+SIMPLIFY: Launch pr-review-toolkit:code-simplifier agent (fresh session).
+VALIDATE: Launch build-validator agent (syntax, health, deps).
+COMMIT:  git commit with description of changes.
 ```
 No exceptions. "Quick fix" and "just try this" still follow the loop.
+The point: each review agent judges the code independently with fresh eyes.
 
 ---
 
@@ -216,6 +219,14 @@ F. **Corrections:** delete or reverse incorrect entries
 G. **Departments:** create departments, enable accounting modules
 
 ---
+
+## Current State (2026-03-21 15:00 CET)
+- **Bot:** tripletex_bot_v4.py (2486 lines, 27 executors, rev 72 deployed)
+- **Score:** 29.08 (rank #107), estimated higher after today's Tier 3 work
+- **Submissions today:** 209/300 used, 91 remaining
+- **Tier 3 executors:** analyze_ledger, year_end_closing, bank_reconciliation, overdue_invoice_reminder, ledger_error_correction
+- **Efficiency environment:** write tracking active, self_improve.py + efficiency_analyzer.py ready
+- **Key efficiency fixes:** 403 abort, dept cache, look-before-leap, email conflict detection
 
 ## Architecture
 
