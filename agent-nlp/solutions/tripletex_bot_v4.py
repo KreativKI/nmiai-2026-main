@@ -9,6 +9,7 @@ Architecture: POST /solve -> Gemini extracts {task_type, fields} -> Python API s
 
 import asyncio
 import base64
+import contextvars
 import json
 import logging
 import os
@@ -18,6 +19,31 @@ import traceback
 from typing import Any
 
 import httpx
+
+# ---------------------------------------------------------------------------
+# Write-call tracking (efficiency instrumentation)
+# ---------------------------------------------------------------------------
+_write_count: contextvars.ContextVar[int] = contextvars.ContextVar("write_count", default=0)
+_error_4xx_count: contextvars.ContextVar[int] = contextvars.ContextVar("error_4xx_count", default=0)
+_call_log: contextvars.ContextVar[list] = contextvars.ContextVar("call_log", default=[])
+
+
+def _reset_tracker() -> None:
+    """Reset per-request write call counters."""
+    _write_count.set(0)
+    _error_4xx_count.set(0)
+    _call_log.set([])
+
+
+def _record_call(method: str, path: str, status_code: int) -> None:
+    """Record an API call for efficiency tracking."""
+    if method.upper() in ("POST", "PUT", "DELETE", "PATCH"):
+        _write_count.set(_write_count.get(0) + 1)
+    if 400 <= status_code < 500:
+        _error_4xx_count.set(_error_4xx_count.get(0) + 1)
+    calls = _call_log.get([])
+    calls.append(f"{method} {path} -> {status_code}")
+    _call_log.set(calls)
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -292,6 +318,7 @@ async def tx(
             data = {"raw": response.text[:2000]}
 
         success = 200 <= response.status_code < 300
+        _record_call(method, path, response.status_code)
         result = {"status_code": response.status_code, "success": success}
 
         if success:
@@ -1479,6 +1506,7 @@ async def run_structured(
 ) -> dict[str, Any]:
     """Run the structured workflow: extract fields then execute deterministic API sequence."""
     t0 = time.time()
+    _reset_tracker()
 
     # Decode files for multimodal extraction
     file_parts = []
@@ -1514,13 +1542,20 @@ async def run_structured(
         try:
             result = await executor(client, base_url, session_token, fields)
             elapsed = time.time() - t0
-            log.info("Executor %s: success=%s, elapsed=%.1fs",
-                     task_type, result.get("success"), elapsed)
+            writes = _write_count.get(0)
+            errors = _error_4xx_count.get(0)
+            log.info("Executor %s: success=%s, elapsed=%.1fs, writes=%d, errors_4xx=%d",
+                     task_type, result.get("success"), elapsed, writes, errors)
+            if writes > 0 or errors > 0:
+                log.info("Efficiency detail [%s]: %s", task_type,
+                         " | ".join(_call_log.get([])))
             return {
                 "status": "completed",
                 "task_type": task_type,
                 "success": result.get("success", False),
                 "elapsed_seconds": elapsed,
+                "writes": writes,
+                "errors_4xx": errors,
             }
         except Exception as e:
             log.error("Executor %s crashed: %s\n%s", task_type, e, traceback.format_exc())
