@@ -468,6 +468,9 @@ class LabelHandler(http.server.BaseHTTPRequestHandler):
             return self._handle_post(path, body)
         except (KeyError, TypeError) as e:
             self.send_json({"error": f"Missing field: {e}"}, 400)
+        except Exception as e:
+            traceback.print_exc()
+            self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
 
     def _handle_post(self, path, body):
         if path == "/api/set-folder":

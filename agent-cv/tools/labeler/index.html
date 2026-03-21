@@ -465,19 +465,19 @@ function handlePointerUp(e){
         return;
     }
 
-    // Double-tap on empty area: smart detect at tap point
-    const isTap=dt<300&&dist<15&&dragType==='new'&&currentImage;
+    // Double-tap: smart detect at tap point (works anywhere on image)
+    const isTap=dt<300&&dist<15&&currentImage;
     if(!isTap)return;
 
     bbox={...bboxAtDragStart};
+    if(undoStack.length)undoStack.pop(); // pop this tap's pointerDown push (no real change)
     draw();
     const now=Date.now();
     const isDoubleTap=now-lastTapTime<300&&Math.abs(endX-lastTapX)<30&&Math.abs(endY-lastTapY)<30;
 
     if(isDoubleTap){
         lastTapTime=0;
-        // Remove the undo entry pushed by the first tap's pointerDown
-        if(undoStack.length>1)undoStack.pop();
+        if(undoStack.length)undoStack.pop(); // pop first tap's pointerDown push
         const p=getNorm(e.changedTouches?{clientX:endX,clientY:endY}:e);
         smartDetect(p.x,p.y);
     }else{
