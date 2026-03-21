@@ -1,50 +1,34 @@
-# ML Session Handoff -- 2026-03-21 11:50 CET
+# ML Session Handoff -- 2026-03-21 17:30 CET
 
-## Critical Context
-- Team: Kreativ KI, rank 171, weighted score 128.1
-- Best: R9 = 82.6 (weighted 128.1). Later rounds worth more.
-- To beat R9 weighted: need 64.7 on R14 or 61.6 on R15.
-- Competition ends Sunday 15:00 CET (~27h left).
+## Score: 169.6 weighted (R15=81.6). Rank 141. Top 1 is 196.6.
 
-## What Just Got Deployed (v3 upgrade)
-Three improvements running in parallel on GCP ml-churn VM:
+## What's Submitted
+- R16 active (closes 18:46 CET). V4 + 50 trees + alpha=20 + deep stack seed 1. Death regime.
 
-1. **Dual V2+V3 blend:** overnight_v3 generates BOTH V2 (global, won R9) and V3 (regime) predictions, blends them weighted by backtest. Currently V3=70%/V2=30% (default). After R14 scores, self-improvement will set data-driven weights. Local test shows V3=51%/V2=49% -- blend hedges V3 volatility.
+## What's Running
+- ml-churn: churn_v4 optimizing LightGBM hyperparams (found 50 trees > 200 trees)
+- ml-brain: idle (V5 comparison finished, failed)
+- overnight_v3: PAUSED (manual control)
 
-2. **Settlement stats:** /simulate returns population, food, wealth, defense per settlement. overnight_v3 saves these during observation. Used to cross-check regime detection. Stats accumulate over rounds.
+## Key Finding This Session
+- Brain V4 (LightGBM) = +6.2 points over V3 on R14 real data
+- 50 trees = +5.5 points over 200 trees on R15 real data
+- Deep stack all seeds 80+ (R15: 82.4, 80.1, 82.3, 80.9, 82.2)
+- V4-R (replay-trained) and V5 (stepper) both FAILED (-41, -43). Dead approaches.
+- Replay API discovered: FREE year-by-year data, 69/70 cached
 
-3. **Calibrated churn:** churn_v3 optimizes for estimated REAL score, not raw backtest. Death rounds penalized (backtest overshoots +20), growth rounds boosted (backtest undershoots -5).
+## Round Workflow Checklist (DO THIS EVERY ROUND)
+1. Cache previous round ground truth + replay
+2. Run hindsight on previous round
+3. Sync new data to GCP
+4. Check churn_v4 for better params
+5. Smell test new round (5 queries)
+6. Deep stack rotating seed (R17=seed 2)
+7. Test variants against most recent real data
+8. Submit winner
+9. Resubmit if churn finds better during window
 
-## R14 Status
-- Active, closes 12:59 CET
-- Growth regime, all 5 seeds observed (48/50 queries)
-- Submitted by overnight_v2 (before swap to v3). V3 regime model.
-- When R14 closes: overnight_v3 will cache ground truth, run self-improvement (which compares V2 vs V3 and sets blend weights), prepare for R15.
-
-## GCP (ml-churn VM, 35.187.42.205)
-- overnight_v3.py: PID 33715, --continuous --interval 300
-- churn_v3.py: PID 33755, continuous
-- Cron: every 15 min restarts crashed processes
-- Log files: ~/overnight_v3.log, ~/churn_v3.log
-
-## Files (new in v3)
-- overnight_v3.py: Dual-track + settlement stats + calibrated self-improvement
-- churn_v3.py: Calibration-aware parameter optimization
-- data/model_weights.json: V2/V3 blend weights (created after first self-improvement)
-- data/settlement_stats/: Per-round settlement health data
-
-## Calibration Data
-Backtest overshoots by +7 avg (std 14.6).
-Death: +20. Growth: -5. Stable: +7.
-RULE: Never trust backtest improvement without actual round confirmation.
-
-## What Worked (R9 = 82.6, our best raw score)
-- V2 NeighborhoodModel (global, NO regime forcing)
-- All 50 queries on seed 0 (deep stacking)
-- Dirichlet blending ps=12, T=1.12, collapse=0.016, sigma=0.3
-
-## Next Steps
-1. Monitor R14 score (closes 12:59 CET)
-2. Verify overnight_v3 self-improvement creates model_weights.json
-3. Check R15 submission uses blended V2+V3
-4. Watch churn_v3 for calibrated score improvements
+## Next: R17
+- Deep stack seed 2
+- Use churn_v4 best params (currently n_est=50, leaves=31, lr=0.05, alpha=20)
+- Test against R16 ground truth before submitting

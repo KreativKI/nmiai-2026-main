@@ -1,83 +1,134 @@
 # Astar Island -- Plan
 
-**Track:** ML | **Last updated:** 2026-03-21 15:15 UTC
-**Best weighted:** 134.2 (R14) | **Rank:** 162 | **Top 3:** 177 | **Deadline:** Sunday 15:00 CET
+**Track:** ML | **Last updated:** 2026-03-21 17:45 UTC
+**Best weighted:** 169.6 (R15) | **Rank:** 141 | **Top 1:** 196.6 | **Deadline:** Sunday 15:00 CET
 
-## GCP VMs
-| VM | Purpose | Status |
-|----|---------|--------|
-| ml-churn | Approach A: V4-R (replay-trained LightGBM) comparison running | Active |
-| ml-brain | Approach B: V5 (step-forward simulator) comparison | Setting up |
+---
 
-## Models Under Test
-| Model | Training Data | Description | Status |
-|-------|-------------|-------------|--------|
-| V4 | 14 rounds x 5 seeds, initial->final (95K cells) | LightGBM, 13 features | **Current best. +6.2 vs V3 on R14.** |
-| V4-R | 69 replays x 50 steps x ~700 cells (~2.4M transitions) | V4 + temporal features + settlement stats | Running comparison on ml-churn |
-| V5 | Same replay data, 5-year step transitions | Step-forward: runs model 10 times to simulate 50 years | Running comparison on ml-brain |
+## The Problem
 
-## Round-to-Round Workflow (MANDATORY every round)
+We have a 40x40 grid. We must predict what each cell looks like after 50 years of simulation. We get 50 observation queries per round. Later rounds have higher weights.
 
-### Phase 1: Round Opens (0-5 min)
-1. Detect new round via API
-2. Get initial states for all 5 seeds
-3. Smell test: 5 queries on deep-stack seed to detect regime
+## What We Have That We're Not Using
 
-### Phase 2: Observe (5-15 min)
-1. Deep stack: ALL remaining queries on ONE seed (rotate: R16=seed 1, R17=seed 2...)
-2. Capture settlement stats from every /simulate response
-3. Save observations to disk (obs_counts, obs_total)
+| Data Source | Volume | Currently Used? |
+|------------|--------|----------------|
+| 69 replay files (51 frames each, terrain + settlement stats) | ~3.5M cell-states | **NO** |
+| Settlement stats per cell per year (food, pop, wealth, defense) | ~175K settlement snapshots | **NO** |
+| Year-by-year terrain transitions (what happens at year 10, 25, 40) | 69 x 50 transitions | **NO** |
+| Faction/owner data per settlement | All replays | **NO** |
+| 15 rounds of ground truth (initial + final) | 102K cells | Yes (V4 trains on this) |
 
-### Phase 3: Test Variants (15-30 min)
-**This is the step we kept skipping. Non-negotiable.**
-1. Load most recent completed round's ground truth + real observations
-2. Generate predictions with EACH available model variant:
-   - V4 + Dirichlet obs (current)
-   - V4-R replay-trained (if ready)
-   - V5 stepper (if ready)
-3. Score each variant against the real ground truth
-4. Test Dirichlet alpha values (8, 12, 16, 20, 25, 30)
-5. Pick the winner based on SCORED DATA
+We're using 3% of our data. The top teams at 196 are almost certainly using more.
 
-### Phase 4: Submit (30-35 min)
-1. Generate predictions with winning variant + calibrated alpha
-2. Validate: floor >= 0.01, normalized, shape 40x40x6, all 5 seeds
-3. Submit all 5 seeds
+---
 
-### Phase 5: Resubmit Window (35 min - round close)
-1. If V4-R or V5 comparison finishes during this window, test against latest ground truth
-2. If new variant beats current submission, resubmit
-3. Do NOT resubmit without real-data testing
+## The Plan: Master Dataset + Pipeline
 
-### Phase 6: Round Closes
-1. Fetch and cache ground truth for all 5 seeds
-2. Download replay data for all 5 seeds (FREE, no query cost)
-3. Retrain all models with new data
-4. Run hindsight analysis: what did we get wrong?
-5. Update calibration offsets
-6. Log results to EXPERIMENTS.md
+### Step 1: Build the Master Dataset
+Create `build_dataset.py` that extracts EVERY feature from EVERY data source into one flat table. Each row = one cell from one seed from one round.
 
-## Query Strategy
-- Deep stack on ONE seed per round (rotate: R16=1, R17=2, R18=3, R19=4, R20=0)
-- Same tiling positions (9 viewports cover 40x40), repeated 5x for ~5 obs/cell
-- Each repeat gives independent simulation results (stochastic)
-- Settlement stats captured from every query response
+**Features per cell (30+):**
 
-## Discovery: Replay API
-`POST /astar-island/replay` returns 51 frames (year 0-50) with full terrain grid + settlement stats per frame. FREE, no query cost. Available for completed rounds only.
-- 69/70 replays cached in data/replays/
-- Gives 50x more training data than initial->final approach
-- Settlement stats per year reveal growth curves, conflict timing, resource depletion
+Spatial (from initial grid):
+- Terrain type (one-hot: 6)
+- 8-neighbor terrain counts (6)
+- Distance to nearest settlement (1)
+- Settlement count within radius 3 (1)
+- Forest count within radius 2 (1)
+- Ocean adjacency count (1)
+- Edge distance (1)
+- Is on coastline (1)
 
-## Score Targets (leaderboard = best score x weight)
-| Target | R16 (2.18) | R17 (2.29) | R18 (2.41) | R20 (2.65) |
+Settlement stats (from replay year 0):
+- Population (1)
+- Food (1)
+- Wealth (1)
+- Defense (1)
+- Has port (1)
+- Owner/faction ID (1)
+
+Temporal (from replay intermediate frames):
+- Alive at year 10? (1)
+- Alive at year 25? (1)
+- Settlement count at year 10 in neighborhood (1)
+- Settlement count at year 25 in neighborhood (1)
+- Food trend year 0->10 (1)
+
+Round-level:
+- Regime indicator (growth/death/stable) (3)
+- Total initial settlements on map (1)
+- Total initial ports (1)
+
+**Target:** 6-class probability distribution at year 50 (from ground truth)
+
+**Estimated size:** 15 rounds x 5 seeds x ~700 dynamic cells = ~52K rows x ~35 features
+
+### Step 2: Data Pipeline Script
+Create `data_pipeline.py` that runs after every round:
+
+```
+1. Fetch ground truth (GET /analysis)
+2. Fetch replay (POST /replay) for all 5 seeds
+3. Extract features into master dataset format
+4. Append to master_dataset.csv (or .npz)
+5. Upload to GCP (scp to ml-churn and ml-brain)
+6. Trigger model retrain on GCP
+```
+
+This script should be idempotent (safe to run multiple times).
+
+### Step 3: Retrain V4 on Master Dataset
+Update brain_v4 to use the full feature set (35 features instead of 13).
+Train on GCP where the dataset lives.
+
+### Step 4: Continuous Improvement on GCP
+churn_v4 uses the master dataset for hyperparameter search.
+Every time the pipeline adds data, churn picks it up automatically.
+
+---
+
+## GCP Allocation
+
+| VM | What | Status |
+|----|------|--------|
+| ml-churn | churn_v4 (hyperparam search) + retrain on master dataset | Active |
+| ml-brain | Available for parallel experiments or model comparison | Idle |
+
+## Round Workflow Checklist
+
+### After Round Closes
+- [ ] Get score from API
+- [ ] Run `data_pipeline.py` (caches GT, replay, extracts features, syncs to GCP)
+- [ ] Run hindsight (compare prediction vs reality)
+- [ ] Check churn_v4 for new best params
+- [ ] Log results
+
+### When Round Opens
+- [ ] Check churn_v4 params first
+- [ ] Smell test (5 queries on deep-stack seed)
+- [ ] Deep stack rotating seed (all remaining queries)
+- [ ] Test variants against most recent real data
+- [ ] Submit with winner
+- [ ] Monitor resubmit window
+
+### Deep Stack Rotation
+R17=seed 2, R18=seed 3, R19=seed 4, R20=seed 0, R21=seed 1
+
+---
+
+## Score Targets
+
+| Target | R17 (2.29) | R18 (2.41) | R19 (2.53) | R20 (2.65) |
 |--------|-----------|-----------|-----------|-----------|
-| Top 50 (166) | 76 | 73 | 69 | 63 |
-| Top 20 (173) | 79 | 76 | 72 | 65 |
-| Top 3 (177) | 81 | 77 | 73 | 67 |
+| Top 50 | 73 | 69 | 66 | 63 |
+| Top 20 | 76 | 72 | 68 | 65 |
+| Top 3 | 77 | 73 | 70 | 67 |
+| Top 1 (196.6) | 86 | 82 | 78 | 74 |
 
-## Next Steps
-1. Wait for V4-R and V5 comparison results from GCP
-2. R16 opens in ~20 min: deep stack seed 1, test all variants, submit winner
-3. After R15 scores: cache ground truth + replay, recalibrate
-4. Integrate winning model into overnight_v3 for autonomous night operation
+## Immediate Next Steps
+1. Build `build_dataset.py` with all features from replays
+2. Build `data_pipeline.py` for automatic round processing
+3. Update `brain_v4.py` to accept the full feature set
+4. Deploy to GCP, retrain, backtest
+5. Submit R17 with the improved model
