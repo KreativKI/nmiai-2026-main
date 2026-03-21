@@ -1,34 +1,33 @@
-# ML Session Handoff -- 2026-03-21 17:30 CET
+# ML Session Handoff -- 2026-03-21 19:50 CET
 
-## Score: 169.6 weighted (R15=81.6). Rank 141. Top 1 is 196.6.
+## Score: 169.6 weighted (R15=81.6). Rank 167. Top 1: 196.6.
 
-## What's Submitted
-- R16 active (closes 18:46 CET). V4 + 50 trees + alpha=20 + deep stack seed 1. Death regime.
+## What's Running (DON'T TOUCH, both autonomous)
+- ml-brain: overnight_v4 (V4 32-feat, handles rounds, caches data, rebuilds dataset)
+- ml-churn: churn_v4 (32-feat hyperparameter search)
+- Both have cron watchdogs. Both use reviewed + simplified code.
 
-## What's Running
-- ml-churn: churn_v4 optimizing LightGBM hyperparams (found 50 trees > 200 trees)
-- ml-brain: idle (V5 comparison finished, failed)
-- overnight_v3: PAUSED (manual control)
+## What Happened This Session
+- Built Brain V4 (LightGBM, 32 features from replay data). +6.2 over V3 on real data.
+- Discovered /replay API: FREE year-by-year simulation data. 80 replays cached.
+- Built master dataset (102K rows x 32 features).
+- R15: 81.6 (V4 + deep stack). R16: 57.0 (chaotic round, model struggled).
+- Audit scored operations 3/10. Fixed: deployed overnight_v4 + updated churn_v4.
+- Full Boris workflow on all 3 core files (review + simplify + validate).
 
-## Key Finding This Session
-- Brain V4 (LightGBM) = +6.2 points over V3 on R14 real data
-- 50 trees = +5.5 points over 200 trees on R15 real data
-- Deep stack all seeds 80+ (R15: 82.4, 80.1, 82.3, 80.9, 82.2)
-- V4-R (replay-trained) and V5 (stepper) both FAILED (-41, -43). Dead approaches.
-- Replay API discovered: FREE year-by-year data, 69/70 cached
+## NEXT SESSION PRIORITY: Deep Analysis
+The competition briefing identified hidden rules from 8 rounds.
+We have 16 rounds of replays now. These rules are UNVALIDATED.
 
-## Round Workflow Checklist (DO THIS EVERY ROUND)
-1. Cache previous round ground truth + replay
-2. Run hindsight on previous round
-3. Sync new data to GCP
-4. Check churn_v4 for better params
-5. Smell test new round (5 queries)
-6. Deep stack rotating seed (R17=seed 2)
-7. Test variants against most recent real data
-8. Submit winner
-9. Resubmit if churn finds better during window
+File: /Users/jcfrugaard/Downloads/OVERSEER-BRIEFING-ASTAR-DEEP-ANALYSIS.md
 
-## Next: R17
-- Deep stack seed 2
-- Use churn_v4 best params (currently n_est=50, leaves=31, lr=0.05, alpha=20)
-- Test against R16 ground truth before submitting
+Task: write deep_analysis.py, run on GCP, validate all hypotheses.
+Results feed into V4 hard constraints and feature engineering.
+See plan.md for the 8 hypotheses.
+
+## Key Learnings
+- R9 and R15 scored 80+ because dynamics were PREDICTABLE (clear growth)
+- R16 scored 57 because dynamics were CHAOTIC (ambiguous, mixed outcomes)
+- Score depends more on hidden parameters than model quality
+- Deep-stacked seed can score WORSE than model-only on chaotic rounds (R16)
+- 50 trees beats 200 trees (less overfitting with small training data)
