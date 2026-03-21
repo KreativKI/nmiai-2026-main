@@ -46,20 +46,6 @@ def get_settlement_at(settlements, x, y):
     return None
 
 
-def count_terrain_in_radius(grid, y, x, h, w, target_cls, radius):
-    """Count cells of target class within Manhattan radius."""
-    count = 0
-    for dy in range(-radius, radius + 1):
-        for dx in range(-radius, radius + 1):
-            if dy == 0 and dx == 0:
-                continue
-            ny, nx = y + dy, x + dx
-            if 0 <= ny < h and 0 <= nx < w:
-                if TERRAIN_TO_CLASS.get(int(grid[ny][nx]), 0) == target_cls:
-                    count += 1
-    return count
-
-
 def extract_cell_features(grid, y, x, h, w, replay_data=None, year=0):
     """Extract full feature vector for one cell.
 
@@ -94,11 +80,12 @@ def extract_cell_features(grid, y, x, h, w, replay_data=None, year=0):
                 if ncls == 4 and d <= 2:
                     forest_r2 += 1
 
-    # Ocean adjacency
+    # Ocean adjacency (terrain codes 10 and 11 are both ocean/empty)
+    OCEAN_RAW = {10, 11}
     ocean_adj = sum(
         1 for dy in (-1, 0, 1) for dx in (-1, 0, 1)
         if (dy, dx) != (0, 0) and 0 <= y+dy < h and 0 <= x+dx < w
-        and int(grid[y+dy][x+dx]) == 10
+        and int(grid[y+dy][x+dx]) in OCEAN_RAW
     )
 
     # Edge distance
@@ -106,7 +93,7 @@ def extract_cell_features(grid, y, x, h, w, replay_data=None, year=0):
 
     # Is on coastline (has both ocean and non-ocean neighbors)
     has_land = any(
-        0 <= y+dy < h and 0 <= x+dx < w and int(grid[y+dy][x+dx]) != 10
+        0 <= y+dy < h and 0 <= x+dx < w and int(grid[y+dy][x+dx]) not in OCEAN_RAW
         for dy in (-1, 0, 1) for dx in (-1, 0, 1) if (dy, dx) != (0, 0)
     )
     is_coastal = 1 if ocean_adj > 0 and has_land else 0
@@ -188,15 +175,22 @@ def extract_cell_features(grid, y, x, h, w, replay_data=None, year=0):
                 and TERRAIN_TO_CLASS.get(int(g25[y+dy][x+dx]), 0) in (1, 2)
             )
     else:
-        # No replay data: fill temporal features with defaults
-        features["terrain_y10"] = my_cls
-        features["is_settle_y10"] = 1 if my_cls in (1, 2) else 0
-        features["food_y10"] = food
-        features["pop_y10"] = pop
-        features["terrain_y25"] = my_cls
-        features["is_settle_y25"] = 1 if my_cls in (1, 2) else 0
-        features["n_settle_y10"] = n_counts[1] + n_counts[2]
-        features["n_settle_y25"] = n_counts[1] + n_counts[2]
+        pass  # Defaults applied below
+
+    # Ensure ALL temporal features exist (handles no replay AND partial replay)
+    temporal_defaults = {
+        "terrain_y10": my_cls,
+        "is_settle_y10": 1 if my_cls in (1, 2) else 0,
+        "food_y10": food,
+        "pop_y10": pop,
+        "terrain_y25": my_cls,
+        "is_settle_y25": 1 if my_cls in (1, 2) else 0,
+        "n_settle_y10": n_counts[1] + n_counts[2],
+        "n_settle_y25": n_counts[1] + n_counts[2],
+    }
+    for fname, default in temporal_defaults.items():
+        if fname not in features:
+            features[fname] = default
 
     return features
 
@@ -237,16 +231,15 @@ def build_master_dataset(rounds_data=None, replay_dir=REPLAY_DIR, exclude_round=
         regime, _ = classify_round(rd)
         h, w = rd["map_height"], rd["map_width"]
 
-        # Count global features
-        ig0 = rd["initial_states"][0]["grid"]
-        total_settle = sum(1 for y in range(h) for x in range(w)
-                          if TERRAIN_TO_CLASS.get(int(ig0[y][x]), 0) == 1)
-        total_ports = sum(1 for y in range(h) for x in range(w)
-                         if TERRAIN_TO_CLASS.get(int(ig0[y][x]), 0) == 2)
-
         for si_str, sd in rd["seeds"].items():
             si = int(si_str)
             ig = rd["initial_states"][si]["grid"]
+
+            # Count global features per seed (each seed has different initial grid)
+            total_settle = sum(1 for y in range(h) for x in range(w)
+                              if TERRAIN_TO_CLASS.get(int(ig[y][x]), 0) == 1)
+            total_ports = sum(1 for y in range(h) for x in range(w)
+                             if TERRAIN_TO_CLASS.get(int(ig[y][x]), 0) == 2)
             gt = np.array(sd["ground_truth"])
 
             # Load replay if available

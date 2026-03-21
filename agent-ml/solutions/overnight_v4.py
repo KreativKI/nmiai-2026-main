@@ -61,7 +61,7 @@ def log(msg):
         with open(LOG_FILE, "a") as f:
             f.write(line + "\n")
     except Exception:
-        print(line, flush=True)
+        print(line, file=sys.stderr, flush=True)
 
 
 # ── State ──
@@ -80,7 +80,8 @@ def load_lgb_params():
     """Load best LightGBM params from churn, or use defaults."""
     if PARAMS_FILE.exists():
         try:
-            p = json.load(open(PARAMS_FILE))
+            with open(PARAMS_FILE) as f:
+                p = json.load(f)
             return {k: p[k] for k in DEFAULT_PARAMS if k in p}
         except Exception:
             pass
@@ -153,7 +154,16 @@ def observe_round(session, round_id, detail, round_num, deep_seed):
     log(f"  Smell: {alive}/{checked} alive = {regime}")
 
     # Deep stack: all remaining queries on deep_seed
-    budget = session.get(f"{BASE}/astar-island/budget").json()
+    for _retry in range(3):
+        try:
+            resp = session.get(f"{BASE}/astar-island/budget")
+            resp.raise_for_status()
+            budget = resp.json()
+            break
+        except Exception as e:
+            log(f"  Budget check failed (attempt {_retry+1}): {e}")
+            time.sleep(2)
+            budget = {"queries_max": 50, "queries_used": 5}  # Conservative fallback
     rem = budget["queries_max"] - budget["queries_used"]
 
     # Pass 1: fill gaps
@@ -188,8 +198,10 @@ def observe_round(session, round_id, detail, round_num, deep_seed):
                         obs_total[ya, xa] += 1
                 rem -= 1
                 qthis += 1
-            except Exception:
-                break
+            except Exception as e:
+                log(f"  Deep stack query error: {e}")
+                time.sleep(1)
+                continue
         if qthis == 0:
             break
 
@@ -365,7 +377,8 @@ def post_round_pipeline(session, round_data, state):
 
                 # Update calibration file
                 if actual and CAL_FILE.exists():
-                    cal = json.load(open(CAL_FILE))
+                    with open(CAL_FILE) as f:
+                        cal = json.load(f)
                     # Find the backtest estimate if we recorded one
                     cal["rounds"] = [r for r in cal.get("rounds", []) if r["round"] != rn]
                     cal["rounds"].append({
@@ -390,7 +403,13 @@ def run_cycle(session, state):
         log("COMPETITION ENDED.")
         return False
 
-    rounds = session.get(f"{BASE}/astar-island/rounds").json()
+    try:
+        resp = session.get(f"{BASE}/astar-island/rounds")
+        resp.raise_for_status()
+        rounds = resp.json()
+    except Exception as e:
+        log(f"  API error fetching rounds: {e}")
+        return True  # Retry next cycle
 
     # Phase A: collect data from completed rounds
     completed = [r for r in rounds if r["status"] == "completed"]
@@ -415,7 +434,10 @@ def run_cycle(session, state):
 
     round_id = active["id"]
     round_num = active["round_number"]
-    closes = datetime.fromisoformat(active["closes_at"])
+    closes_str = active["closes_at"].replace("Z", "+00:00")
+    closes = datetime.fromisoformat(closes_str)
+    if closes.tzinfo is None:
+        closes = closes.replace(tzinfo=timezone.utc)
     remaining = (closes - now).total_seconds() / 60
 
     log(f"R{round_num} active, {remaining:.0f} min left, weight={active['round_weight']:.4f}")
