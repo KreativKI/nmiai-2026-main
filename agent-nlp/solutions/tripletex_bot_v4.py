@@ -1009,18 +1009,18 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
         net_amount = total_incl_vat
         vat_amount = 0.0
 
-    # Create supplier via /customer (not /supplier which is BETA/403)
-    sup_body = {"name": supplier_name, "isCustomer": False, "isSupplier": True}
+    # Create supplier via POST /supplier (NOT BETA, confirmed in Swagger docs)
+    sup_body = {"name": supplier_name}
     if org_number: sup_body["organizationNumber"] = str(org_number)
-    sup_r = await tx(c, base, tok, "POST", "/customer", sup_body)
+    sup_r = await tx(c, base, tok, "POST", "/supplier", sup_body)
     supplier_id = sup_r["data"]["id"] if sup_r.get("success") and sup_r.get("data") else None
 
     # Look up accounts
     expense_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": expense_account_number})
     expense_acct_id = as_list(expense_acct_r["data"])[0]["id"] if expense_acct_r.get("success") and expense_acct_r.get("data") else None
 
-    # Use bank account (1920) for credit side instead of 2400 (which requires supplier ref on posting)
-    credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
+    # Use account 2400 (leverandorgjeld) for credit with supplier reference
+    credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 2400})
     credit_acct_id = as_list(credit_acct_r["data"])[0]["id"] if credit_acct_r.get("success") and credit_acct_r.get("data") else None
 
     input_vat_map = await lookup_input_vat_map(c, base, tok)
@@ -1047,8 +1047,10 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
         "amountGross": -total_incl_vat,
         "amountGrossCurrency": -total_incl_vat,
         "currency": {"id": 1},
-        "description": f"Betaling {supplier_name}",
+        "description": f"Leverandorgjeld {supplier_name}",
     }
+    if supplier_id:
+        posting_credit["supplier"] = {"id": supplier_id}
     voucher_body = {"date": invoice_date, "description": description, "postings": [posting_debit, posting_credit]}
     return await tx(c, base, tok, "POST", "/ledger/voucher", voucher_body)
 
@@ -1231,9 +1233,9 @@ async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str,
 
 
 async def exec_create_supplier(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    """Register a supplier entity. Uses /customer with isSupplier=True (not /supplier which is BETA/403)."""
+    """Register a supplier entity via POST /supplier."""
     name = f.get("supplierName") or f.get("name", "")
-    body = {"name": name, "isCustomer": False, "isSupplier": True}
+    body = {"name": name}
     if f.get("orgNumber") or f.get("supplierOrgNumber"):
         body["organizationNumber"] = str(f.get("orgNumber") or f["supplierOrgNumber"])
     if f.get("email"): body["email"] = f["email"]
@@ -1244,6 +1246,12 @@ async def exec_create_supplier(c: httpx.AsyncClient, base: str, tok: str, f: dic
             "postalCode": f.get("postalCode", ""),
             "city": f.get("city", ""),
         }
+    r = await tx(c, base, tok, "POST", "/supplier", body)
+    if r.get("success"):
+        return r
+    # Fallback to /customer with isSupplier if /supplier fails
+    body["isCustomer"] = False
+    body["isSupplier"] = True
     return await tx(c, base, tok, "POST", "/customer", body)
 
 
