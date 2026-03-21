@@ -119,12 +119,6 @@ async function fetchJSON<T>(url: string): Promise<T | null> {
   }
 }
 
-function budgetBarColor(ratio: number): string {
-  if (ratio > 0.8) return "#ef4444";
-  if (ratio > 0.5) return "#f59e0b";
-  return "#22c55e";
-}
-
 // --- Component ---
 
 export function OverviewView() {
@@ -235,14 +229,6 @@ export function OverviewView() {
   const nlpRank = nlpTaskScores?.rank ?? null;
   const nlpTasksSolved = nlpTaskScores?.tasks_solved ?? null;
   const nlpTotalSubs = nlpTaskScores?.submissions_total ?? nlpSubs.length;
-  const nlpDailyUsed = nlpTaskScores?.daily_used ?? nlpSubs.filter((s) => {
-    const d = new Date(s.timestamp);
-    const now = new Date();
-    return d.getUTCFullYear() === now.getUTCFullYear() &&
-           d.getUTCMonth() === now.getUTCMonth() &&
-           d.getUTCDate() === now.getUTCDate();
-  }).length;
-  const nlpDailyLimit = nlpTaskScores?.daily_limit ?? 180;
 
   // ML weighted total from leaderboard (cumulative score across all rounds)
   const mlWeightedTotal = ourRow ? Number(ourRow["astar_island"] ?? 0) : 0;
@@ -334,23 +320,6 @@ export function OverviewView() {
             {nlpRank && <ScoreRow label="Rank" value={`#${nlpRank}`} />}
             {nlpTasksSolved && <ScoreRow label="Tasks" value={nlpTasksSolved} />}
             <ScoreRow label="Total subs" value={`${nlpTotalSubs}`} />
-            <div>
-              <div className="flex justify-between text-xs mb-0.5">
-                <span className="text-sky-600">Daily budget</span>
-                <span className="text-sky-800 font-semibold">
-                  {nlpDailyUsed} / {nlpDailyLimit}
-                </span>
-              </div>
-              <div className="w-full h-1.5 bg-sky-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${Math.min((nlpDailyUsed / Math.max(nlpDailyLimit, 1)) * 100, 100)}%`,
-                    backgroundColor: budgetBarColor(nlpDailyUsed / Math.max(nlpDailyLimit, 1)),
-                  }}
-                />
-              </div>
-            </div>
             <ScoreRow label="Weight" value="33.33%" />
           </div>
         </div>

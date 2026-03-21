@@ -95,6 +95,7 @@ export function NLPSubmissionFeed() {
   const latestWithBudget = [...submissions]
     .reverse()
     .find((s) => s.daily_used != null && s.daily_limit != null);
+  const hasBudgetData = latestWithBudget != null;
   const dailyUsed = latestWithBudget?.daily_used ?? 0;
   const dailyLimit = latestWithBudget?.daily_limit ?? 180;
   const budgetPct = dailyLimit > 0 ? (dailyUsed / dailyLimit) * 100 : 0;
@@ -161,24 +162,26 @@ export function NLPSubmissionFeed() {
             </div>
           </div>
 
-          {/* Daily budget bar */}
-          <div className="mb-4">
-            <div className="flex justify-between text-[10px] text-sky-500 mb-1">
-              <span>Daily budget</span>
-              <span>
-                {dailyUsed} / {dailyLimit} used
-              </span>
+          {/* Daily budget bar (only shown when budget data exists) */}
+          {hasBudgetData && (
+            <div className="mb-4">
+              <div className="flex justify-between text-[10px] text-sky-500 mb-1">
+                <span>Daily budget</span>
+                <span>
+                  {dailyUsed} / {dailyLimit} used
+                </span>
+              </div>
+              <div className="w-full h-2 bg-sky-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${Math.min(budgetPct, 100)}%`,
+                    backgroundColor: budgetBarColor(budgetPct),
+                  }}
+                />
+              </div>
             </div>
-            <div className="w-full h-2 bg-sky-100 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${Math.min(budgetPct, 100)}%`,
-                  backgroundColor: budgetBarColor(budgetPct),
-                }}
-              />
-            </div>
-          </div>
+          )}
 
           {/* Submission list */}
           <div className="max-h-[350px] overflow-y-auto space-y-1.5">
