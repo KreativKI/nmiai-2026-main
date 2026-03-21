@@ -184,3 +184,16 @@ Priority: Build Tier 3 executors with efficiency-first design from the start.
 - Zero 4xx errors
 - Parse CSV/PDF attachments via Gemini multimodal
 - Research Tripletex API endpoints for: bank reconciliation, ledger corrections, year-end
+
+### First Tier 3 Task Seen (2026-03-21 12:03 CET)
+**Prompt (French):** "Analyze ledger, find 3 expense accounts with biggest Jan->Feb increase, create internal project for each, create activity for each"
+**Result:** 0/10 -- Gemini extracted task_type=create_project with empty fields (no executor for this)
+**What it needs:**
+1. GET /ledger/posting (with date filters for Jan and Feb 2026)
+2. Aggregate by account, calculate increase
+3. Find top 3 accounts
+4. Create 3 projects (POST /project x3)
+5. Create 3 activities (POST /project/activity or similar x3)
+**New executor needed:** exec_analyze_and_create_projects
+**Estimated writes:** 6 (3 POST project + 3 POST activity)
+**Estimated GETs:** 2-3 (ledger postings for Jan + Feb, maybe account lookup)
