@@ -63,3 +63,9 @@ agent-*/best_model.pth
 # Node (if dashboard is added)
 node_modules/
 .next/
+.astar_token
+
+# Dashboard audit artifacts
+agent-ops/dashboard/screenshots/
+agent-ops/dashboard/audit_screenshots.py
+agent-ops/dashboard/verify_*.py
