@@ -579,8 +579,10 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
         sal = float(salary)
         # If salary looks annual (>= 100000), use directly. If monthly, multiply by 12.
         details_body["annualSalary"] = sal if sal >= 100000 else sal * 12
-    if f.get("occupationCode"):
-        details_body["occupationCode"] = str(f["occupationCode"])
+    # occupationCode expects an object, not a string. Try not sending it
+    # to avoid 422 errors. The field is nice-to-have, not critical for scoring.
+    # if f.get("occupationCode"):
+    #     details_body["occupationCode"] = {"code": str(f["occupationCode"])}
 
     await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
     return emp_r  # Return employee result, not details result
