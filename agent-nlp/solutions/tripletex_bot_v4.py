@@ -875,13 +875,20 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
                 diff_acct_id = as_list(diff_acct_r["data"])[0]["id"]
                 ar_acct_id = as_list(ar_acct_r["data"])[0]["id"]
                 abs_diff = abs(diff)
+                # Account 1500 (AR) requires customer reference
+                cust_id_for_voucher = cust_r.get("id")
+                ar_posting_extra = {}
+                if cust_id_for_voucher:
+                    ar_posting_extra = {"customer": {"id": cust_id_for_voucher}}
+
                 # Balanced voucher: debit/credit depends on gain or loss
                 if diff > 0:
                     # Agio: debit 1500 (AR), credit 8060 (gain)
                     postings = [
                         {"row": 1, "date": pay_date, "account": {"id": ar_acct_id},
                          "amountGross": abs_diff, "amountGrossCurrency": abs_diff,
-                         "currency": {"id": 1}, "description": "Valutagevinst (agio)"},
+                         "currency": {"id": 1}, "description": "Valutagevinst (agio)",
+                         **ar_posting_extra},
                         {"row": 2, "date": pay_date, "account": {"id": diff_acct_id},
                          "amountGross": -abs_diff, "amountGrossCurrency": -abs_diff,
                          "currency": {"id": 1}, "description": "Valutagevinst (agio)"},
@@ -894,7 +901,8 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
                          "currency": {"id": 1}, "description": "Valutatap (disagio)"},
                         {"row": 2, "date": pay_date, "account": {"id": ar_acct_id},
                          "amountGross": -abs_diff, "amountGrossCurrency": -abs_diff,
-                         "currency": {"id": 1}, "description": "Valutatap (disagio)"},
+                         "currency": {"id": 1}, "description": "Valutatap (disagio)",
+                         **ar_posting_extra},
                     ]
                 await tx(c, base, tok, "POST", "/ledger/voucher", {
                     "date": pay_date,
@@ -1622,7 +1630,7 @@ async def exec_analyze_ledger_create_projects(c: httpx.AsyncClient, base: str, t
         "accountNumberFrom": 4000,
         "accountNumberTo": 7999,
         "count": 10000,
-        "fields": "account(id;number;name),amount,date",
+        "fields": "account,amount,date",
     })
     if not postings_r.get("success") or not postings_r.get("data"):
         return {"success": False, "error": "Could not fetch ledger postings"}
@@ -1832,7 +1840,7 @@ async def exec_bank_reconciliation(c: httpx.AsyncClient, base: str, tok: str, f:
 
     reconciliation_date = f.get("date") or time.strftime("%Y-%m-%d")
 
-    # Step 1: Get all open customer invoices in one call
+    # Step 1: Get all open customer invoices with customer details
     inv_r = await tx(c, base, tok, "GET", "/invoice", params={
         "invoiceDateFrom": "2020-01-01",
         "invoiceDateTo": "2030-12-31",
@@ -1853,7 +1861,7 @@ async def exec_bank_reconciliation(c: httpx.AsyncClient, base: str, tok: str, f:
         if pts:
             pt_id = pts[0]["id"]
 
-    # Step 3: Pre-fetch account IDs for outgoing payments (avoid per-txn GETs)
+    # Step 3: Pre-fetch account IDs for outgoing payments
     bank_acct_id = None
     supp_acct_id = None
     has_outgoing = any(
@@ -1871,6 +1879,7 @@ async def exec_bank_reconciliation(c: httpx.AsyncClient, base: str, tok: str, f:
     # Step 4: Process each transaction
     last_result = {"success": False, "error": "No transactions processed"}
     matched_count = 0
+    used_invoices: set[int] = set()  # track which invoices already got a payment
 
     for txn in transactions:
         txn_amount = float(txn.get("amount", 0))
@@ -1880,28 +1889,47 @@ async def exec_bank_reconciliation(c: httpx.AsyncClient, base: str, tok: str, f:
         txn_type = (txn.get("type") or "").lower()
 
         if txn_amount > 0 or txn_type in ("incoming", "innbetaling", "credit"):
-            # Incoming payment: match to customer invoice
+            # Incoming payment: match to customer invoice by customer name + amount
             abs_amount = abs(txn_amount)
             best_match = None
-            best_diff = float("inf")
+            best_score = -1
 
             for inv in open_invoices:
+                inv_id = inv.get("id")
                 outstanding = float(inv.get("amountOutstanding") or inv.get("amount") or 0)
-                diff = abs(outstanding - abs_amount)
-                # Match by amount (exact or partial) or reference in description
-                inv_number = str(inv.get("invoiceNumber", ""))
-                ref_match = inv_number and (inv_number in txn_desc or inv_number in txn_ref)
-                if ref_match or diff < best_diff:
-                    if ref_match or diff <= outstanding * 0.01:  # within 1% tolerance
-                        best_match = inv
-                        best_diff = diff
-                        if ref_match:
-                            break  # exact reference match, stop looking
+                if outstanding <= 0:
+                    continue
 
-            if best_match:
+                # Score: higher = better match
+                score = 0
+                inv_number = str(inv.get("invoiceNumber", ""))
+                cust = inv.get("customer") or {}
+                cust_name = (cust.get("name") or "").lower()
+
+                # Match by customer name in transaction description
+                if cust_name and cust_name in txn_desc.lower():
+                    score += 100
+                # Match by invoice number reference
+                if inv_number and (inv_number in txn_desc or inv_number in txn_ref):
+                    score += 50
+                # Match by amount (closer = higher score)
+                amount_diff = abs(outstanding - abs_amount)
+                if amount_diff < 1.0:
+                    score += 25  # exact match
+                elif amount_diff <= outstanding * 0.5:
+                    score += 10  # partial payment range
+                # Penalize already-used invoices (prefer unused ones)
+                if inv_id in used_invoices:
+                    score -= 200
+
+                if score > best_score:
+                    best_score = score
+                    best_match = inv
+
+            if best_match and best_score > 0:
                 inv_id = best_match["id"]
                 outstanding = float(best_match.get("amountOutstanding") or best_match.get("amount") or 0)
-                pay_amount = min(abs_amount, outstanding)  # Handle partial payments
+                pay_amount = min(abs_amount, outstanding)
                 pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params={
                     "paymentDate": txn_date,
                     "paidAmount": str(pay_amount),
@@ -1911,24 +1939,40 @@ async def exec_bank_reconciliation(c: httpx.AsyncClient, base: str, tok: str, f:
                 if pay_r.get("success"):
                     matched_count += 1
                     last_result = pay_r
-                    # Update outstanding for subsequent matches
                     best_match["amountOutstanding"] = outstanding - pay_amount
+                    if outstanding - pay_amount <= 0:
+                        used_invoices.add(inv_id)
 
         elif txn_amount < 0 or txn_type in ("outgoing", "utbetaling", "debit"):
-            # Outgoing payment: post as supplier payment voucher
+            # Outgoing payment: create supplier + post voucher with supplier ref
             abs_amount = abs(txn_amount)
             if bank_acct_id and supp_acct_id:
+                # Extract supplier name from description (e.g., "Utbetaling til Acme AS / Faktura 123")
+                supp_name = txn_desc.split("/")[0].replace("Utbetaling til", "").replace("Betaling til", "").replace("Paiement à", "").replace("Zahlung an", "").strip()
+                if not supp_name:
+                    supp_name = txn_desc[:50] or "Leverandor"
+                # Create supplier (needed for account 2400 postings)
+                sup_r = await tx(c, base, tok, "POST", "/supplier", {"name": supp_name})
+                supplier_id = sup_r["data"]["id"] if sup_r.get("success") and sup_r.get("data") else None
+
+                posting_debit = {
+                    "row": 1, "date": txn_date, "account": {"id": supp_acct_id},
+                    "amountGross": abs_amount, "amountGrossCurrency": abs_amount,
+                    "currency": {"id": 1}, "description": f"Betaling {supp_name}",
+                }
+                posting_credit = {
+                    "row": 2, "date": txn_date, "account": {"id": bank_acct_id},
+                    "amountGross": -abs_amount, "amountGrossCurrency": -abs_amount,
+                    "currency": {"id": 1}, "description": f"Betaling {supp_name}",
+                }
+                if supplier_id:
+                    posting_debit["supplier"] = {"id": supplier_id}
+                    posting_credit["supplier"] = {"id": supplier_id}
+
                 voucher_r = await tx(c, base, tok, "POST", "/ledger/voucher", {
                     "date": txn_date,
-                    "description": f"Betaling: {txn_desc or txn_ref}",
-                    "postings": [
-                        {"row": 1, "date": txn_date, "account": {"id": supp_acct_id},
-                         "amountGross": abs_amount, "amountGrossCurrency": abs_amount,
-                         "currency": {"id": 1}, "description": f"Betaling {txn_desc}"},
-                        {"row": 2, "date": txn_date, "account": {"id": bank_acct_id},
-                         "amountGross": -abs_amount, "amountGrossCurrency": -abs_amount,
-                         "currency": {"id": 1}, "description": f"Betaling {txn_desc}"},
-                    ],
+                    "description": f"Betaling: {supp_name}",
+                    "postings": [posting_debit, posting_credit],
                 })
                 if voucher_r.get("success"):
                     matched_count += 1
