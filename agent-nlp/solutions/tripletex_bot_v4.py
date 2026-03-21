@@ -1091,7 +1091,8 @@ async def exec_create_dimension(c: httpx.AsyncClient, base: str, tok: str, f: di
 
         acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": int(post_account)})
         acct_id = as_list(acct_r["data"])[0]["id"] if acct_r.get("success") and acct_r.get("data") else None
-        credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 2400})
+        # Use account 1920 (bank) for credit, NOT 2400 (leverandorgjeld requires supplier)
+        credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
         credit_id = as_list(credit_acct_r["data"])[0]["id"] if credit_acct_r.get("success") and credit_acct_r.get("data") else None
 
         if acct_id and credit_id:
