@@ -551,6 +551,10 @@ async def exec_create_project(c: httpx.AsyncClient, base: str, tok: str, f: dict
             "dateOfBirth": "1990-01-15",
         }
         pm_r = await tx(c, base, tok, "POST", "/employee", pm_body)
+        if not pm_r.get("success") and "e-post" in str(pm_r.get("error", "")).lower():
+            # Email conflict - try with unique suffix
+            pm_body["email"] = f"{pm_first.lower()}.{int(time.time()) % 10000}@company.no"
+            pm_r = await tx(c, base, tok, "POST", "/employee", pm_body)
         if pm_r.get("success") and pm_r.get("data"):
             pm_id = pm_r["data"]["id"]
 
