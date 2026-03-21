@@ -1,538 +1,512 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full overflow-hidden">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JC | Shelf Labeler Pro</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@200;300;400&family=Space+Grotesk:wght@700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com/4.0.0-alpha.26"></script>
-    <style>
-        :root {
-            --bg-950: oklch(12% 0.01 260);
-            --bg-900: oklch(16% 0.02 260);
-            --bg-800: oklch(22% 0.02 260);
-            --accent-green: oklch(75% 0.18 145);
-            --accent-green-muted: oklch(75% 0.18 145 / 0.2);
-            --accent-red: oklch(65% 0.22 25);
-            --accent-blue: oklch(70% 0.15 250);
-            --text-main: oklch(98% 0.01 260);
-            --text-muted: oklch(65% 0.01 260);
-            --noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>CV Labeler</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Space+Grotesk:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0e14;--bg2:#131820;--bg3:#1c2430;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--amber:#f59e0b;--text:#e8ecf1;--muted:#6b7a8d;--border:rgba(255,255,255,0.08)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:none}
+h1,h2{font-family:'Space Grotesk',sans-serif}
 
-        body {
-            background-color: var(--bg-950);
-            background-image: var(--noise), linear-gradient(to bottom, var(--bg-950), var(--bg-900));
-            background-blend-mode: overlay;
-            color: var(--text-main);
-            font-family: 'JetBrains Mono', monospace;
-            font-weight: 200;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            width: 100vw;
-            user-select: none;
-        }
+.topbar{height:44px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 8px;gap:8px;flex-shrink:0}
+.stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+canvas{display:block;touch-action:none}
+.bottombar{background:var(--bg2);border-top:1px solid var(--border);display:flex;flex-wrap:wrap;align-items:center;padding:6px 8px;gap:6px;flex-shrink:0}
 
-        h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; font-weight: 800; }
+.btn{padding:8px 16px;border:none;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;cursor:pointer;text-transform:uppercase;min-height:44px;min-width:44px;display:flex;align-items:center;justify-content:center;gap:4px}
+.btn-green{background:var(--green);color:#000}
+.btn-red{background:var(--red);color:#fff}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-amber{background:var(--amber);color:#000}
+.btn-ghost{background:var(--bg3);color:var(--text)}
+.btn:active{filter:brightness(0.85)}
 
-        .top-bar { height: 56px; border-bottom: 1px solid oklch(100% 0 0 / 0.1); background: var(--bg-950); }
-        .bottom-bar { height: 48px; border-top: 1px solid oklch(100% 0 0 / 0.1); background: var(--bg-950); }
-        .canvas-container { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        
-        canvas { 
-            display: block; 
-            box-shadow: 0 0 40px oklch(0% 0 0 / 0.5); 
-            image-rendering: pixelated;
-            cursor: crosshair;
-            opacity: 1;
-            visibility: visible;
-            transform: none;
-        }
+.overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;padding:20px}
+.overlay.hidden{display:none}
+.folder-input{background:var(--bg3);border:2px solid var(--border);color:var(--text);padding:12px;font-family:'JetBrains Mono',monospace;font-size:14px;border-radius:6px;width:100%;max-width:500px}
+.folder-input:focus{outline:none;border-color:var(--green)}
 
-        .btn {
-            padding: 4px 16px;
-            font-size: 13px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            transition: all 150ms ease;
-            border-radius: 2px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
+.folder-list{list-style:none;width:100%;max-width:500px;margin-top:12px;max-height:40vh;overflow-y:auto}
+.folder-item{padding:10px 12px;background:var(--bg3);border-radius:4px;margin-bottom:4px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px;min-height:44px}
+.folder-item:active{background:#2a3444}
+.folder-item.has-images{border-left:3px solid var(--green)}
 
-        .btn-green { background: var(--accent-green); color: var(--bg-950); }
-        .btn-green:hover { filter: brightness(1.1); }
-        .btn-red { background: var(--accent-red); color: white; }
-        .btn-red:hover { filter: brightness(1.1); }
-        .btn-blue { background: var(--accent-blue); color: white; }
-        .btn-blue:hover { filter: brightness(1.1); }
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;width:100%;max-width:1200px}
+.gallery-card{cursor:pointer;background:var(--bg3);border-radius:4px;overflow:hidden;position:relative}
+.gallery-card:active{outline:2px solid var(--green)}
+.gallery-card img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
+.gallery-card .dot{position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%}
+.gallery-card .lbl{padding:2px 4px;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-        .toggle-switch {
-            width: 32px;
-            height: 16px;
-            background: var(--bg-800);
-            border-radius: 8px;
-            position: relative;
-            cursor: pointer;
-            transition: 150ms;
-        }
-        .toggle-switch.active { background: var(--accent-green); }
-        .toggle-knob {
-            width: 12px;
-            height: 12px;
-            background: white;
-            border-radius: 50%;
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            transition: 150ms transform;
-        }
-        .toggle-switch.active .toggle-knob { transform: translateX(16px); }
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--green);color:var(--text);padding:8px 16px;font-size:12px;border-radius:6px;pointer-events:none;opacity:0;transition:opacity 0.2s;z-index:200}
+#toast.show{opacity:1}
 
-        .pulsing-dot {
-            width: 6px;
-            height: 6px;
-            background: var(--accent-green);
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 6px;
-            animation: pulse 1.5s infinite;
-        }
+.tap-dot{position:absolute;width:20px;height:20px;border-radius:50%;background:var(--green);border:2px solid #fff;margin:-10px 0 0 -10px;pointer-events:none;z-index:10}
 
-        @keyframes pulse {
-            0% { transform: scale(0.9); opacity: 1; }
-            50% { transform: scale(1.2); opacity: 0.5; }
-            100% { transform: scale(0.9); opacity: 1; }
-        }
+.mode-indicator{background:var(--bg3);color:var(--amber);padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600;text-transform:uppercase}
 
-        #toast {
-            position: fixed;
-            bottom: 64px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--bg-800);
-            border: 1px solid var(--accent-green);
-            padding: 8px 16px;
-            font-size: 12px;
-            z-index: 100;
-            pointer-events: none;
-            opacity: 0;
-            visibility: hidden;
-            transition: 200ms opacity, 0s visibility 200ms;
-        }
-
-        #done-overlay {
-            position: fixed;
-            inset: 0;
-            background: var(--bg-950);
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-
-        :focus-visible { outline: 2px solid var(--accent-green); outline-offset: 2px; }
-    </style>
+@media(max-width:768px){
+    .topbar{height:40px;padding:0 6px;gap:4px}
+    .btn{padding:6px 10px;font-size:12px}
+    .hide-mobile{display:none}
+}
+</style>
 </head>
 <body>
 
-    <nav class="top-bar flex items-center px-4 justify-between" aria-label="Tool bar">
-        <div class="flex items-center gap-4">
-            <h1 id="product-name" class="text-2xl" style="color: var(--text-main)">---</h1>
-            <img id="ref-photo" src="" alt="Reference" class="w-12 h-12 object-cover rounded border border-white/20 hidden">
-        </div>
-
-        <div id="coords-display" class="text-[13px] tracking-tight" style="color: var(--accent-green)">
-            cx: 0.000  cy: 0.000  w: 0.000  h: 0.000
-        </div>
-
-        <div class="w-64">
-            <div id="progress-text" class="text-[11px] text-right text-muted mb-1 uppercase tracking-widest">0 labeled | 0 skipped | 0 remaining</div>
-            <div class="w-full h-1 rounded-full overflow-hidden" style="background: oklch(100% 0 0 / 0.1)">
-                <div id="progress-bar" class="h-full bg-[oklch(75%_0.18_145)]" style="width: 0%"></div>
-            </div>
-        </div>
-    </nav>
-
-    <main class="canvas-container" id="main-stage">
-        <canvas id="label-canvas" width="800" height="600"></canvas>
-    </main>
-
-    <footer class="bottom-bar flex items-center px-4 justify-between">
-        <div class="flex items-center gap-2">
-            <button onclick="saveLabel()" class="btn btn-green" aria-label="Save and next">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Save & Next
-            </button>
-            <button onclick="skipImage()" class="btn btn-red" aria-label="Skip image">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                Skip
-            </button>
-            <button onclick="resetBox()" class="btn btn-blue" aria-label="Reset box">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M2.5 2v6h6M2.5 8l3.5-3.5A9 9 0 1 1 2.5 15"></path></svg>
-                Reset
-            </button>
-        </div>
-
-        <div class="flex items-center gap-3 text-[12px] font-bold">
-            <span class="text-muted uppercase">YOLO Auto-Label</span>
-            <div id="auto-label-toggle" class="toggle-switch" onclick="toggleAutoLabel()" role="switch" aria-checked="false">
-                <div class="toggle-knob"></div>
-            </div>
-            <div id="pulse-indicator" class="hidden">
-                <div class="pulsing-dot"></div>
-                <span style="color: var(--accent-green)">QUEUE ACTIVE</span>
-            </div>
-        </div>
-
-        <div class="text-[11px] text-muted tracking-tighter uppercase flex gap-4">
-            <span>[Enter] Save</span>
-            <span>[S] Skip</span>
-            <span>[R] Reset</span>
-            <span>[+/-] Resize</span>
-        </div>
-    </footer>
-
-    <div id="toast" role="status">Auto-label queued</div>
-
-    <div id="done-overlay">
-        <h2 class="text-7xl mb-4" style="color: var(--text-main)">ALL DONE</h2>
-        <div id="final-stats" class="text-xl text-muted tracking-widest uppercase"></div>
+<!-- FOLDER PICKER -->
+<div id="folder-overlay" class="overlay">
+    <h2 style="font-size:24px;margin-bottom:16px">CV LABELER</h2>
+    <div style="display:flex;gap:6px;width:100%;max-width:500px">
+        <input type="text" id="folder-input" class="folder-input" placeholder="/path/to/images" autofocus>
+        <button onclick="browseFolder()" class="btn btn-blue">Browse</button>
     </div>
+    <p id="folder-error" style="color:var(--red);font-size:12px;margin-top:6px;display:none"></p>
+    <button onclick="setFolder()" class="btn btn-green" style="margin-top:12px;width:100%;max-width:500px">Open Folder</button>
+    <div id="folder-browser" style="width:100%;max-width:500px;margin-top:16px">
+        <div id="folder-browser-path" style="color:var(--muted);font-size:11px;margin-bottom:6px"></div>
+        <ul id="folder-browser-list" class="folder-list"></ul>
+    </div>
+    <div style="margin-top:16px;width:100%;max-width:500px">
+        <div style="color:var(--muted);font-size:11px;margin-bottom:6px;text-transform:uppercase">Recent</div>
+        <ul id="folder-history" class="folder-list"></ul>
+    </div>
+</div>
 
-    <script>
-        const canvas = document.getElementById('label-canvas');
-        const ctx = canvas.getContext('2d');
-        const stage = document.getElementById('main-stage');
+<!-- GALLERY -->
+<div id="gallery-overlay" class="overlay hidden" style="overflow-y:auto;align-items:stretch">
+    <div style="max-width:1200px;margin:0 auto;width:100%">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:10">
+            <h2 style="font-size:18px">All Images</h2>
+            <div style="display:flex;gap:6px;align-items:center">
+                <span id="gallery-stats" style="color:var(--muted);font-size:11px"></span>
+                <button onclick="closeGallery()" class="btn btn-ghost">Close</button>
+            </div>
+        </div>
+        <div id="gallery-grid" class="gallery-grid"></div>
+    </div>
+</div>
 
-        let currentImage = null;
-        let img = new Image();
-        let imgLoaded = false;
-        let autoLabelEnabled = false;
+<!-- DONE -->
+<div id="done-overlay" class="overlay hidden">
+    <h2 style="font-size:36px;margin-bottom:8px">BATCH COMPLETE</h2>
+    <p id="final-stats" style="color:var(--muted);font-size:14px;margin-bottom:20px"></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+        <button onclick="goHome()" class="btn btn-blue">Review</button>
+        <button onclick="confirmNextBatch()" class="btn btn-green" style="padding:10px 24px;font-size:15px">Next Batch &#10132;</button>
+        <button onclick="openNewFolder()" class="btn btn-ghost">Choose Folder</button>
+    </div>
+</div>
 
-        let bbox = { cx: 0.5, cy: 0.5, w: 0.5, h: 0.5 };
-        let suggestedBbox = { cx: 0.5, cy: 0.5, w: 0.5, h: 0.5 };
+<!-- CONFIRM POPUP -->
+<div id="confirm-overlay" class="overlay hidden" style="background:rgba(0,0,0,0.85)">
+    <div style="background:var(--bg2);border-radius:8px;padding:24px;max-width:400px;text-align:center">
+        <h2 style="font-size:20px;margin-bottom:12px" id="confirm-title">Next Batch?</h2>
+        <p style="color:var(--muted);margin-bottom:20px" id="confirm-message">This will send the current batch to the CV agent for training and load the next batch.</p>
+        <div style="display:flex;gap:8px;justify-content:center">
+            <button onclick="cancelConfirm()" class="btn btn-ghost" style="padding:10px 24px">Cancel</button>
+            <button onclick="executeNextBatch()" class="btn btn-green" style="padding:10px 24px">Yes, Next Batch</button>
+        </div>
+    </div>
+</div>
 
-        let dragging = false;
-        let dragType = null; // 'move', 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w', 'new'
-        let dragStart = { x: 0, y: 0 };
-        let bboxAtDragStart = null;
+<!-- MAIN UI -->
+<div class="topbar">
+    <button onclick="goHome()" class="btn btn-ghost" style="padding:4px 8px;min-width:36px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    </button>
+    <div style="min-width:0;flex:1">
+        <div id="product-name" style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">---</div>
+        <div id="filename-display" style="color:var(--muted);font-size:10px"></div>
+    </div>
+    <span id="image-counter" style="font-family:'Space Grotesk';font-weight:800;font-size:16px;flex-shrink:0">-/-</span>
+    <span id="mode-label" class="mode-indicator">TAP</span>
+    <div style="flex-shrink:0;text-align:right" class="hide-mobile">
+        <div id="progress-text" style="color:var(--muted);font-size:10px">0 labeled</div>
+        <div style="width:80px;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden"><div id="progress-bar" style="height:100%;background:var(--green);width:0%;transition:width 0.3s"></div></div>
+    </div>
+    <div id="timer-display" style="color:var(--amber);font-size:13px;font-weight:600;flex-shrink:0">00:00</div>
+</div>
 
-        const HANDLE_SIZE = 8;
-        const MIN_SIZE = 0.02;
-        const rootStyles = getComputedStyle(document.documentElement);
-        const COLOR_GREEN = rootStyles.getPropertyValue('--accent-green');
-        const COLOR_BLUE = rootStyles.getPropertyValue('--accent-blue');
+<div class="stage" id="stage">
+    <div onclick="prevImage()" style="position:absolute;left:0;top:50%;transform:translateY(-50%);z-index:10;width:48px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(0,0,0,0.4);border-radius:0 8px 8px 0;color:#fff;font-size:28px;user-select:none;-webkit-user-select:none" aria-label="Previous">&#9664;</div>
+    <canvas id="c"></canvas>
+    <div onclick="saveAndNext()" style="position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:10;width:48px;height:100px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(34,197,94,0.5);border-radius:8px 0 0 8px;color:#fff;font-size:28px;user-select:none;-webkit-user-select:none" aria-label="Save and next">&#9654;</div>
+    <div id="tap-dot-1" class="tap-dot" style="display:none"></div>
+</div>
 
-        async function fetchJSON(url, opts = {}) {
-            try {
-                const response = await fetch(url, {
-                    ...opts,
-                    headers: { 'Content-Type': 'application/json', ...opts.headers }
-                });
-                return await response.json();
-            } catch (e) {
-                console.error("Fetch error:", e);
-                return null;
-            }
-        }
+<div class="bottombar">
+    <button onclick="saveAndNext()" class="btn btn-green">Save &#10132;</button>
+    <button onclick="skipImage()" class="btn btn-red">Skip</button>
+    <button onclick="snapBox()" class="btn btn-amber">Snap</button>
+    <button onclick="undoAction()" class="btn btn-ghost">Undo</button>
+    <button onclick="toggleMode()" class="btn btn-ghost" id="mode-btn">Mode: Tap</button>
+    <span style="flex:1"></span>
+    <button onclick="prevImage()" class="btn btn-ghost" style="padding:4px 12px">&#9664;</button>
+    <button onclick="nextImageNav()" class="btn btn-ghost" style="padding:4px 12px">&#9654;</button>
+</div>
 
-        async function updateProgress() {
-            const status = await fetchJSON('/api/status');
-            if (!status) return;
-            document.getElementById('progress-text').innerText = 
-                `${status.labeled} labeled | ${status.skipped} skipped | ${status.remaining} remaining`;
-            const pct = status.total > 0 ? ((status.labeled + status.skipped) / status.total) * 100 : 0;
-            document.getElementById('progress-bar').style.width = pct + '%';
-            
-            if (status.remaining === 0 && status.total > 0) {
-                document.getElementById('done-overlay').style.display = 'flex';
-                document.getElementById('final-stats').innerText = 
-                    `${status.labeled} labels completed | ${status.skipped} skipped`;
-            }
-        }
+<div id="toast"></div>
 
-        async function loadNext() {
-            const data = await fetchJSON('/api/next');
-            if (!data) return;
-            if (data.done) {
-                updateProgress();
-                return;
-            }
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d'),stage=document.getElementById('stage');
+let currentImage=null,img=new Image(),imgLoaded=false,currentIndex=-1,totalImages=0;
+let bbox={cx:0.5,cy:0.5,w:0.5,h:0.5},initialBbox={cx:0.5,cy:0.5,w:0.5,h:0.5};
+let undoStack=[];
+const MIN_SIZE=0.02;
 
-            currentImage = data;
-            document.getElementById('product-name').innerText = data.product_name;
-            
-            const ref = document.getElementById('ref-photo');
-            if (data.reference_url) {
-                ref.src = data.reference_url;
-                ref.classList.remove('hidden');
-            } else {
-                ref.classList.add('hidden');
-            }
+// Modes: 'tap' (two-tap), 'drag' (click-drag)
+let mode='tap';
+let tapPoint1=null;
 
-            img = new Image();
-            img.onload = () => {
-                imgLoaded = true;
-                resizeCanvas();
-                
-                const src = data.suggested_bbox || { cx: 0.5, cy: 0.5, w: 0.5, h: 0.5 };
-                bbox = { ...src };
-                suggestedBbox = { ...src };
-                draw();
-            };
-            img.src = data.image_url;
-            updateProgress();
-        }
+// Drag state
+let dragging=false,dragType=null,dragStart={x:0,y:0},bboxAtDragStart=null;
 
-        async function saveLabel() {
-            if (!currentImage) return;
-            await fetchJSON('/api/label', {
-                method: 'POST',
-                body: JSON.stringify({
-                    filename: currentImage.filename,
-                    category_id: currentImage.category_id,
-                    bbox: bbox
-                })
-            });
+async function api(u,o){try{const r=await fetch(u,{headers:{'Content-Type':'application/json'},...o});return await r.json()}catch(e){return null}}
 
-            if (autoLabelEnabled) {
-                await fetchJSON('/api/auto-label', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        filename: currentImage.filename,
-                        category_id: currentImage.category_id,
-                        bbox: bbox
-                    })
-                });
-                showToast("Auto-label queued");
-            }
+// --- Init ---
+async function init(){
+    const c=await api('/api/config');
+    if(c&&c.has_folder){hideFolderPicker();loadNext()}
+    if(c){
+        if(c.folder)document.getElementById('folder-input').value=c.folder;
+        renderHistory(c.folder_history||[]);
+    }
+    loadBrowser('/Volumes/devdrive');
+}
 
+// --- Folder ---
+function hideFolderPicker(){document.getElementById('folder-overlay').classList.add('hidden')}
+function showFolderPicker(){document.getElementById('folder-error').style.display='none';document.getElementById('folder-overlay').classList.remove('hidden');document.getElementById('folder-input').focus()}
+async function setFolder(){
+    const f=document.getElementById('folder-input').value.trim();if(!f)return;
+    const r=await api('/api/set-folder',{method:'POST',body:JSON.stringify({folder:f})});
+    if(!r)return;if(r.error){document.getElementById('folder-error').innerText=r.error;document.getElementById('folder-error').style.display='block';return}
+    hideFolderPicker();showToast('Loaded '+r.total+' images');loadNext();
+}
+async function browseFolder(){showToast('Opening Finder...');const r=await api('/api/browse');if(r&&r.folder){document.getElementById('folder-input').value=r.folder;setFolder()}}
+function openNewFolder(){document.getElementById('done-overlay').classList.add('hidden');document.getElementById('folder-input').value='';showFolderPicker()}
+
+let pendingNextBatch=null;
+function confirmNextBatch(){
+    document.getElementById('confirm-overlay').classList.remove('hidden');
+}
+function cancelConfirm(){
+    document.getElementById('confirm-overlay').classList.add('hidden');
+}
+async function executeNextBatch(){
+    document.getElementById('confirm-overlay').classList.add('hidden');
+    showToast('Completing batch...');
+    const r=await api('/api/complete-batch',{method:'POST',body:'{}'});
+    if(!r||!r.ok){showToast('Error completing batch');return}
+    showToast(r.labeled+'/'+r.total+' labeled. Sent to CV agent.');
+    if(r.next_batch){
+        const lr=await api('/api/load-next-batch',{method:'POST',body:JSON.stringify({folder:r.next_batch})});
+        if(lr&&lr.ok){
+            document.getElementById('done-overlay').classList.add('hidden');
+            showToast('Next batch: '+lr.total+' images');
+            sessionSeconds=0;sessionStart=Date.now();
             loadNext();
+        }else{
+            document.getElementById('final-stats').innerText='Batch sent to CV agent. No more batches available.';
+            showToast('No more batches. Use Choose Folder to select one.');
         }
+    }else{
+        document.getElementById('final-stats').innerText='Batch sent to CV agent. No more batches available.';
+        showToast('All batches complete. Choose a new folder when ready.');
+    }
+}
 
-        async function skipImage() {
-            if (!currentImage) return;
-            await fetchJSON('/api/skip', {
-                method: 'POST',
-                body: JSON.stringify({ filename: currentImage.filename })
-            });
-            loadNext();
-        }
+async function loadBrowser(path){
+    const r=await api('/api/list-dir?path='+encodeURIComponent(path));if(!r)return;
+    document.getElementById('folder-browser-path').innerText=r.path;
+    const list=document.getElementById('folder-browser-list');list.innerHTML='';
+    if(r.parent!==r.path){
+        const li=document.createElement('li');li.className='folder-item';li.innerText='.. (up)';
+        li.onclick=()=>loadBrowser(r.parent);list.appendChild(li);
+    }
+    for(const e of r.entries){
+        const li=document.createElement('li');li.className='folder-item'+(e.has_images?' has-images':'');
+        li.innerHTML='<span style="flex:1;overflow:hidden;text-overflow:ellipsis">'+e.name+'</span>';
+        if(e.has_images){const b=document.createElement('button');b.className='btn btn-green';b.style.cssText='padding:4px 8px;font-size:10px;min-height:28px';b.innerText='Open';b.onclick=(ev)=>{ev.stopPropagation();document.getElementById('folder-input').value=e.path;setFolder()};li.appendChild(b)}
+        li.onclick=()=>loadBrowser(e.path);
+        list.appendChild(li);
+    }
+}
+function renderHistory(folders){
+    const ul=document.getElementById('folder-history');ul.innerHTML='';
+    for(const f of folders){
+        const li=document.createElement('li');li.className='folder-item';
+        li.innerHTML='<span style="flex:1;overflow:hidden;text-overflow:ellipsis">'+f+'</span>';
+        li.onclick=()=>{document.getElementById('folder-input').value=f;setFolder()};
+        ul.appendChild(li);
+    }
+}
 
-        function resizeCanvas() {
-            if (!imgLoaded) return;
-            const availableW = stage.clientWidth - 40;
-            const availableH = stage.clientHeight - 40;
-            const imgAR = img.width / img.height;
-            const containerAR = availableW / availableH;
+// --- Gallery ---
+async function goHome(){
+    document.getElementById('done-overlay').classList.add('hidden');
+    const list=await api('/api/list');if(!list||!list.length)return;
+    const grid=document.getElementById('gallery-grid');grid.innerHTML='';
+    const labeled=list.filter(x=>x.status==='labeled').length;
+    document.getElementById('gallery-stats').innerText=list.length+' total | '+labeled+' labeled';
+    for(const item of list){
+        const card=document.createElement('div');card.className='gallery-card';
+        card.onclick=()=>{closeGallery();goToIndex(item.index)};
+        const dot=item.status==='labeled'?'var(--green)':item.status==='skipped'?'var(--red)':'var(--muted)';
+        card.innerHTML='<img src="/images/'+encodeURIComponent(item.filename)+'" loading="lazy"><div class="dot" style="background:'+dot+'"></div><div class="lbl">'+(item.index+1)+'. '+item.product_name+'</div>';
+        grid.appendChild(card);
+    }
+    document.getElementById('gallery-overlay').classList.remove('hidden');
+}
+function closeGallery(){document.getElementById('gallery-overlay').classList.add('hidden')}
 
-            if (containerAR > imgAR) {
-                canvas.height = availableH;
-                canvas.width = availableH * imgAR;
-            } else {
-                canvas.width = availableW;
-                canvas.height = availableW / imgAR;
-            }
-            draw();
-        }
+// --- Navigation ---
+async function loadNext(){const d=await api('/api/next');if(!d)return;if(d.done){updateProgress();return}loadImageData(d)}
+async function goToIndex(i){const d=await api('/api/goto?index='+i);if(!d||d.error)return;loadImageData(d)}
+function loadImageData(data){
+    currentImage=data;currentIndex=data.index;
+    document.getElementById('product-name').innerText=data.product_name;
+    document.getElementById('filename-display').innerText=data.filename;
+    undoStack=[];tapPoint1=null;hideTapDot();
+    imgLoaded=false;img=new Image();
+    img.onload=()=>{
+        imgLoaded=true;
+        if(data.bbox&&data.bbox.w>=0.02&&data.bbox.h>=0.02){bbox={...data.bbox}}
+        else{bbox={cx:0.5,cy:0.5,w:0.5,h:0.5}}
+        initialBbox={...bbox};fitCanvas();draw();
+    };
+    img.onerror=()=>showToast('Image failed');
+    img.src=data.image_url;
+    updateProgress();startTimer();
+}
 
-        function draw() {
-            if (!imgLoaded) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+async function updateProgress(){
+    const s=await api('/api/status');if(!s)return;totalImages=s.total;
+    document.getElementById('image-counter').innerText=(currentIndex>=0?(currentIndex+1):'-')+'/'+s.total;
+    document.getElementById('progress-text').innerText=s.labeled+' labeled';
+    document.getElementById('progress-bar').style.width=(s.total>0?((s.labeled+s.skipped)/s.total*100):0)+'%';
+    if(s.remaining===0&&s.total>0){
+        const m=Math.floor(sessionSeconds/60),sec=sessionSeconds%60;
+        const avg=s.labeled>0?(sessionSeconds/s.labeled).toFixed(1):'-';
+        document.getElementById('final-stats').innerText=s.labeled+' labeled | '+m+'m'+sec+'s | '+avg+'s/img';
+        document.getElementById('done-overlay').classList.remove('hidden');
+    }
+}
 
-            const x1 = (bbox.cx - bbox.w / 2) * canvas.width;
-            const y1 = (bbox.cy - bbox.h / 2) * canvas.height;
-            const x2 = (bbox.cx + bbox.w / 2) * canvas.width;
-            const y2 = (bbox.cy + bbox.h / 2) * canvas.height;
-            const bw = x2 - x1;
-            const bh = y2 - y1;
+// --- Save/Skip ---
+async function saveLabel(){
+    if(!currentImage)return;
+    if(bbox.w<MIN_SIZE||bbox.h<MIN_SIZE){showToast('Box too small, not saved');return}
+    await api('/api/label',{method:'POST',body:JSON.stringify({filename:currentImage.filename,category_id:currentImage.category_id,bbox})});
+}
+async function saveAndNext(){await saveLabel();nextImage()}
+async function skipImage(){if(!currentImage)return;await api('/api/skip',{method:'POST',body:JSON.stringify({filename:currentImage.filename})});loadNext()}
+async function nextImage(){if(currentIndex>=0&&currentIndex<totalImages-1)goToIndex(currentIndex+1);else loadNext()}
+async function nextImageNav(){await saveLabel();nextImage()}
+async function prevImage(){if(currentIndex>0){await saveLabel();goToIndex(currentIndex-1)}}
 
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-            ctx.fillRect(0, 0, canvas.width, y1);
-            ctx.fillRect(0, y2, canvas.width, canvas.height - y2);
-            ctx.fillRect(0, y1, x1, y2 - y1);
-            ctx.fillRect(x2, y1, canvas.width - x2, y2 - y1);
+// --- Canvas ---
+function fitCanvas(){
+    if(!imgLoaded)return;
+    const w=stage.clientWidth,h=stage.clientHeight;
+    const ar=img.naturalWidth/img.naturalHeight;
+    if(w/h>ar){canvas.height=h;canvas.width=Math.round(h*ar)}
+    else{canvas.width=w;canvas.height=Math.round(w/ar)}
+}
+function draw(){
+    if(!imgLoaded)return;ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    if(bbox.w>=MIN_SIZE&&bbox.h>=MIN_SIZE){
+        const x1=(bbox.cx-bbox.w/2)*canvas.width,y1=(bbox.cy-bbox.h/2)*canvas.height;
+        const x2=(bbox.cx+bbox.w/2)*canvas.width,y2=(bbox.cy+bbox.h/2)*canvas.height;
+        ctx.fillStyle='rgba(0,0,0,0.35)';
+        ctx.fillRect(0,0,canvas.width,y1);ctx.fillRect(0,y2,canvas.width,canvas.height-y2);
+        ctx.fillRect(0,y1,x1,y2-y1);ctx.fillRect(x2,y1,canvas.width-x2,y2-y1);
+        ctx.strokeStyle='#22c55e';ctx.lineWidth=2;ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+        const hs=7;ctx.fillStyle='#22c55e';
+        ctx.fillRect(x1-hs,y1-hs,hs*2,hs*2);ctx.fillRect(x2-hs,y1-hs,hs*2,hs*2);
+        ctx.fillRect(x1-hs,y2-hs,hs*2,hs*2);ctx.fillRect(x2-hs,y2-hs,hs*2,hs*2);
+        ctx.fillStyle='#3b82f6';const mx=(x1+x2)/2,my=(y1+y2)/2;
+        ctx.fillRect(mx-hs,y1-hs,hs*2,hs*2);ctx.fillRect(mx-hs,y2-hs,hs*2,hs*2);
+        ctx.fillRect(x1-hs,my-hs,hs*2,hs*2);ctx.fillRect(x2-hs,my-hs,hs*2,hs*2);
+    }
+}
 
-            ctx.strokeStyle = COLOR_GREEN;
-            ctx.lineWidth = 2;
-            ctx.strokeRect(x1, y1, bw, bh);
+// --- Mode toggle ---
+function toggleMode(){
+    mode=mode==='tap'?'drag':'tap';
+    document.getElementById('mode-label').innerText=mode.toUpperCase();
+    document.getElementById('mode-btn').innerText='Mode: '+(mode==='tap'?'Tap':'Drag');
+    tapPoint1=null;hideTapDot();
+    showToast(mode==='tap'?'Two-tap mode: tap 2 corners':'Drag mode: click and drag');
+}
 
-            ctx.setLineDash([5, 5]);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(x1, bbox.cy * canvas.height);
-            ctx.lineTo(x2, bbox.cy * canvas.height);
-            ctx.moveTo(bbox.cx * canvas.width, y1);
-            ctx.lineTo(bbox.cx * canvas.width, y2);
-            ctx.stroke();
-            ctx.setLineDash([]);
+// --- Tap dot visual ---
+function showTapDot(x,y){
+    const dot=document.getElementById('tap-dot-1');
+    const r=canvas.getBoundingClientRect();
+    dot.style.left=(r.left+x)+'px';dot.style.top=(r.top+y)+'px';dot.style.display='block';
+}
+function hideTapDot(){document.getElementById('tap-dot-1').style.display='none'}
 
-            ctx.fillStyle = COLOR_GREEN;
-            ctx.fillRect(x1 - 4, y1 - 4, 8, 8); // nw
-            ctx.fillRect(x2 - 4, y1 - 4, 8, 8); // ne
-            ctx.fillRect(x1 - 4, y2 - 4, 8, 8); // sw
-            ctx.fillRect(x2 - 4, y2 - 4, 8, 8); // se
+// --- Pointer handling (works for both mouse and touch) ---
+function getNorm(e){
+    const r=canvas.getBoundingClientRect();
+    const clientX=e.touches?e.touches[0].clientX:e.clientX;
+    const clientY=e.touches?e.touches[0].clientY:e.clientY;
+    return{x:Math.max(0,Math.min(1,(clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(clientY-r.top)/r.height)),px:clientX-r.left,py:clientY-r.top};
+}
 
-            ctx.fillStyle = COLOR_BLUE;
-            ctx.fillRect(bbox.cx * canvas.width - 4, y1 - 4, 8, 8); // n
-            ctx.fillRect(bbox.cx * canvas.width - 4, y2 - 4, 8, 8); // s
-            ctx.fillRect(x1 - 4, bbox.cy * canvas.height - 4, 8, 8); // w
-            ctx.fillRect(x2 - 4, bbox.cy * canvas.height - 4, 8, 8); // e
+function getHandle(nx,ny){
+    const px=nx*canvas.width,py=ny*canvas.height;
+    const x1=(bbox.cx-bbox.w/2)*canvas.width,y1=(bbox.cy-bbox.h/2)*canvas.height;
+    const x2=(bbox.cx+bbox.w/2)*canvas.width,y2=(bbox.cy+bbox.h/2)*canvas.height;
+    const mx=(x1+x2)/2,my=(y1+y2)/2;
+    const d=(a,b,c,e)=>Math.sqrt((a-c)**2+(b-e)**2),t=20;
+    if(d(px,py,x1,y1)<t)return'nw';if(d(px,py,x2,y1)<t)return'ne';
+    if(d(px,py,x1,y2)<t)return'sw';if(d(px,py,x2,y2)<t)return'se';
+    if(d(px,py,mx,y1)<t)return'n';if(d(px,py,mx,y2)<t)return's';
+    if(d(px,py,x1,my)<t)return'w';if(d(px,py,x2,my)<t)return'e';
+    if(nx>bbox.cx-bbox.w/2&&nx<bbox.cx+bbox.w/2&&ny>bbox.cy-bbox.h/2&&ny<bbox.cy+bbox.h/2)return'move';
+    return'new';
+}
 
-            document.getElementById('coords-display').innerText =
-                `cx: ${bbox.cx.toFixed(3)}  cy: ${bbox.cy.toFixed(3)}  w: ${bbox.w.toFixed(3)}  h: ${bbox.h.toFixed(3)}`;
-        }
+// Track touch for swipe detection
+let touchStartX=0,touchStartY=0,touchStartTime=0,touchOnCanvas=false;
 
-        function getHandleAt(nx, ny) {
-            const px = nx * canvas.width;
-            const py = ny * canvas.height;
-            const x1 = (bbox.cx - bbox.w / 2) * canvas.width;
-            const y1 = (bbox.cy - bbox.h / 2) * canvas.height;
-            const x2 = (bbox.cx + bbox.w / 2) * canvas.width;
-            const y2 = (bbox.cy + bbox.h / 2) * canvas.height;
-            const mx = bbox.cx * canvas.width;
-            const my = bbox.cy * canvas.height;
+function handlePointerDown(e){
+    if(!imgLoaded)return;
+    e.preventDefault();
+    const p=getNorm(e);
+    const clientX=e.touches?e.touches[0].clientX:e.clientX;
+    const clientY=e.touches?e.touches[0].clientY:e.clientY;
+    touchStartX=clientX;touchStartY=clientY;touchStartTime=Date.now();touchOnCanvas=true;
 
-            const dist = (ax, ay, bx, by) => Math.sqrt((ax - bx)**2 + (ay - by)**2);
-            const threshold = 12;
+    // Always drag mode: tap-and-drag to draw, or grab handles/box to adjust
+    pushUndo();
+    dragging=true;
+    dragType=getHandle(p.x,p.y);
+    dragStart=p;bboxAtDragStart={...bbox};
+    if(dragType==='new')bbox={cx:p.x,cy:p.y,w:0.01,h:0.01};
+}
 
-            if (dist(px, py, x1, y1) < threshold) return 'nw';
-            if (dist(px, py, x2, y1) < threshold) return 'ne';
-            if (dist(px, py, x1, y2) < threshold) return 'sw';
-            if (dist(px, py, x2, y2) < threshold) return 'se';
-            if (dist(px, py, mx, y1) < threshold) return 'n';
-            if (dist(px, py, mx, y2) < threshold) return 's';
-            if (dist(px, py, x1, my) < threshold) return 'w';
-            if (dist(px, py, x2, my) < threshold) return 'e';
+function handlePointerMove(e){
+    if(!dragging||!imgLoaded)return;
+    e.preventDefault();
+    const p=getNorm(e);
+    const dx=p.x-dragStart.x,dy=p.y-dragStart.y;
+    const b=bboxAtDragStart;
+    if(dragType==='move'){
+        bbox.cx=Math.max(b.w/2,Math.min(1-b.w/2,b.cx+dx));
+        bbox.cy=Math.max(b.h/2,Math.min(1-b.h/2,b.cy+dy));
+    }else if(dragType==='new'){
+        const l=Math.min(dragStart.x,p.x),r2=Math.max(dragStart.x,p.x),t=Math.min(dragStart.y,p.y),bt=Math.max(dragStart.y,p.y);
+        bbox.w=Math.max(MIN_SIZE,r2-l);bbox.h=Math.max(MIN_SIZE,bt-t);bbox.cx=l+bbox.w/2;bbox.cy=t+bbox.h/2;
+    }else{
+        let x1=b.cx-b.w/2,x2=b.cx+b.w/2,y1=b.cy-b.h/2,y2=b.cy+b.h/2;
+        if(dragType.includes('n'))y1=Math.min(y2-MIN_SIZE,p.y);
+        if(dragType.includes('s'))y2=Math.max(y1+MIN_SIZE,p.y);
+        if(dragType.includes('w'))x1=Math.min(x2-MIN_SIZE,p.x);
+        if(dragType.includes('e'))x2=Math.max(x1+MIN_SIZE,p.x);
+        bbox.w=x2-x1;bbox.h=y2-y1;bbox.cx=x1+bbox.w/2;bbox.cy=y1+bbox.h/2;
+    }
+    draw();
+}
 
-            if (nx > bbox.cx - bbox.w/2 && nx < bbox.cx + bbox.w/2 &&
-                ny > bbox.cy - bbox.h/2 && ny < bbox.cy + bbox.h/2) return 'move';
+function handlePointerUp(e){
+    dragging=false;
+    if(!touchOnCanvas)return;
+    touchOnCanvas=false;
 
-            return 'new';
-        }
+    const endX=e.changedTouches?e.changedTouches[0].clientX:e.clientX;
+    const endY=e.changedTouches?e.changedTouches[0].clientY:e.clientY;
+    const dx=endX-touchStartX,dy=endY-touchStartY;
+    const dt=Date.now()-touchStartTime;
+    const dist=Math.sqrt(dx*dx+dy*dy);
 
-        canvas.addEventListener('mousedown', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const nx = (e.clientX - rect.left) / canvas.width;
-            const ny = (e.clientY - rect.top) / canvas.height;
+    // Swipe: fast horizontal movement
+    if(dt<400&&Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*2){
+        bbox={...bboxAtDragStart};
+        draw();
+        if(dx>0){saveAndNext()}else{prevImage()}
+        return;
+    }
 
-            dragging = true;
-            dragType = getHandleAt(nx, ny);
-            dragStart = { x: nx, y: ny };
-            bboxAtDragStart = { ...bbox };
+    // Magic tap: short tap with no drag = auto-detect at tap point
+    if(dt<300&&dist<15&&dragType==='new'&&currentImage){
+        const p=getNorm(e.changedTouches?{clientX:endX,clientY:endY}:e);
+        bbox={...bboxAtDragStart}; // restore before auto-detect
+        magicTap(p.x,p.y);
+    }
+}
 
-            if (dragType === 'new') {
-                bbox = { cx: nx, cy: ny, w: 0.01, h: 0.01 };
-            }
-        });
+async function magicTap(nx,ny){
+    if(!currentImage)return;
+    pushUndo();
+    // Create rough box centered on tap (40% of image)
+    const roughW=0.4,roughH=0.5;
+    bbox={
+        cx:Math.max(roughW/2,Math.min(1-roughW/2,nx)),
+        cy:Math.max(roughH/2,Math.min(1-roughH/2,ny)),
+        w:roughW,h:roughH
+    };
+    draw();
+    showToast('Detecting...');
+    const r=await api('/api/grabcut',{method:'POST',body:JSON.stringify({filename:currentImage.filename,bbox,mode:'all'})});
+    if(r&&r.ok&&r.bbox){bbox=r.bbox;draw();showToast('Detected')}
+    else{draw();showToast('Tap detected, adjust manually')}
+}
 
-        window.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const nx = Math.max(0, Math.min(1, (e.clientX - rect.left) / canvas.width));
-            const ny = Math.max(0, Math.min(1, (e.clientY - rect.top) / canvas.height));
+canvas.addEventListener('mousedown',handlePointerDown);
+window.addEventListener('mousemove',handlePointerMove);
+window.addEventListener('mouseup',handlePointerUp);
+canvas.addEventListener('touchstart',handlePointerDown,{passive:false});
+window.addEventListener('touchmove',handlePointerMove,{passive:false});
+window.addEventListener('touchend',handlePointerUp);
 
-            if (!dragging) {
-                const cursors = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize',
-                                  n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', move: 'grab' };
-                canvas.style.cursor = cursors[getHandleAt(nx, ny)] || 'crosshair';
-                return;
-            }
+// --- Snap ---
+async function snapBox(){
+    if(!imgLoaded||!currentImage||bbox.w<MIN_SIZE)return;
+    pushUndo();showToast('Snapping...');
+    const r=await api('/api/grabcut',{method:'POST',body:JSON.stringify({filename:currentImage.filename,bbox,mode:'all'})});
+    if(r&&r.ok&&r.bbox){bbox=r.bbox;draw();showToast('Snapped')}else showToast(r?.error||'Failed');
+}
 
-            const dx = nx - dragStart.x;
-            const dy = ny - dragStart.y;
+// --- Undo ---
+function pushUndo(){undoStack.push({...bbox})}
+function undoAction(){if(!undoStack.length)return;bbox=undoStack.pop();draw()}
 
-            if (dragType === 'move') {
-                bbox.cx = Math.max(bbox.w / 2, Math.min(1 - bbox.w / 2, bboxAtDragStart.cx + dx));
-                bbox.cy = Math.max(bbox.h / 2, Math.min(1 - bbox.h / 2, bboxAtDragStart.cy + dy));
-            } else if (dragType === 'new') {
-                const left = Math.min(dragStart.x, nx);
-                const right = Math.max(dragStart.x, nx);
-                const top = Math.min(dragStart.y, ny);
-                const bottom = Math.max(dragStart.y, ny);
-                bbox.w = Math.max(MIN_SIZE, right - left);
-                bbox.h = Math.max(MIN_SIZE, bottom - top);
-                bbox.cx = left + bbox.w / 2;
-                bbox.cy = top + bbox.h / 2;
-            } else {
-                let x1 = bboxAtDragStart.cx - bboxAtDragStart.w / 2;
-                let x2 = bboxAtDragStart.cx + bboxAtDragStart.w / 2;
-                let y1 = bboxAtDragStart.cy - bboxAtDragStart.h / 2;
-                let y2 = bboxAtDragStart.cy + bboxAtDragStart.h / 2;
+// --- Toast ---
+function showToast(m){const t=document.getElementById('toast');t.innerText=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1500)}
 
-                if (dragType.includes('n')) y1 = Math.min(y2 - MIN_SIZE, ny);
-                if (dragType.includes('s')) y2 = Math.max(y1 + MIN_SIZE, ny);
-                if (dragType.includes('w')) x1 = Math.min(x2 - MIN_SIZE, nx);
-                if (dragType.includes('e')) x2 = Math.max(x1 + MIN_SIZE, nx);
+// --- Timer ---
+let sessionStart=null,timerInterval=null,sessionSeconds=0;
+function startTimer(){if(timerInterval)return;sessionStart=Date.now();timerInterval=setInterval(()=>{sessionSeconds=Math.floor((Date.now()-sessionStart)/1000);const m=Math.floor(sessionSeconds/60),s=sessionSeconds%60;document.getElementById('timer-display').innerText=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')},1000)}
 
-                bbox.w = x2 - x1;
-                bbox.h = y2 - y1;
-                bbox.cx = x1 + bbox.w / 2;
-                bbox.cy = y1 + bbox.h / 2;
-            }
+// --- Keyboard (desktop) ---
+window.addEventListener('keydown',(e)=>{
+    if(document.activeElement?.id==='folder-input'){if(e.key==='Enter')setFolder();return}
+    if(e.key==='Escape'){closeGallery();return}
+    if(!document.getElementById('gallery-overlay').classList.contains('hidden'))return;
+    if((e.metaKey||e.ctrlKey)&&e.key==='z'){e.preventDefault();undoAction()}
+    else if(e.key==='Enter'){e.preventDefault();saveAndNext()}
+    else if(e.key==='ArrowRight'){e.preventDefault();nextImageNav()}
+    else if(e.key==='ArrowLeft'){e.preventDefault();prevImage()}
+    else if(e.key===' '){e.preventDefault();snapBox()}
+    else if(e.key.toLowerCase()==='s'&&!e.metaKey){e.preventDefault();skipImage()}
+    else if(e.key.toLowerCase()==='m'&&!e.metaKey){e.preventDefault();toggleMode()}
+});
 
-            draw();
-        });
+// Swipe is handled in handlePointerUp above
 
-        window.addEventListener('mouseup', () => {
-            dragging = false;
-        });
-
-        function resetBox() {
-            bbox = { ...suggestedBbox };
-            draw();
-        }
-
-        function resizeBoxBy(delta) {
-            bbox.w = Math.max(MIN_SIZE, Math.min(1, bbox.w + delta));
-            bbox.h = Math.max(MIN_SIZE, Math.min(1, bbox.h + delta));
-            bbox.cx = Math.max(bbox.w / 2, Math.min(1 - bbox.w / 2, bbox.cx));
-            bbox.cy = Math.max(bbox.h / 2, Math.min(1 - bbox.h / 2, bbox.cy));
-            draw();
-        }
-
-        function toggleAutoLabel() {
-            autoLabelEnabled = !autoLabelEnabled;
-            document.getElementById('auto-label-toggle').classList.toggle('active', autoLabelEnabled);
-            document.getElementById('auto-label-toggle').setAttribute('aria-checked', String(autoLabelEnabled));
-            document.getElementById('pulse-indicator').classList.toggle('hidden', !autoLabelEnabled);
-        }
-
-        function showToast(msg) {
-            const t = document.getElementById('toast');
-            t.innerText = msg;
-            t.style.opacity = '1';
-            t.style.visibility = 'visible';
-            t.style.transition = '200ms opacity';
-            setTimeout(() => { t.style.opacity = '0'; t.style.visibility = 'hidden'; t.style.transition = '200ms opacity, 0s visibility 200ms'; }, 2000);
-        }
-
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === 'ArrowRight') {
-                saveLabel();
-            } else if (e.key.toLowerCase() === 's') {
-                skipImage();
-            } else if (e.key.toLowerCase() === 'r') {
-                resetBox();
-            } else if (e.key === '+' || e.key === '=') {
-                resizeBoxBy(0.02);
-            } else if (e.key === '-' || e.key === '_') {
-                resizeBoxBy(-0.02);
-            }
-        });
-
-        window.addEventListener('resize', resizeCanvas);
-        loadNext();
-
-    </script>
+window.addEventListener('resize',()=>{fitCanvas();draw()});
+init();
+</script>
 </body>
 </html>
