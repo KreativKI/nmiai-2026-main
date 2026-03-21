@@ -671,8 +671,8 @@ async def exec_create_invoice_with_payment(c: httpx.AsyncClient, base: str, tok:
     if not inv_id:
         return inv_result
 
-    # Step 2: Register payment on the created invoice
-    amount = f.get("amount") or inv_result.get("data", {}).get("amount", 0)
+    # Step 2: Register payment on the created invoice (use invoice total, not LLM amount)
+    amount = float(inv_result.get("data", {}).get("amount") or f.get("amount", 0))
     # Get payment type
     pt_r = await tx(c, base, tok, "GET", "/invoice/paymentType")
     pt_id = 1
@@ -997,13 +997,15 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
     # Create supplier via /customer (not /supplier which is BETA/403)
     sup_body = {"name": supplier_name, "isCustomer": False, "isSupplier": True}
     if org_number: sup_body["organizationNumber"] = str(org_number)
-    await tx(c, base, tok, "POST", "/customer", sup_body)
+    sup_r = await tx(c, base, tok, "POST", "/customer", sup_body)
+    supplier_id = sup_r["data"]["id"] if sup_r.get("success") and sup_r.get("data") else None
 
     # Look up accounts
     expense_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": expense_account_number})
     expense_acct_id = as_list(expense_acct_r["data"])[0]["id"] if expense_acct_r.get("success") and expense_acct_r.get("data") else None
 
-    credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 2400})
+    # Use bank account (1920) for credit side instead of 2400 (which requires supplier ref on posting)
+    credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
     credit_acct_id = as_list(credit_acct_r["data"])[0]["id"] if credit_acct_r.get("success") and credit_acct_r.get("data") else None
 
     input_vat_map = await lookup_input_vat_map(c, base, tok)
@@ -1012,7 +1014,7 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
     if not expense_acct_id or not credit_acct_id:
         return {"success": False, "error": "Could not resolve ledger accounts"}
 
-    # Balanced voucher: expense debit + credit on 2400 (accounts payable)
+    # Balanced voucher: expense debit + credit on bank account
     posting_debit = {
         "row": 1, "date": invoice_date,
         "account": {"id": expense_acct_id},
@@ -1022,13 +1024,15 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
         "description": description,
         "vatType": {"id": input_vat_id},
     }
+    if supplier_id:
+        posting_debit["supplier"] = {"id": supplier_id}
     posting_credit = {
         "row": 2, "date": invoice_date,
         "account": {"id": credit_acct_id},
         "amountGross": -total_incl_vat,
         "amountGrossCurrency": -total_incl_vat,
         "currency": {"id": 1},
-        "description": f"Leverandorgjeld {supplier_name}",
+        "description": f"Betaling {supplier_name}",
     }
     voucher_body = {"date": invoice_date, "description": description, "postings": [posting_debit, posting_credit]}
     return await tx(c, base, tok, "POST", "/ledger/voucher", voucher_body)
