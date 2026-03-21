@@ -1,32 +1,26 @@
-# CV Session Handoff — 2026-03-21 02:45 CET
+# CV Session Handoff — 2026-03-21 05:40 CET
 
-## Leaderboard: 0.6475 (up from 0.5756, +0.072)
+## Leaderboard: 0.6475 | Best Val: 0.816
 
-## Validated ZIPs Ready for JC
-A. `submission_aggressive_v2_final.zip` -- YOLO11m, val 0.767, leaderboard 0.6475 (CONFIRMED)
-B. `submission_yolo11l.zip` -- YOLO11l, val 0.780 (best val so far), pipeline+canary PASS
+## 3 Validated ZIPs Ready (pipeline + canary PASS)
+1. `submission_maxdata.zip` -- YOLO11m, 854 images, val 0.816 (SUBMIT FIRST)
+2. `submission_yolo11l.zip` -- YOLO11l, 348 images, val 0.780
+3. `submission_aggressive_v2_final.zip` -- YOLO11m, 348 images, val 0.767, leaderboard 0.6475
 
-## GCP VMs Running
-| VM | Zone | Model | Epoch | Best Val mAP50 | ETA |
-|----|------|-------|-------|----------------|-----|
-| cv-train-1 | europe-west1-c | YOLO11m maxdata (854 imgs, 200ep) | 57/200 | 0.770 | ~06:00 |
-| cv-train-3 | europe-west1-b | YOLO11l | DONE | 0.780 | ZIP ready |
-| cv-train-4 | europe-west3-a | YOLO26m (348 imgs, 120ep) | 25/120 | 0.132 (slow) | ~04:00 |
+## GCP VMs (all training complete)
+- cv-train-1: europe-west1-c (maxdata DONE, Gemini gen may still be running)
+- cv-train-3: europe-west1-b (YOLO11l DONE)
+- cv-train-4: europe-west3-a (YOLO26m DONE, 0.485, skip)
 
-## Check Commands
-```bash
-# cv-train-1 (maxdata)
-gcloud compute ssh cv-train-1 --zone=europe-west1-c --project=ai-nm26osl-1779 --command="grep -oP '\d+/200' ~/train_maxdata.log | tail -1; sort -t, -k8 -rn ~/retrain/yolo11m_maxdata_200ep/results.csv | head -1"
+DELETE VMs when no longer needed to save credits.
 
-# cv-train-4 (yolo26)
-gcloud compute ssh cv-train-4 --zone=europe-west3-a --project=ai-nm26osl-1779 --command="grep -oP '\d+/120' ~/train_yolo26m.log | tail -1; tail -1 ~/retrain/yolo26m_aggressive/results.csv"
-```
+## What Worked
+- Proper 80/20 train/val split eliminated fake local scores
+- Aggressive augmentation (mosaic=1.0, mixup=0.3, copy_paste=0.3, scale=0.5)
+- More training data: 854 images (3.4x original) produced val 0.816 vs 0.767 with 348
 
-## When Models Finish
-For each model, run quick_submit.sh then canary agent.
-
-## Key Insight
-More data = less overfitting = higher leaderboard. Gap shrank from 0.38 to 0.12.
-
-## 6 Saturday Submission Slots (after 01:00 CET reset)
-Priority: YOLO11l (0.780 val) > maxdata when ready > YOLO26 if decent
+## Next Moves If Needed
+- Confidence threshold sweep (0.10, 0.12, 0.15, 0.20, 0.25) on best model
+- Even more synthetic data (Gemini with shelf backgrounds, not white)
+- Ensemble YOLO11m + YOLO11l (WBF or NMS merge)
+- Train on maxdata with YOLO11l backbone (bigger model + more data)
