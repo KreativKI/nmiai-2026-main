@@ -25,7 +25,7 @@ import httpx
 # ---------------------------------------------------------------------------
 _write_count: contextvars.ContextVar[int] = contextvars.ContextVar("write_count", default=0)
 _error_4xx_count: contextvars.ContextVar[int] = contextvars.ContextVar("error_4xx_count", default=0)
-_call_log: contextvars.ContextVar[list] = contextvars.ContextVar("call_log", default=[])
+_call_log: contextvars.ContextVar[list | None] = contextvars.ContextVar("call_log", default=None)
 
 
 def _reset_tracker() -> None:
@@ -41,7 +41,9 @@ def _record_call(method: str, path: str, status_code: int) -> None:
         _write_count.set(_write_count.get(0) + 1)
     if 400 <= status_code < 500:
         _error_4xx_count.set(_error_4xx_count.get(0) + 1)
-    calls = _call_log.get([])
+    calls = _call_log.get(None)
+    if calls is None:
+        calls = []
     calls.append(f"{method} {path} -> {status_code}")
     _call_log.set(calls)
 from dotenv import load_dotenv
@@ -147,9 +149,10 @@ _vat_cache: dict[str, dict[int, int]] = {}
 
 
 async def lookup_vat_map(c: httpx.AsyncClient, base: str, tok: str) -> dict[int, int]:
-    """Fetch OUTPUT vatType IDs from sandbox and build rate->id map. Cached per base_url."""
-    if base in _vat_cache:
-        return _vat_cache[base]
+    """Fetch OUTPUT vatType IDs from sandbox and build rate->id map. Cached per (base_url, token)."""
+    cache_key = f"{base}:{tok[:16]}"
+    if cache_key in _vat_cache:
+        return _vat_cache[cache_key]
 
     r = await tx(c, base, tok, "GET", "/ledger/vatType", params={"count": 200})
     vat_map = {}
@@ -172,7 +175,7 @@ async def lookup_vat_map(c: httpx.AsyncClient, base: str, tok: str) -> dict[int,
         vat_map = {25: 3, 15: 31, 12: 32, 0: 5}
         log.warning("VAT lookup returned empty, using hardcoded fallback")
 
-    _vat_cache[base] = vat_map
+    _vat_cache[cache_key] = vat_map
     log.info("VAT map for sandbox: %s", vat_map)
     return vat_map
 
@@ -181,9 +184,10 @@ _input_vat_cache: dict[str, dict[int, int]] = {}
 
 
 async def lookup_input_vat_map(c: httpx.AsyncClient, base: str, tok: str) -> dict[int, int]:
-    """Fetch INPUT (inngaende) vatType IDs for supplier invoices. Cached per base_url."""
-    if base in _input_vat_cache:
-        return _input_vat_cache[base]
+    """Fetch INPUT (inngaende) vatType IDs for supplier invoices. Cached per (base_url, token)."""
+    cache_key = f"{base}:{tok[:16]}"
+    if cache_key in _input_vat_cache:
+        return _input_vat_cache[cache_key]
     r = await tx(c, base, tok, "GET", "/ledger/vatType", params={"count": 200})
     vat_map: dict[int, int] = {}
     if r.get("success") and r.get("data"):
@@ -197,7 +201,7 @@ async def lookup_input_vat_map(c: httpx.AsyncClient, base: str, tok: str) -> dic
                     vat_map[pct_int] = vid
     if not vat_map:
         vat_map = {25: 1, 15: 33, 12: 34, 0: 6}
-    _input_vat_cache[base] = vat_map
+    _input_vat_cache[cache_key] = vat_map
     return vat_map
 
 
@@ -618,7 +622,7 @@ async def exec_create_project(c: httpx.AsyncClient, base: str, tok: str, f: dict
             "dateOfBirth": "1990-01-15",
         }
         pm_r = await tx(c, base, tok, "POST", "/employee", pm_body)
-        if not pm_r.get("success") and "e-post" in str(pm_r.get("error", "")).lower():
+        if not pm_r.get("success") and any(w in str(pm_r.get("error", "")).lower() for w in ("e-post", "email", "duplicate", "already")):
             # Email conflict: admin has this email. Use admin as PM and update name.
             pm_id = admin_id
             await tx(c, base, tok, "PUT", f"/employee/{admin_id}", {
@@ -870,11 +874,12 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
     # Step 3: Create travel expense with travelDetails (makes it reiseregning, not ansattutlegg)
     today = time.strftime("%Y-%m-%d")
     location = f.get("travelLocation", "")
-    per_diem_days = int(f.get("perDiemDays", 1))
+    per_diem_days_raw = f.get("perDiemDays")
+    per_diem_days_int = int(per_diem_days_raw) if per_diem_days_raw else 1
     # Set departure/return dates based on trip duration
     from datetime import datetime, timedelta
     dep_date = datetime.strptime(today, "%Y-%m-%d")
-    ret_date = dep_date + timedelta(days=max(per_diem_days - 1, 0))
+    ret_date = dep_date + timedelta(days=max(per_diem_days_int - 1, 0))
     te_body = {
         "employee": {"id": emp_id},
         "title": f.get("title", "Reiseregning"),
@@ -892,12 +897,11 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
     te_id = te_r["data"]["id"]
 
     # Step 4: Add per diem compensation if specified
-    per_diem_days = f.get("perDiemDays")
     per_diem_rate = f.get("perDiemRate")
-    if per_diem_days:
+    if per_diem_days_raw:
         pd_body = {
             "travelExpense": {"id": te_id},
-            "count": int(per_diem_days),
+            "count": per_diem_days_int,
             "location": f.get("travelLocation", "Norge"),
             "address": f.get("travelLocation", ""),
             "overnightAccommodation": "HOTEL",
@@ -947,7 +951,14 @@ async def exec_delete_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
         })
         if emp_r.get("success") and emp_r.get("data"):
             emps = as_list(emp_r["data"])
-            te_r = await tx(c, base, tok, "GET", "/travelExpense", params={"employeeId": emps[0]["id"]})
+            target_emp_id = None
+            for e in emps:
+                if e.get("firstName") == first and e.get("lastName") == last:
+                    target_emp_id = e["id"]
+                    break
+            if not target_emp_id:
+                target_emp_id = emps[0]["id"]
+            te_r = await tx(c, base, tok, "GET", "/travelExpense", params={"employeeId": target_emp_id})
             if te_r.get("success") and te_r.get("data"):
                 tes = as_list(te_r["data"])
                 return await tx(c, base, tok, "DELETE", f"/travelExpense/{tes[0]['id']}")
@@ -1125,12 +1136,8 @@ async def exec_process_salary(c: httpx.AsyncClient, base: str, tok: str, f: dict
                 details_body["annualSalary"] = float(salary_amount) * 12
             await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
 
-    # Employment details were already created with salary in the block above (if employment was new).
-    # Only create/update details if employment already existed (no details set yet).
-    salary_amount = f.get("salary") or f.get("baseSalary") or f.get("amount") or 0
-    bonus_amount = f.get("bonus") or f.get("bonusAmount") or 0
-
-    return {"success": True, "data": {"message": f"Employee + employment + salary details created"}}
+    overall_success = emp_id is not None and employment_id is not None
+    return {"success": overall_success, "data": {"employee_id": emp_id, "employment_id": employment_id}}
 
 
 async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
@@ -1367,7 +1374,7 @@ async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str,
             "dateOfBirth": "1990-01-15",
         }
         emp_r = await tx(c, base, tok, "POST", "/employee", emp_body)
-        if not emp_r.get("success") and "e-post" in str(emp_r.get("error", "")).lower():
+        if not emp_r.get("success") and any(w in str(emp_r.get("error", "")).lower() for w in ("e-post", "email", "duplicate", "already")):
             # Email conflict: admin has this email. Use admin and update name.
             pm_id = admin_id
             await tx(c, base, tok, "PUT", f"/employee/{admin_id}", {
