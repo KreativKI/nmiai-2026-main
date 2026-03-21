@@ -99,7 +99,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - dateOfBirth, startDate, endDate, address, postalCode, city
 - productName, productNumber, price, vatRate (25, 15, 12, or 0)
 - departmentName, departmentNumber
-- projectName, projectNumber
+- projectName, projectNumber, projectManagerName, projectManagerEmail
 - invoiceDate, dueDate, customerName, customerOrgNumber
 - items (array of {description, quantity, unitPrice, vatRate})
 - amount, paymentDate, reason
@@ -537,11 +537,35 @@ async def exec_create_department(c: httpx.AsyncClient, base: str, tok: str, f: d
 
 
 async def exec_create_project(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    # Get admin employee for projectManager
-    whoami = await tx(c, base, tok, "GET", "/token/session/>whoAmI")
-    pm_id = whoami.get("data", {}).get("employee", {}).get("id")
+    # Determine project manager: use specified PM if given, else admin from whoAmI
+    pm_name = f.get("projectManagerName") or ""
+    pm_email = f.get("projectManagerEmail") or ""
+    pm_id = None
+
+    if pm_name:
+        # Create the specified employee as PM
+        pm_parts = pm_name.strip().split()
+        pm_first = pm_parts[0] if pm_parts else "PM"
+        pm_last = " ".join(pm_parts[1:]) if len(pm_parts) > 1 else ""
+        dept_id = await ensure_department(c, base, tok)
+        pm_body = {
+            "firstName": pm_first,
+            "lastName": pm_last,
+            "department": {"id": dept_id or 1},
+            "userType": "STANDARD",
+            "email": pm_email or f"{pm_first.lower()}@company.no",
+            "dateOfBirth": "1990-01-15",
+        }
+        pm_r = await tx(c, base, tok, "POST", "/employee", pm_body)
+        if pm_r.get("success") and pm_r.get("data"):
+            pm_id = pm_r["data"]["id"]
+
     if not pm_id:
-        return {"success": False, "error": "Could not get project manager from whoAmI"}
+        # Fallback: use admin from whoAmI
+        whoami = await tx(c, base, tok, "GET", "/token/session/>whoAmI")
+        pm_id = whoami.get("data", {}).get("employee", {}).get("id")
+        if not pm_id:
+            return {"success": False, "error": "Could not get project manager"}
 
     body = {
         "name": f.get("projectName") or f.get("name", ""),
