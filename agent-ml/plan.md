@@ -1,14 +1,14 @@
-# Astar Island — Plan
+# Astar Island -- Plan
 
-**Track:** ML | **Last updated:** 2026-03-21 10:15 UTC
-**Best:** 82.6 (R9) | **Rank:** ~100/238 | **Deadline:** Sunday 15:00 CET (~28h left)
+**Track:** ML | **Last updated:** 2026-03-21 10:50 UTC
+**Best:** 82.6 (R9) | **Rank:** ~100/238 | **Deadline:** Sunday 15:00 CET (~27h left)
 
 ## Current State
-- R14 active, closes ~12:59 CET, growth regime, all 5 seeds observed
+- R14 active, closes ~12:59 CET, growth regime, all 5 seeds observed + submitted
 - 13 rounds of ground truth cached (R1-R13, 104K cells)
 - Brain V3 backtest: 72.86 (calibrated estimate: ~66)
-- Backtest overshoots reality by +7 on average (std 14.6)
-- GCP: overnight_v2 + churn_v2 running on ml-churn VM
+- **GCP upgraded to v3:** overnight_v3 + churn_v3 running on ml-churn VM
+- Three improvements deployed: dual V2+V3 blend, settlement stats, calibrated scoring
 
 ## Score History
 | Round | Score | Rank | Regime | Chef | Notes |
@@ -24,40 +24,66 @@
 | R11 | 69.0 | 92/171 | growth | v8 | V3 regime model |
 | R12 | 49.7 | 72/146 | growth | v8 | |
 | R13 | 63.3 | 141/186 | death | v8 | |
-| R14 | pending | - | growth | v9* | *Submitted V2 no-obs (mistake) |
+| R14 | pending | - | growth | v8 (overnight) | V3+obs, submitted by overnight_v2 |
+
+## V2 vs V3 Backtest (3-round LOO)
+| Round | Regime | V2 | V3 | Winner |
+|-------|--------|-----|-----|--------|
+| R7 | growth | 53.2 | 62.5 | V3 |
+| R8 | death | 62.2 | 83.9 | V3 |
+| R9 | death | 81.4 | 61.3 | V2 |
+| **Avg** | | **65.6** | **69.2** | **V3** |
+
+Blend weights: V3=51% V2=49%. Neither model dominates. Blending hedges volatility.
 
 ## Key Lessons
 A. R9 (best) used V2 global model + deep stack seed 0. Simple won.
-B. V3 regime model wins 10/13 rounds on average but destroyed R9 (-29).
-C. Backtest overshoots by +7. Never trust backtest without real confirmation.
-D. Deep stacking (40+ queries on 1 seed) > thin coverage (8 per seed).
-E. Observations are the #1 scoring lever, not model architecture.
+B. V3 regime model wins on average (+3.6) but destroyed R9 (-29).
+C. Backtest overshoots by +7. Death: +20. Growth: -5.
+D. Observations are the #1 scoring lever, not model architecture.
+E. Settlement stats (population, food, wealth, defense) available from /simulate but untapped.
 
 ---
 
-## Phase 1: Fix R14 NOW
-1. Resubmit R14 with V3+observations (overnight runner's version was better than V9 no-obs)
-2. Both V2 and V3 predictions use the same R14 observations
-3. Log calibrated estimate for R14
+## What's Running on GCP
 
-## Phase 2: Two-Track GCP Setup
-Run both approaches in parallel on GCP:
-- **Track A (ml-churn VM):** V3 regime model + churn optimization (already running)
-- **Track B (new process on ml-churn):** V2 global model + deep stack strategy
-After each round: compare both predictions against ground truth, submit the winner next round.
+### overnight_v3.py (PID 33715)
+- Dual-track: generates BOTH V2 and V3 predictions, blends by model_weights.json
+- Settlement stats: captures population/food/wealth/defense from /simulate
+- Self-improvement: compares V2 vs V3 after each round, updates blend weights
+- Calibrated scoring: regime-specific offsets in V2/V3 comparison
 
-## Phase 3: Calibration Loop
-After R14 scores:
-1. Compare R14 actual vs our calibrated estimate
-2. Update calibration factor
-3. Adjust churn to optimize for calibrated score, not raw backtest
+### churn_v3.py (PID 33755)
+- Calibration-aware: optimizes for estimated real score (backtest - regime offset)
+- Growth rounds weighted favorably (backtest undershoots by 5)
+- Updates model_weights.json every 5 batches
+- 1400+ experiments already run by v2, v3 continues from best params
 
-## Phase 4: Overnight Strategy (Saturday night -> Sunday)
-- Both tracks run autonomously
-- Each round: submit whichever model has better calibrated estimate
-- Self-improvement continues between rounds
+### Cron (every 15 min)
+- Restarts overnight_v3 if crashed
+- Restarts churn_v3 if crashed
+
+---
+
+## Phase 1: DONE -- V3 Deployment
+All three improvements deployed to GCP:
+1. Dual V2+V3 blend (weighted prediction submission)
+2. Settlement stats collection (regime detection enhancement)
+3. Calibrated churn (regime-weighted optimization)
+
+## Phase 2: Monitor R14 Score
+After R14 closes (~12:59 CET):
+1. overnight_v3 caches R14 ground truth
+2. Self-improvement runs: retrains brain, compares V2 vs V3, sets blend weights
+3. model_weights.json created with data-driven blend ratios
+4. R15 starts with blended predictions
+
+## Phase 3: Overnight Strategy (Saturday night -> Sunday)
+- Both models run in blend mode
+- Self-improvement updates weights after each round
+- Settlement stats accumulate and improve regime detection
 - Feature freeze Sunday 09:00 CET
 
-## Phase 5: Final Submission (Sunday 15:00 CET)
-- Submit with best calibrated model
+## Phase 4: Final Submission (Sunday 15:00 CET)
+- Submit with best calibrated blend
 - Repo public at 14:45
