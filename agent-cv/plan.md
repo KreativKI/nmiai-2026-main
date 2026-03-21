@@ -1,7 +1,7 @@
 # NorgesGruppen Object Detection — Plan
 
 **Track:** CV | **Task:** Grocery Shelf Detection | **Weight:** 33.33%
-**Last updated:** 2026-03-21 07:30 CET
+**Last updated:** 2026-03-21 08:30 CET
 
 ## Current State
 - **Leaderboard:** 0.6584 (YOLO11m maxdata, 854 images)
@@ -57,30 +57,52 @@ Multi-reference produces much more accurate product appearance than text-only pr
 - 18 "barely known" (2 imgs): 8 variations each = 144 images
 - 62 "somewhat known" (3-9 imgs): 5 variations each = 310 images
 
-### Phase 2: Retrain on Real + Realistic Synthetic (~4h, 1 VM with GPU)
+### Phase 2: Label the Generated Images
+Two paths depending on whether Butler's labeling tool + JC's time works out:
+
+**Path A: Human-in-the-loop (preferred)**
+- Butler is building a web labeling GUI (assignment sent)
+- JC draws one bounding box per image (category pre-filled from filename)
+- Output: human-quality YOLO labels
+- Time: ~3-4h for ~2000 images (5-10 sec per image with pre-suggested boxes)
+- This gives the BEST labels but depends on JC having time
+
+**Path B: Auto-labeling (backup if JC can't label all images)**
+- Run our existing trained YOLO model on each generated image
+- It detects products and creates pseudo-labels automatically
+- Filter: only keep detections where confidence > 0.5 AND the detected category matches the product we generated
+- This is circular (training on own predictions) but the new SHELF CONTEXT is still novel
+- Quality: ~70% as good as human labels, but zero JC time needed
+
+**Path C: Hybrid (most likely)**
+- JC labels the 54 "seen once" products (540 images, ~1.5h)
+- Auto-label the remaining 1610 images with Path B
+- Best products get human labels, rest get good-enough auto-labels
+
+### Phase 3: Retrain on Real + Labeled Synthetic (~4h, 1 VM with GPU)
 Combine:
-- 208 real images (train split)
-- ~994 Gemini realistic shelf images (Phase 1, HIGH QUALITY)
-- Optionally keep existing copy-paste + Gemini white-bg as secondary data
-- Total: ~1200-1700 images, with the new 994 being realistic shelf scenes
+- 208 real images (train split) with original annotations
+- ~2150 Gemini shelf images with labels (human or auto)
+- Total: ~2350 images
 
 Train YOLO11m with aggressive augmentation, 200 epochs.
 Use the SAME proper train/val split (40 real images held out).
 
 **Timeline:**
-- Generation done: ~12:00-13:00 CET Saturday
-- Retrain done: ~17:00 CET Saturday
-- Evaluate + submit: Saturday evening
-- Iterate if needed: Sunday morning (6 fresh slots)
+- Generation done: ~18:00 CET Saturday (2 VMs, ~10h)
+- Labeling: Saturday evening (JC labels priority products, auto-label the rest)
+- Retrain: Saturday night (~4h)
+- Evaluate + submit: Sunday morning
+- Iterate if needed: Sunday (6 fresh slots)
 - Deadline: Sunday 15:00 CET
 
-### Phase 3: Evaluate + Submit
+### Phase 4: Evaluate + Submit
 - Run honest eval on val set
 - Apply calibration ratio (~0.80-0.85) to predict leaderboard score
 - Run cv_pipeline.sh + canary
 - Submit
 
-### Phase 4: Iterate Based on Result
+### Phase 5: Iterate Based on Result
 - If improved: generate more variations, target next weakness
 - If not: try confidence threshold sweep, ensemble YOLO11m + YOLO11l
 
@@ -97,12 +119,16 @@ Use the SAME proper train/val split (40 real images held out).
 | Barely known (2) | 18 | 2 each | Generate 10 shelf variations each |
 | Seen once | 54 | 1 each | Generate 10 shelf variations each (PRIORITY) |
 
+## In-Flight Work
+- **Butler agent:** Building web labeling GUI for JC (assignment in intelligence/for-ops-agent/)
+- **Gemini generation:** NOT YET STARTED. Start in next session.
+
 ## GCP VMs Available
 | VM | Zone | Status |
 |----|------|--------|
-| cv-train-1 | europe-west1-c | IDLE (has all data + models) |
-| cv-train-3 | europe-west1-b | IDLE |
-| cv-train-4 | europe-west3-a | IDLE |
+| cv-train-1 | europe-west1-c | IDLE (has all data, models, Gemini ADC) -- USE FOR GENERATION |
+| cv-train-3 | europe-west1-b | IDLE -- USE FOR GENERATION |
+| cv-train-4 | europe-west3-a | IDLE -- available for training later |
 | ml-churn | europe-west1-b | ML agent (don't touch) |
 
 ## Validated ZIPs Ready
