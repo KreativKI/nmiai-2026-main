@@ -597,7 +597,18 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             return cust_r
         cust_id = cust_r["data"]["id"]
 
-    # Step 2: Build order lines (bank account registration removed - unnecessary write call)
+    # Step 2: Register bank account (REQUIRED - invoices fail without it)
+    acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
+    if acct_r.get("success") and acct_r.get("data"):
+        accts = as_list(acct_r["data"])
+        if accts and not accts[0].get("bankAccountNumber"):
+            await tx(c, base, tok, "PUT", f"/ledger/account/{accts[0]['id']}", {
+                "bankAccountNumber": "19201234568",
+                "bankAccountCountry": {"id": 161},
+                "currency": {"id": 1},
+            })
+
+    # Step 3: Build order lines
     today = f.get("invoiceDate", time.strftime("%Y-%m-%d"))
     due = f.get("dueDate", today)
     items = f.get("items", [])
@@ -958,10 +969,11 @@ async def exec_process_salary(c: httpx.AsyncClient, base: str, tok: str, f: dict
 
     if employment_id:
         payslip_r = await tx(c, base, tok, "POST", "/salary/payslip", {
-            "employee": {"id": emp_id}, "employment": {"id": employment_id}})
+            "employee": {"id": emp_id}})
         if not payslip_r.get("success"):
-            payslip_r = await tx(c, base, tok, "POST", "/salary/paymentSpecification", {
-                "employee": {"id": emp_id}, "employment": {"id": employment_id}})
+            # Try alternative endpoint without employment field
+            payslip_r = await tx(c, base, tok, "POST", "/salary/payslip", {
+                "employee": {"id": emp_id}, "date": pay_date})
         if payslip_r.get("success") and payslip_r.get("data"):
             ps_id = payslip_r["data"]["id"]
             if salary_amount and monthly_type_id:
