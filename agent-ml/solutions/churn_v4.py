@@ -35,7 +35,7 @@ from backtest import (
     TERRAIN_TO_CLASS, STATIC_TERRAIN, NUM_CLASSES, PROB_FLOOR,
 )
 from regime_model import classify_round
-from brain_v4 import BrainV4, build_dataset, extract_features
+from build_dataset import build_master_dataset, FEATURE_NAMES, extract_cell_features
 
 DATA_DIR = Path(__file__).parent / "data"
 PARAMS_FILE = DATA_DIR / "brain_v4_params.json"
@@ -90,9 +90,10 @@ def save_if_better(score, params, experiment_name):
 
 
 def score_variant(rounds_data, lgb_params, alpha):
-    """Leave-one-out backtest on last 5 rounds with given LightGBM params + alpha."""
+    """Leave-one-out backtest on last 5 rounds with 32-feature master dataset."""
     test_rounds = rounds_data[-5:] if len(rounds_data) > 5 else rounds_data
     scores = []
+    REPLAY_DIR = DATA_DIR / "replays"
 
     for rd in test_rounds:
         if not rd.get("seeds"):
@@ -101,43 +102,63 @@ def score_variant(rounds_data, lgb_params, alpha):
         regime, _ = classify_round(rd)
         h, w = rd["map_height"], rd["map_width"]
 
-        # Train V4 with these params
-        X_train, Y_train = build_dataset(rounds_data, exclude_round=rn)
-        brain = BrainV4()
-        # Override LightGBM params
+        # Train on 32-feature master dataset
+        X_train, Y_train, _ = build_master_dataset(rounds_data, exclude_round=rn)
+        models = {}
         for cls in range(NUM_CLASSES):
             model = lgb.LGBMRegressor(**lgb_params)
             model.fit(X_train, Y_train[:, cls])
-            brain.models[cls] = model
+            models[cls] = model
+
+        ig0 = rd["initial_states"][0]["grid"]
+        total_s = sum(1 for y in range(h) for x in range(w)
+                      if TERRAIN_TO_CLASS.get(int(ig0[y][x]), 0) == 1)
+        total_p = sum(1 for y in range(h) for x in range(w)
+                      if TERRAIN_TO_CLASS.get(int(ig0[y][x]), 0) == 2)
 
         for si_str, sd in rd["seeds"].items():
             si = int(si_str)
             gt = np.array(sd["ground_truth"])
             ig = rd["initial_states"][si]["grid"]
 
-            pred = brain.predict_grid(rd, si, regime=regime)
+            # Load replay for features
+            replay_path = REPLAY_DIR / f"r{rn}_seed{si}.json"
+            replay_data = None
+            if replay_path.exists():
+                try:
+                    replay_data = json.load(open(replay_path))
+                except Exception:
+                    pass
 
-            # Simulate observation blending (use GT argmax as simulated obs)
-            obs_counts = np.zeros((h, w, NUM_CLASSES))
-            obs_total = np.zeros((h, w))
+            # Extract 32 features
+            cells, coords = [], []
             for y in range(h):
                 for x in range(w):
                     if int(ig[y][x]) in STATIC_TERRAIN:
                         continue
-                    # Simulate 3 observations from GT distribution
-                    for _ in range(3):
-                        sampled = np.random.choice(NUM_CLASSES, p=gt[y, x])
-                        obs_counts[y, x, sampled] += 1
-                        obs_total[y, x] += 1
+                    fd = extract_cell_features(ig, y, x, h, w, replay_data)
+                    fd["regime_death"] = 1 if regime == "death" else 0
+                    fd["regime_growth"] = 1 if regime == "growth" else 0
+                    fd["regime_stable"] = 1 if regime == "stable" else 0
+                    fd["total_settlements"] = total_s
+                    fd["total_ports"] = total_p
+                    cells.append([fd.get(n, 0) for n in FEATURE_NAMES])
+                    coords.append((y, x))
 
-            # Apply Dirichlet blending
+            pred = np.zeros((h, w, NUM_CLASSES))
+            if cells:
+                Xp = np.array(cells, dtype=np.float32)
+                for cls in range(NUM_CLASSES):
+                    preds = models[cls].predict(Xp)
+                    for i, (y, x) in enumerate(coords):
+                        pred[y, x, cls] = preds[i]
+
             for y in range(h):
                 for x in range(w):
-                    if obs_total[y, x] == 0:
-                        continue
-                    a = alpha * pred[y, x]
-                    a = np.maximum(a, PROB_FLOOR)
-                    pred[y, x] = (a + obs_counts[y, x]) / (a.sum() + obs_total[y, x])
+                    if int(ig[y][x]) in STATIC_TERRAIN:
+                        cls = TERRAIN_TO_CLASS.get(int(ig[y][x]), 0)
+                        pred[y, x] = PROB_FLOOR
+                        pred[y, x, cls] = 1.0 - (NUM_CLASSES - 1) * PROB_FLOOR
 
             pred = np.maximum(pred, PROB_FLOOR)
             pred /= pred.sum(axis=-1, keepdims=True)
