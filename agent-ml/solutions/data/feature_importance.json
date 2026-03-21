@@ -1,0 +1,363 @@
+{
+  "features": [
+    {
+      "rank": 1,
+      "feature": "dist_settle",
+      "importance": 183.8,
+      "pct": 14.71,
+      "available": "always"
+    },
+    {
+      "rank": 2,
+      "feature": "settle_growth_y25",
+      "importance": 177.0,
+      "pct": 14.16,
+      "available": "replay"
+    },
+    {
+      "rank": 3,
+      "feature": "wealth_decay_y10",
+      "importance": 91.0,
+      "pct": 7.28,
+      "available": "replay"
+    },
+    {
+      "rank": 4,
+      "feature": "wealth_decay_y25",
+      "importance": 78.8,
+      "pct": 6.31,
+      "available": "replay"
+    },
+    {
+      "rank": 5,
+      "feature": "faction_consol_y10",
+      "importance": 73.3,
+      "pct": 5.87,
+      "available": "replay"
+    },
+    {
+      "rank": 6,
+      "feature": "pop_trend_y10",
+      "importance": 59.3,
+      "pct": 4.75,
+      "available": "replay"
+    },
+    {
+      "rank": 7,
+      "feature": "edge_dist",
+      "importance": 52.5,
+      "pct": 4.2,
+      "available": "always"
+    },
+    {
+      "rank": 8,
+      "feature": "settle_growth_y10",
+      "importance": 47.7,
+      "pct": 3.81,
+      "available": "replay"
+    },
+    {
+      "rank": 9,
+      "feature": "n_settle_y25",
+      "importance": 46.3,
+      "pct": 3.71,
+      "available": "replay"
+    },
+    {
+      "rank": 10,
+      "feature": "regime_growth",
+      "importance": 43.8,
+      "pct": 3.51,
+      "available": "always"
+    },
+    {
+      "rank": 11,
+      "feature": "total_wealth_y0",
+      "importance": 41.3,
+      "pct": 3.31,
+      "available": "replay"
+    },
+    {
+      "rank": 12,
+      "feature": "regime_death",
+      "importance": 39.8,
+      "pct": 3.19,
+      "available": "always"
+    },
+    {
+      "rank": 13,
+      "feature": "food_trend_y10",
+      "importance": 28.8,
+      "pct": 2.31,
+      "available": "replay"
+    },
+    {
+      "rank": 14,
+      "feature": "settle_r3",
+      "importance": 25.7,
+      "pct": 2.05,
+      "available": "always"
+    },
+    {
+      "rank": 15,
+      "feature": "terrain",
+      "importance": 24.8,
+      "pct": 1.99,
+      "available": "always"
+    },
+    {
+      "rank": 16,
+      "feature": "total_food_y0",
+      "importance": 24.0,
+      "pct": 1.92,
+      "available": "replay"
+    },
+    {
+      "rank": 17,
+      "feature": "total_settlements",
+      "importance": 21.8,
+      "pct": 1.75,
+      "available": "always"
+    },
+    {
+      "rank": 18,
+      "feature": "avg_defense_y0",
+      "importance": 18.5,
+      "pct": 1.48,
+      "available": "replay"
+    },
+    {
+      "rank": 19,
+      "feature": "n_settle",
+      "importance": 15.5,
+      "pct": 1.24,
+      "available": "always"
+    },
+    {
+      "rank": 20,
+      "feature": "n_settle_y10",
+      "importance": 14.8,
+      "pct": 1.19,
+      "available": "replay"
+    },
+    {
+      "rank": 21,
+      "feature": "forest_r2",
+      "importance": 12.7,
+      "pct": 1.01,
+      "available": "always"
+    },
+    {
+      "rank": 22,
+      "feature": "regime_stable",
+      "importance": 11.7,
+      "pct": 0.93,
+      "available": "always"
+    },
+    {
+      "rank": 23,
+      "feature": "total_factions_y0",
+      "importance": 11.0,
+      "pct": 0.88,
+      "available": "replay"
+    },
+    {
+      "rank": 24,
+      "feature": "terrain_y25",
+      "importance": 9.7,
+      "pct": 0.77,
+      "available": "replay"
+    },
+    {
+      "rank": 25,
+      "feature": "terrain_y10",
+      "importance": 9.5,
+      "pct": 0.76,
+      "available": "replay"
+    },
+    {
+      "rank": 26,
+      "feature": "has_port",
+      "importance": 7.5,
+      "pct": 0.6,
+      "available": "always"
+    },
+    {
+      "rank": 27,
+      "feature": "total_ports",
+      "importance": 7.3,
+      "pct": 0.59,
+      "available": "always"
+    },
+    {
+      "rank": 28,
+      "feature": "n_port",
+      "importance": 7.2,
+      "pct": 0.57,
+      "available": "always"
+    },
+    {
+      "rank": 29,
+      "feature": "defense_y10",
+      "importance": 6.5,
+      "pct": 0.52,
+      "available": "replay"
+    },
+    {
+      "rank": 30,
+      "feature": "pop_y0",
+      "importance": 6.0,
+      "pct": 0.48,
+      "available": "always"
+    },
+    {
+      "rank": 31,
+      "feature": "defense_y25",
+      "importance": 5.8,
+      "pct": 0.47,
+      "available": "replay"
+    },
+    {
+      "rank": 32,
+      "feature": "food_y0",
+      "importance": 5.3,
+      "pct": 0.43,
+      "available": "always"
+    },
+    {
+      "rank": 33,
+      "feature": "wealth_y25",
+      "importance": 5.2,
+      "pct": 0.41,
+      "available": "replay"
+    },
+    {
+      "rank": 34,
+      "feature": "defense_y0",
+      "importance": 4.3,
+      "pct": 0.35,
+      "available": "always"
+    },
+    {
+      "rank": 35,
+      "feature": "pop_y25",
+      "importance": 4.3,
+      "pct": 0.35,
+      "available": "replay"
+    },
+    {
+      "rank": 36,
+      "feature": "n_empty",
+      "importance": 4.2,
+      "pct": 0.33,
+      "available": "always"
+    },
+    {
+      "rank": 37,
+      "feature": "pop_y10",
+      "importance": 4.0,
+      "pct": 0.32,
+      "available": "replay"
+    },
+    {
+      "rank": 38,
+      "feature": "n_forest",
+      "importance": 4.0,
+      "pct": 0.32,
+      "available": "always"
+    },
+    {
+      "rank": 39,
+      "feature": "wealth_y0",
+      "importance": 3.7,
+      "pct": 0.29,
+      "available": "always"
+    },
+    {
+      "rank": 40,
+      "feature": "wealth_y10",
+      "importance": 2.5,
+      "pct": 0.2,
+      "available": "replay"
+    },
+    {
+      "rank": 41,
+      "feature": "is_settle_y25",
+      "importance": 1.8,
+      "pct": 0.15,
+      "available": "replay"
+    },
+    {
+      "rank": 42,
+      "feature": "food_y25",
+      "importance": 1.5,
+      "pct": 0.12,
+      "available": "replay"
+    },
+    {
+      "rank": 43,
+      "feature": "food_y10",
+      "importance": 1.5,
+      "pct": 0.12,
+      "available": "replay"
+    },
+    {
+      "rank": 44,
+      "feature": "ocean_adj",
+      "importance": 1.2,
+      "pct": 0.09,
+      "available": "always"
+    },
+    {
+      "rank": 45,
+      "feature": "owner_id",
+      "importance": 1.0,
+      "pct": 0.08,
+      "available": "always"
+    },
+    {
+      "rank": 46,
+      "feature": "is_settle_y10",
+      "importance": 0.7,
+      "pct": 0.05,
+      "available": "replay"
+    },
+    {
+      "rank": 47,
+      "feature": "n_mountain",
+      "importance": 0.7,
+      "pct": 0.05,
+      "available": "always"
+    },
+    {
+      "rank": 48,
+      "feature": "survived_y10",
+      "importance": 0.5,
+      "pct": 0.04,
+      "available": "replay"
+    },
+    {
+      "rank": 49,
+      "feature": "n_ruin",
+      "importance": 0.0,
+      "pct": 0.0,
+      "available": "always"
+    },
+    {
+      "rank": 50,
+      "feature": "is_coastal",
+      "importance": 0.0,
+      "pct": 0.0,
+      "available": "always"
+    },
+    {
+      "rank": 51,
+      "feature": "survived_y25",
+      "importance": 0.0,
+      "pct": 0.0,
+      "available": "replay"
+    }
+  ],
+  "replay_importance_pct": 61.2,
+  "always_importance_pct": 38.8
+}

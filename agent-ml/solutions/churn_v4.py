@@ -35,7 +35,10 @@ from backtest import (
     TERRAIN_TO_CLASS, STATIC_TERRAIN, NUM_CLASSES, PROB_FLOOR,
 )
 from regime_model import classify_round
-from build_dataset import build_master_dataset, FEATURE_NAMES, extract_cell_features
+from build_dataset import (
+    build_master_dataset, FEATURE_NAMES, extract_cell_features,
+    _compute_trajectory_features,
+)
 
 DATA_DIR = Path(__file__).parent / "data"
 PARAMS_FILE = DATA_DIR / "brain_v4_params.json"
@@ -95,7 +98,7 @@ def save_if_better(score, params, experiment_name):
 
 
 def score_variant(rounds_data, lgb_params):
-    """Leave-one-out backtest on last 5 rounds with 32-feature master dataset."""
+    """Leave-one-out backtest on last 5 rounds with 51-feature master dataset."""
     test_rounds = rounds_data[-5:] if len(rounds_data) > 5 else rounds_data
     scores = []
     replay_dir = DATA_DIR / "replays"
@@ -145,6 +148,12 @@ def score_variant(rounds_data, lgb_params):
                 except Exception:
                     pass
 
+            # Compute trajectory features from replay (round-level, same for all cells)
+            traj = _compute_trajectory_features(replay_data, total_s)
+
+            # Merge all round-level features
+            round_feats = {**regime_flags, **traj}
+
             # Extract features for dynamic cells only
             cells, coords = [], []
             for y in range(h):
@@ -152,7 +161,7 @@ def score_variant(rounds_data, lgb_params):
                     if int(ig[y][x]) in STATIC_TERRAIN:
                         continue
                     feat = extract_cell_features(ig, y, x, h, w, replay_data)
-                    feat.update(regime_flags)
+                    feat.update(round_feats)
                     cells.append([feat.get(n, 0) for n in FEATURE_NAMES])
                     coords.append((y, x))
 

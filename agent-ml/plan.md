@@ -387,7 +387,52 @@ Review (sequential), Simplify, Validate, Commit.
 
 ---
 
+## Phase 7: Churn V5 (upgrade for 51 features)
+
+File: `churn_v5.py` (or patch churn_v4.py)
+
+churn_v4 has the same bug evaluate.py had: it doesn't pass replay data
+or compute trajectory features during its backtesting. This means churn
+is optimizing hyperparameters against a model that gets 0 for all 11
+trajectory features during prediction, which is wrong.
+
+### Changes needed
+- Add `_compute_trajectory_features` call in `score_variant()`
+- Pass replay_data to extract_cell_features (same fix as evaluate.py)
+- Deploy to GCP, restart
+
+### Why it matters
+Churn optimizes hyperparameters. If it's testing against wrong feature values,
+it finds hyperparameters optimized for the wrong model. With 51 real features,
+different hyperparameters may be optimal (especially n_estimators and num_leaves
+which control model complexity for more features).
+
+## Phase 8: Feature Importance Analysis
+
+File: `feature_importance.py`
+
+Train the 51-feature model on all data. Extract LightGBM feature importance
+(gain-based). Cross-reference with which features are available at prediction
+time vs only during training. Identify:
+
+- Top 10 most important features
+- Any new features that rank high (trajectory, year-25 stats)
+- Any features with zero importance (candidates for removal)
+- Features that only exist in training (replay-dependent) vs always available
+
+This tells us if the 51-feature extension actually helped or if only a
+subset of features matter.
+
+## Phase 9: Final Audit
+
+Spawn unbiased auditor to review:
+- Current model performance (R18 score when available)
+- Feature importance findings
+- Churn v5 deployment
+- Any remaining gaps before feature freeze (Sunday 09:00 CET)
+- overnight_v4 health and configuration
+
 ## What stays running during all of this
 
 overnight_v4 on ml-brain: handles rounds, submits, caches data, downloads replays.
-Nothing in this plan touches or interrupts it until Phase 6 deployment.
+Already upgraded with 51-feat build_dataset.py. R18 submitted with 51 features.

@@ -33,6 +33,7 @@ from backtest import (
 )
 from build_dataset import (
     build_master_dataset, FEATURE_NAMES, extract_cell_features,
+    _compute_trajectory_features,
 )
 
 OCEAN_RAW = {10, 11}
@@ -270,16 +271,26 @@ def predict_and_submit(session, round_id, detail, round_num, deep_seed,
     for seed_idx in range(seeds_count):
         ig = detail["initial_states"][seed_idx]["grid"]
 
+        # Load replay if available (completed rounds only, free API call)
+        replay_path = REPLAY_DIR / f"r{round_num}_seed{seed_idx}.json"
+        replay_data = None
+        if replay_path.exists():
+            try:
+                with open(replay_path) as f:
+                    replay_data = json.load(f)
+            except Exception:
+                pass
+        traj = _compute_trajectory_features(replay_data, total_s)
+        round_feats = {**regime_flags, "total_settlements": total_s, "total_ports": total_p, **traj}
+
         # Extract features for dynamic cells
         cells, coords = [], []
         for y in range(h):
             for x in range(w):
                 if int(ig[y][x]) in STATIC_TERRAIN:
                     continue
-                fd = extract_cell_features(ig, y, x, h, w, replay_data=None)
-                fd.update(regime_flags)
-                fd["total_settlements"] = total_s
-                fd["total_ports"] = total_p
+                fd = extract_cell_features(ig, y, x, h, w, replay_data=replay_data)
+                fd.update(round_feats)
                 cells.append([fd.get(n, 0) for n in FEATURE_NAMES])
                 coords.append((y, x))
 
