@@ -147,6 +147,137 @@ def run_grabcut(img_path, bbox_norm, mode="all"):
     }}
 
 
+def _load_and_resize(img_path, max_dim=480):
+    """Load image and resize if larger than max_dim. Returns (img, h, w) or None."""
+    if not HAS_CV2:
+        return None
+    img = cv2.imread(img_path)
+    if img is None:
+        return None
+    oh, ow = img.shape[:2]
+    if max(ow, oh) > max_dim:
+        s = max_dim / max(ow, oh)
+        img = cv2.resize(img, (int(ow * s), int(oh * s)))
+    h, w = img.shape[:2]
+    return img, h, w
+
+
+def _pad_and_clamp_rect(x, y, w, h, pad, img_w, img_h):
+    """Apply padding to a rect and clamp to image bounds."""
+    return (
+        max(0, x - pad),
+        max(0, y - pad),
+        min(img_w - max(0, x - pad), w + 2 * pad),
+        min(img_h - max(0, y - pad), h + 2 * pad),
+    )
+
+
+def _rect_to_norm_bbox(x, y, w, h, img_w, img_h):
+    """Convert pixel rect to normalized center-format bbox."""
+    return {
+        "cx": round((x + w / 2) / img_w, 6),
+        "cy": round((y + h / 2) / img_h, 6),
+        "w": round(w / img_w, 6),
+        "h": round(h / img_h, 6),
+    }
+
+
+def smart_detect(img_path, tap_x, tap_y):
+    """Edge-guided product detection: edges + contours + GrabCut."""
+    loaded = _load_and_resize(img_path)
+    if loaded is None:
+        return {"error": "Could not read image" if HAS_CV2 else "OpenCV not available"}
+    img, h, w = loaded
+    tx, ty = int(tap_x * w), int(tap_y * h)
+
+    fallback_bbox = {
+        "cx": max(0.2, min(0.8, tap_x)),
+        "cy": max(0.25, min(0.75, tap_y)),
+        "w": 0.4, "h": 0.5,
+    }
+
+    # Edge detection: bilateral filter preserves edges while smoothing noise
+    filtered = cv2.bilateralFilter(img, d=9, sigmaColor=75, sigmaSpace=75)
+    gray = cv2.cvtColor(filtered, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 50, 150)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Find best contour near tap point
+    img_area = w * h
+    min_area = img_area * 0.005
+    max_area = img_area * 0.5
+    best_contour = None
+    best_dist = float('inf')
+    found_containing = False
+
+    for c in contours:
+        area = cv2.contourArea(c)
+        if area < min_area or area > max_area:
+            continue
+        signed_dist = cv2.pointPolygonTest(c, (tx, ty), True)
+        if signed_dist >= 0:
+            # Tap is inside this contour: prefer the largest containing contour
+            if not found_containing or area > cv2.contourArea(best_contour):
+                best_contour = c
+                found_containing = True
+        elif not found_containing:
+            # Tap is outside: prefer the nearest contour
+            dist = abs(signed_dist)
+            if dist < best_dist:
+                best_dist = dist
+                best_contour = c
+
+    # Fallback if no good contour nearby
+    max_nearby = max(w, h) * 0.15
+    if best_contour is None or (not found_containing and best_dist > max_nearby):
+        return run_grabcut(img_path, fallback_bbox, mode="all")
+
+    # Contour bounding rect with padding
+    bx, by, bw, bh = cv2.boundingRect(best_contour)
+    bx, by, bw, bh = _pad_and_clamp_rect(bx, by, bw, bh, int(max(bw, bh) * 0.1), w, h)
+    if bw < 10 or bh < 10:
+        return run_grabcut(img_path, fallback_bbox, mode="all")
+
+    # GrabCut refinement with edge-guided rect
+    mask = np.zeros((h, w), np.uint8)
+    bgd, fgd = np.zeros((1, 65), np.float64), np.zeros((1, 65), np.float64)
+    try:
+        cv2.grabCut(img, mask, (bx, by, bw, bh), bgd, fgd, 5, cv2.GC_INIT_WITH_RECT)
+    except cv2.error:
+        return {"error": "GrabCut failed"}
+    fg = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 1, 0).astype(np.uint8)
+
+    # Morphological opening + select largest component near tap
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, kernel)
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(fg, connectivity=8)
+    best_label = -1
+    best_score = -1
+    for i in range(1, num_labels):
+        comp_area = stats[i, cv2.CC_STAT_AREA]
+        if comp_area < min_area * 0.5:
+            continue
+        tap_inside = 0 <= ty < labels.shape[0] and 0 <= tx < labels.shape[1] and labels[ty, tx] == i
+        if tap_inside:
+            score = comp_area * 10
+        else:
+            cdist = ((centroids[i][0] - tx) ** 2 + (centroids[i][1] - ty) ** 2) ** 0.5
+            score = comp_area / (1 + cdist)
+        if score > best_score:
+            best_score = score
+            best_label = i
+
+    if best_label >= 0:
+        coords = cv2.findNonZero((labels == best_label).astype(np.uint8))
+    else:
+        coords = cv2.findNonZero(fg)
+    if coords is None:
+        return {"error": "No foreground found"}
+    rx, ry, rw, rh = cv2.boundingRect(coords)
+    rx, ry, rw, rh = _pad_and_clamp_rect(rx, ry, rw, rh, int(max(rw, rh) * 0.02), w, h)
+    return {"ok": True, "bbox": _rect_to_norm_bbox(rx, ry, rw, rh, w, h)}
+
+
 class LabelHandler(http.server.BaseHTTPRequestHandler):
     manifest = {}
     image_list = []
@@ -463,11 +594,29 @@ class LabelHandler(http.server.BaseHTTPRequestHandler):
             if not HAS_CV2 or not self.images_dir:
                 self.send_json({"error": "Not available"}, 400)
                 return
-            img_path = self.images_dir / body["filename"]
+            img_path = (self.images_dir / body["filename"]).resolve()
+            if not str(img_path).startswith(str(self.images_dir.resolve())):
+                self.send_json({"error": "Forbidden"}, 403)
+                return
             if not img_path.exists():
                 self.send_json({"error": "Image not found"}, 404)
                 return
             result = run_grabcut(str(img_path), body["bbox"], body.get("mode", "all"))
+            self.send_json(result)
+            return
+
+        if path == "/api/smart-detect":
+            if not HAS_CV2 or not self.images_dir:
+                self.send_json({"error": "Not available"}, 400)
+                return
+            img_path = (self.images_dir / body["filename"]).resolve()
+            if not str(img_path).startswith(str(self.images_dir.resolve())):
+                self.send_json({"error": "Forbidden"}, 403)
+                return
+            if not img_path.exists():
+                self.send_json({"error": "Image not found"}, 404)
+                return
+            result = smart_detect(str(img_path), body["tap_x"], body["tap_y"])
             self.send_json(result)
             return
 

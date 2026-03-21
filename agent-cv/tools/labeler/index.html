@@ -222,6 +222,30 @@ async function executeNextBatch(){
     }
 }
 
+let autoAdvancing=false;
+async function autoAdvanceBatch(labeled,total,m,sec,avg){
+    if(autoAdvancing)return;
+    autoAdvancing=true;
+    showToast('Batch done! Sending to CV agent...');
+    const r=await api('/api/complete-batch',{method:'POST',body:'{}'});
+    if(!r||!r.ok){autoAdvancing=false;document.getElementById('done-overlay').classList.remove('hidden');return}
+    showToast(labeled+'/'+total+' labeled. Sent to CV agent.');
+    if(r.next_batch){
+        const lr=await api('/api/load-next-batch',{method:'POST',body:JSON.stringify({folder:r.next_batch})});
+        if(lr&&lr.ok){
+            showToast('Next batch: '+lr.total+' images');
+            sessionSeconds=0;sessionStart=Date.now();
+            autoAdvancing=false;
+            loadNext();
+            return;
+        }
+    }
+    // No next batch: show the done screen
+    autoAdvancing=false;
+    document.getElementById('final-stats').innerText=labeled+' labeled | '+m+'m'+sec+'s | '+avg+'s/img | No more batches';
+    document.getElementById('done-overlay').classList.remove('hidden');
+}
+
 async function loadBrowser(path){
     const r=await api('/api/list-dir?path='+encodeURIComponent(path));if(!r)return;
     document.getElementById('folder-browser-path').innerText=r.path;
@@ -295,7 +319,8 @@ async function updateProgress(){
         const m=Math.floor(sessionSeconds/60),sec=sessionSeconds%60;
         const avg=s.labeled>0?(sessionSeconds/s.labeled).toFixed(1):'-';
         document.getElementById('final-stats').innerText=s.labeled+' labeled | '+m+'m'+sec+'s | '+avg+'s/img';
-        document.getElementById('done-overlay').classList.remove('hidden');
+        // Auto-advance: complete batch and load next if available
+        autoAdvanceBatch(s.labeled,s.total,m,sec,avg);
     }
 }
 
@@ -379,6 +404,8 @@ function getHandle(nx,ny){
 
 // Track touch for swipe detection
 let touchStartX=0,touchStartY=0,touchStartTime=0,touchOnCanvas=false;
+// Double-tap detection
+let lastTapTime=0,lastTapX=0,lastTapY=0;
 
 function handlePointerDown(e){
     if(!imgLoaded)return;
@@ -438,29 +465,33 @@ function handlePointerUp(e){
         return;
     }
 
-    // Magic tap: short tap with no drag = auto-detect at tap point
-    if(dt<300&&dist<15&&dragType==='new'&&currentImage){
+    // Double-tap on empty area: smart detect at tap point
+    const isTap=dt<300&&dist<15&&dragType==='new'&&currentImage;
+    if(!isTap)return;
+
+    bbox={...bboxAtDragStart};
+    draw();
+    const now=Date.now();
+    const isDoubleTap=now-lastTapTime<300&&Math.abs(endX-lastTapX)<30&&Math.abs(endY-lastTapY)<30;
+
+    if(isDoubleTap){
+        lastTapTime=0;
+        // Remove the undo entry pushed by the first tap's pointerDown
+        if(undoStack.length>1)undoStack.pop();
         const p=getNorm(e.changedTouches?{clientX:endX,clientY:endY}:e);
-        bbox={...bboxAtDragStart}; // restore before auto-detect
-        magicTap(p.x,p.y);
+        smartDetect(p.x,p.y);
+    }else{
+        lastTapTime=now;lastTapX=endX;lastTapY=endY;
     }
 }
 
-async function magicTap(nx,ny){
+async function smartDetect(nx,ny){
     if(!currentImage)return;
     pushUndo();
-    // Create rough box centered on tap (40% of image)
-    const roughW=0.4,roughH=0.5;
-    bbox={
-        cx:Math.max(roughW/2,Math.min(1-roughW/2,nx)),
-        cy:Math.max(roughH/2,Math.min(1-roughH/2,ny)),
-        w:roughW,h:roughH
-    };
-    draw();
-    showToast('Detecting...');
-    const r=await api('/api/grabcut',{method:'POST',body:JSON.stringify({filename:currentImage.filename,bbox,mode:'all'})});
+    showToast('Smart detecting...');
+    const r=await api('/api/smart-detect',{method:'POST',body:JSON.stringify({filename:currentImage.filename,tap_x:nx,tap_y:ny})});
     if(r&&r.ok&&r.bbox){bbox=r.bbox;draw();showToast('Detected')}
-    else{draw();showToast('Tap detected, adjust manually')}
+    else{showToast(r?.error||'Detection failed')}
 }
 
 canvas.addEventListener('mousedown',handlePointerDown);
