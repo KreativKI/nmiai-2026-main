@@ -122,29 +122,53 @@ def save_params(alphas, temps, score, baseline):
         raise
 
 
-def load_model_weights():
-    """Load V2/V3 blend weights. Returns (v3_weight, v2_weight)."""
+def load_model_weights(regime=None):
+    """Load V2/V3 blend weights, regime-conditional.
+
+    Three regimes, based on 13-round backtest:
+      growth: V3 wins 5/5 rounds -> lean V3
+      death:  V3 wins 4/6 avg, V2 wins the two highest -> balanced
+      stable: V2 wins 2/2 -> lean V2
+    """
+    # Data-driven defaults from full 13-round LOO comparison
+    REGIME_DEFAULTS = {
+        "growth": 0.70,   # V3 always wins growth (+7.7 avg)
+        "death":  0.55,   # V3 wins 4/6 but V2 has higher ceiling
+        "stable": 0.35,   # V2 wins 2/2
+    }
+
     if WEIGHTS_FILE.exists():
         try:
             w = json.load(open(WEIGHTS_FILE))
-            v3w = w.get("v3_weight", 0.7)
+            # Check for per-regime weights first
+            if regime and "by_regime" in w:
+                v3w = w["by_regime"].get(regime, {}).get("v3_weight")
+                if v3w is not None:
+                    return v3w, 1.0 - v3w
+            # Fall back to global weight
+            v3w = w.get("v3_weight", REGIME_DEFAULTS.get(regime, 0.55))
             return v3w, 1.0 - v3w
         except Exception:
             pass
-    return 0.7, 0.3  # Default: lean V3
+
+    v3w = REGIME_DEFAULTS.get(regime, 0.55)
+    return v3w, 1.0 - v3w
 
 
-def save_model_weights(v3_weight, v2_avg, v3_avg, details=""):
+def save_model_weights(v3_weight, v2_avg, v3_avg, details="", by_regime=None):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    data = {
+        "v3_weight": round(v3_weight, 3),
+        "v2_weight": round(1.0 - v3_weight, 3),
+        "v2_avg": round(v2_avg, 2),
+        "v3_avg": round(v3_avg, 2),
+        "details": details,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if by_regime:
+        data["by_regime"] = by_regime
     with open(WEIGHTS_FILE, "w") as f:
-        json.dump({
-            "v3_weight": round(v3_weight, 3),
-            "v2_weight": round(1.0 - v3_weight, 3),
-            "v2_avg": round(v2_avg, 2),
-            "v3_avg": round(v3_avg, 2),
-            "details": details,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }, f, indent=2)
+        json.dump(data, f, indent=2)
 
 
 # ──────────────────────────────────────────────
@@ -406,11 +430,11 @@ def predict_v2(detail, seed_idx, all_obs):
 # ──────────────────────────────────────────────
 
 def predict_blended(detail, seed_idx, regime, all_obs, r_trans, alphas, temps):
-    """Generate blended V2+V3 prediction, weighted by backtest performance."""
+    """Generate blended V2+V3 prediction, weighted by regime-conditional backtest."""
     pred_v3 = predict_v3(detail, seed_idx, regime, all_obs, r_trans, alphas, temps)
     pred_v2 = predict_v2(detail, seed_idx, all_obs)
 
-    v3_w, v2_w = load_model_weights()
+    v3_w, v2_w = load_model_weights(regime=regime)
 
     pred = v3_w * pred_v3 + v2_w * pred_v2
     pred = np.maximum(pred, PROB_FLOOR)
@@ -640,7 +664,7 @@ def _submit_blended(session, round_id, detail, round_num, all_obs, regime_info):
     seeds_count = detail["seeds_count"]
     regime = regime_info.get("regime", "stable")
     alphas, temps = load_params()
-    v3_w, v2_w = load_model_weights()
+    v3_w, v2_w = load_model_weights(regime=regime)
 
     log(f"Phase 3: Dual predict & submit (regime={regime}, V3={v3_w:.0%}/V2={v2_w:.0%})")
 
@@ -843,20 +867,49 @@ def self_improve(session, state):
     v2_avg = np.mean(v2_all) if v2_all else 0
     v3_avg = np.mean(v3_all) if v3_all else 0
 
-    # Set blend weights proportional to calibrated scores
+    # Compute per-regime blend weights from calibrated scores
+    by_regime = {}
+    for regime in ["death", "growth", "stable"]:
+        v2s = v2_scores_by_regime[regime]
+        v3s = v3_scores_by_regime[regime]
+        if not v2s:
+            continue
+        cal_offset = CALIBRATION.get(regime, 7.0)
+        v2_r = np.mean([s - cal_offset for s in v2s])
+        v3_r = np.mean([s - cal_offset for s in v3s])
+        # Win-rate-based weighting (more responsive than avg ratio)
+        v3_wins = sum(1 for a, b in zip(v3s, v2s) if a > b)
+        v2_wins = len(v3s) - v3_wins
+        total_rounds = len(v3s)
+        # Blend: 60% win rate + 40% score ratio
+        win_w = v3_wins / max(1, total_rounds)
+        score_w = v3_r / max(v2_r + v3_r, 1.0) if v2_r + v3_r > 0 else 0.5
+        v3_weight_regime = 0.6 * win_w + 0.4 * score_w
+        v3_weight_regime = max(0.25, min(0.85, v3_weight_regime))
+        by_regime[regime] = {
+            "v3_weight": round(v3_weight_regime, 3),
+            "v2_avg": round(float(np.mean(v2s)), 2),
+            "v3_avg": round(float(np.mean(v3s)), 2),
+            "v3_wins": v3_wins,
+            "total": total_rounds,
+        }
+        log(f"    {regime}: V3={v3_weight_regime:.0%} V2={1-v3_weight_regime:.0%} "
+            f"(V3 wins {v3_wins}/{total_rounds})")
+
+    # Global weight (fallback)
     total = max(v2_avg + v3_avg, 1.0)
     if total > 0 and v2_avg > 0 and v3_avg > 0:
         v3_weight = v3_avg / total
-        v3_weight = max(0.3, min(0.9, v3_weight))  # Clamp to [0.3, 0.9]
+        v3_weight = max(0.3, min(0.9, v3_weight))
     elif v3_avg >= v2_avg:
         v3_weight = 0.7
     else:
         v3_weight = 0.3
 
     save_model_weights(v3_weight, v2_avg, v3_avg,
-                       f"V2_cal={v2_avg:.1f} V3_cal={v3_avg:.1f}")
-    log(f"  Model weights: V3={v3_weight:.0%} V2={1-v3_weight:.0%} "
-        f"(V2_cal={v2_avg:.1f} V3_cal={v3_avg:.1f})")
+                       f"V2_cal={v2_avg:.1f} V3_cal={v3_avg:.1f}",
+                       by_regime=by_regime)
+    log(f"  Global: V3={v3_weight:.0%} V2={1-v3_weight:.0%} | Per-regime weights saved")
 
     state["last_model_rounds"] = n_rounds
     save_state(state)
