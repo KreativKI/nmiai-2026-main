@@ -87,7 +87,46 @@ H8: Predictable vs chaotic rounds
 - Training any model
 - Making API calls or submissions
 
-## Priority 2: Keep Autonomous System Running
+## Priority 2: Apply Hard Constraints to overnight_v4 (CURRENT)
+
+### Goal
+Use deep analysis findings as post-processing hard constraints on predictions.
+Resubmit R17 with improved predictions. Future rounds get them automatically.
+
+### Changes to overnight_v4.py predict_and_submit()
+After Dirichlet blending (line 309), before floor+renormalize (line 311):
+
+```python
+# Hard constraints from deep analysis
+OCEAN_RAW = {10, 11}
+for y in range(h):
+    for x in range(w):
+        if int(ig[y][x]) in STATIC_TERRAIN:
+            continue
+        # H4: Ports ONLY form on coastal cells
+        has_ocean = any(
+            int(ig[y+dy][x+dx]) in OCEAN_RAW
+            for dy in (-1, 0, 1) for dx in (-1, 0, 1)
+            if (dy, dx) != (0, 0) and 0 <= y+dy < h and 0 <= x+dx < w
+        )
+        if not has_ocean:
+            pred[y, x, 2] = PROB_FLOOR  # Port
+        # H5: Ruin never dominant at year 50 (avg lifespan 1 year)
+        pred[y, x, 3] = min(pred[y, x, 3], 0.05)
+```
+
+### Deployment
+1. Edit overnight_v4.py locally
+2. Boris review/simplify/validate
+3. SCP to ml-brain VM
+4. Kill overnight_v4, restart it
+5. Touch brain_v4_params.json to trigger resubmit of R17
+
+### Risk
+Low: only adds post-processing constraints. Prediction pipeline unchanged.
+Resubmit uses existing obs data cached from initial R17 submission.
+
+## Priority 3: Keep Autonomous System Running
 overnight_v4 and churn_v4 handle rounds and optimization.
 Check health periodically. Fix if crashed.
 

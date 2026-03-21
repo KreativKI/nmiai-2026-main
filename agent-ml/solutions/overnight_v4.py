@@ -35,6 +35,8 @@ from build_dataset import (
     build_master_dataset, FEATURE_NAMES, extract_cell_features,
 )
 
+OCEAN_RAW = {10, 11}
+SKIP_CELLS = STATIC_TERRAIN | OCEAN_RAW  # cells that never change class
 DATA_DIR = Path(__file__).parent / "data"
 REPLAY_DIR = DATA_DIR / "replays"
 STATE_FILE = Path(__file__).parent.parent / "overnight_v4_state.json"
@@ -307,6 +309,23 @@ def predict_and_submit(session, round_id, detail, round_num, deep_seed,
                     a = alpha * pred[y, x]
                     a = np.maximum(a, PROB_FLOOR)
                     pred[y, x] = (a + obs_counts[y, x]) / (a.sum() + obs_total[y, x])
+
+        # Hard constraints from deep analysis (validated on 75 replays)
+        for y in range(h):
+            for x in range(w):
+                if int(ig[y][x]) in SKIP_CELLS:
+                    continue
+                # H4: Ports ONLY form on coastal cells (1834/1834 = 100%)
+                has_ocean = any(
+                    0 <= y + dy < h and 0 <= x + dx < w
+                    and int(ig[y + dy][x + dx]) in OCEAN_RAW
+                    for dy in (-1, 0, 1) for dx in (-1, 0, 1)
+                    if (dy, dx) != (0, 0)
+                )
+                if not has_ocean:
+                    pred[y, x, 2] = PROB_FLOOR
+                # H5: Ruin never dominant at year 50 (avg lifespan 1 year)
+                pred[y, x, 3] = min(pred[y, x, 3], 0.05)
 
         pred = np.maximum(pred, PROB_FLOOR)
         pred /= pred.sum(axis=-1, keepdims=True)
