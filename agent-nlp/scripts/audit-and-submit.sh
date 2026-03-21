@@ -120,5 +120,7 @@ cd "$REPO_ROOT"
 python3 "$AUTO_SUBMIT_SCRIPT" $SUBMIT_ARGS
 
 echo ""
-echo ">>> SUBMISSION COMPLETE."
-echo ">>> Check logs: gcloud run services logs read tripletex-agent --region europe-west4 --project ai-nm26osl-1779 --limit 50"
+echo ">>> SUBMISSION COMPLETE. Running post-submission analysis..."
+echo ""
+
+python3 "$SCRIPT_DIR/post_submit_analysis.py" --hours 1
