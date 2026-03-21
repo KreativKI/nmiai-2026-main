@@ -113,14 +113,19 @@ Novel problem?               -> BUILD from scratch, flag to JC
 
 ## Boris Workflow (mandatory, every change)
 ```
-EXPLORE: What is the current bottleneck? (read MEMORY.md, check scores)
-PLAN:    What change addresses this? (2-3 sentences in MEMORY.md)
-CODE:    Implement the change
-REVIEW:  code-reviewer validates (bugs, security, logic)
-SIMPLIFY: code-simplifier cleans up
-VALIDATE: build-validator + run test suite, check score delta
-COMMIT:  If improved, commit with score delta in message
+EXPLORE:  What is the current bottleneck? (read MEMORY.md, check scores)
+PLAN:     What change addresses this? (2-3 sentences in MEMORY.md)
+CODE:     Implement the change
+REVIEW:   Launch `feature-dev:code-reviewer` agent (fresh context)
+SIMPLIFY: Launch `code-simplifier:code-simplifier` agent (fresh context)
+VALIDATE: Launch `build-validator` agent (fresh context)
+COMMIT:   If improved, commit with score delta in message
 ```
+
+CRITICAL: Review, Simplify, and Validate are THREE SEPARATE Agent calls.
+Each gets a fresh context. Never bundle them into one agent or one session.
+The fresh context per step is the entire point: unbiased review.
+
 No exceptions. "Quick fix" and "just try this" still follow the loop.
 
 ---
