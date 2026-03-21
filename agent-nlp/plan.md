@@ -3,7 +3,7 @@
 **Track:** NLP | **Weight:** 33.33%
 **Last updated:** 2026-03-21 13:30 CET
 **Approach:** Structured workflows (LLM extracts fields, Python executes API calls)
-**Bot version:** tripletex_bot_v4.py (~1760 lines, 22 executors, rev 68 deployed)
+**Bot version:** tripletex_bot_v4.py (~1870 lines, 23 executors, rev 69 deployed)
 **Efficiency plan:** See EFFICIENCY-PLAN.md for full strategy
 
 ## Leaderboard State (2026-03-21 00:50 CET)
@@ -194,6 +194,6 @@ Priority: Build Tier 3 executors with efficiency-first design from the start.
 3. Find top 3 accounts
 4. Create 3 projects (POST /project x3)
 5. Create 3 activities (POST /project/activity or similar x3)
-**New executor needed:** exec_analyze_and_create_projects
-**Estimated writes:** 6 (3 POST project + 3 POST activity)
-**Estimated GETs:** 2-3 (ledger postings for Jan + Feb, maybe account lookup)
+**Executor built:** exec_analyze_ledger_create_projects (rev 69)
+**API budget:** 8 calls total (2 GETs + 6 writes: 3 POST project + 3 POST activity)
+**Implementation:** Single GET for all postings (4000-7999 expense range), aggregate in Python, create projects + activities

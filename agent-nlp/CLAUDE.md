@@ -271,12 +271,23 @@ Prompts arrive in 7 languages: Norwegian, English, Spanish, Portuguese, Nynorsk,
 ## Efficiency Optimization (critical for high scores)
 Efficiency bonus applies ONLY when all fields are correct. On a perfect score, fewer API calls and zero 4xx errors yield up to 2x the tier multiplier.
 
+**IMPORTANT: ALL API calls likely count toward efficiency (not just writes).** Competition docs say "How many API calls" and examples say "Minimize GET calls." Treat every call as expensive.
+
 Rules:
 - Plan before calling. Know which endpoints you need before making any request.
 - Validate inputs before sending. A 4xx error counts against you even if you retry successfully.
 - Do NOT fetch back entities you just created. You already have the data from the POST response.
 - Do NOT make exploratory GET calls. Use the prompt to determine what to create.
+- Minimize ALL calls: GETs count too. find_customer with 3 GETs is worse than 1.
 - Benchmarks recalculated every 12h. The efficiency bar rises as teams improve.
+- Rate limit: 5 per task per day PER TIER.
+
+### Efficiency Environment (active)
+Bot logs `writes=N, errors_4xx=N` and full call sequence per request (Cloud Run logs).
+- `python3 agent-nlp/scripts/efficiency_analyzer.py --hours 12 --save` -- analyze logs
+- `python3 agent-nlp/scripts/self_improve.py --hours 12` -- diagnose + prescribe fixes
+- 403 early-abort prevents cascading errors from expired tokens
+- Per-request dept cache prevents duplicate POST /department
 
 ---
 
@@ -293,10 +304,13 @@ Rules:
 - Each correct Tier 2 task is worth 2x a Tier 1 task
 - Expand tool definitions to cover more API endpoints
 
-### Phase 3: Tier 3 (Saturday morning through Sunday)
-- Tier 3 unlocks with 3.0x multiplier
-- Complex scenarios: corrections, reversals, linked projects
-- With efficiency bonus, a single perfect Tier 3 task can score up to 6.0
+### Phase 3: Tier 3 (LIVE as of Saturday March 21)
+- Tier 3 has 3.0x multiplier. Perfect + efficient = up to 6.0 per task.
+- One perfect Tier 3 = three perfect Tier 2 tasks = six perfect Tier 1 tasks.
+- Known Tier 3 task type: "Analyze ledger, find top N accounts with biggest change, create projects + activities"
+- Executor: exec_analyze_ledger_create_projects (23 task types total)
+- Other possible Tier 3 tasks: bank reconciliation from CSV, error correction in ledger, year-end closing
+- Build efficiency-first: minimum calls (ALL calls count), zero 4xx errors
 
 ### Ongoing: Submit Frequently
 - Rate limit: 10/task/day (verified), 180 total/day (platform enforces 180, docs said 300), 3 concurrent. Resets 01:00 CET.
