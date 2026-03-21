@@ -147,7 +147,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - items (array of {description, quantity, unitPrice, vatRate})
 - amount, paymentDate, reason
 - title, costs (array of {description, amount, date}), perDiemDays, perDiemRate, travelLocation
-- salary, baseSalary, bonus, bonusAmount, employmentPercentage
+- salary, baseSalary, bonus, bonusAmount, employmentPercentage, hoursPerDay, configureWorkingHours (set to true when prompt mentions "standard arbeidstid" or "working hours" or "Arbeitszeit")
 - userType (if admin/kontoadministrator mentioned: "STANDARD", otherwise omit)
 - targetEntity (for updates: which entity to find)
 - updateFields (for updates: what to change)
@@ -159,6 +159,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - assets (array of {name, value, years, account, accumulatedAccount} for year-end depreciation)
 - depreciationExpenseAccount (account number for depreciation expense, default 6010)
 - accumulatedDepreciationAccount (contra-account for accumulated depreciation, e.g., 1209 for 1210)
+- period (e.g., "March 2026" for monthly closing, omit for annual)
 - prepaidAccount, prepaidAmount, accrualAmount (for monthly closing: transfer from prepaid to expense)
 - transactions (array of {date, description, amount, type, reference} from CSV bank statements -- extract these from attached CSV files)
 - reminderFee, partialPaymentAmount, debitAccount, creditAccount
@@ -585,7 +586,24 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
     #     details_body["occupationCode"] = {"code": str(f["occupationCode"])}
 
     await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
-    return emp_r  # Return employee result, not details result
+
+    # Configure standard working hours if requested (e.g., "standard arbeidstid")
+    hours_per_day = f.get("hoursPerDay") or f.get("workingHoursPerDay")
+    if hours_per_day or f.get("configureWorkingHours"):
+        hpd = float(hours_per_day or 7.5)  # Norwegian standard: 7.5 hours/day
+        # Try POST /employee/standardTime
+        std_time_r = await tx(c, base, tok, "POST", "/employee/standardTime", {
+            "employee": {"id": emp_id},
+            "hoursPerDay": hpd,
+            "fromDate": start_date,
+        })
+        if not std_time_r.get("success"):
+            # Fallback: try PUT on employment with workingHoursScheme
+            await tx(c, base, tok, "PUT", f"/employee/employment/{employment_id}", {
+                "workingHoursScheme": "STANDARD",
+            })
+
+    return emp_r
 
 
 async def exec_create_product(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
@@ -1770,6 +1788,9 @@ async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: di
         return {"success": False, "error": f"Could not find account {depreciation_expense_acct_num}"}
     expense_acct_id = as_list(expense_acct_r["data"])[0]["id"]
 
+    # For monthly closing tasks, use monthly depreciation (annual / 12)
+    is_monthly = bool(f.get("period") or f.get("monthly"))
+
     # Build all postings in a single voucher for efficiency
     postings = []
     row = 1
@@ -1784,6 +1805,10 @@ async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: di
             continue
 
         annual_depreciation = round(asset_value / asset_years, 2)
+        if is_monthly:
+            depreciation_amount = round(annual_depreciation / 12, 2)
+        else:
+            depreciation_amount = annual_depreciation
 
         # Determine credit account: use accumulated depreciation account if provided,
         # otherwise use the asset's own contra-account (asset_account - 1, e.g., 1209 for 1210)
@@ -1815,8 +1840,8 @@ async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: di
         postings.append({
             "row": row, "date": voucher_date,
             "account": {"id": expense_acct_id},
-            "amountGross": annual_depreciation,
-            "amountGrossCurrency": annual_depreciation,
+            "amountGross": depreciation_amount,
+            "amountGrossCurrency": depreciation_amount,
             "currency": {"id": 1},
             "description": f"Avskrivning {asset_name} ({asset_value}/{asset_years} ar)",
         })
@@ -1826,8 +1851,8 @@ async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: di
         postings.append({
             "row": row, "date": voucher_date,
             "account": {"id": credit_acct_id},
-            "amountGross": -annual_depreciation,
-            "amountGrossCurrency": -annual_depreciation,
+            "amountGross": -depreciation_amount,
+            "amountGrossCurrency": -depreciation_amount,
             "currency": {"id": 1},
             "description": f"Akkumulert avskrivning {asset_name}",
         })
@@ -1950,7 +1975,9 @@ async def exec_bank_reconciliation(c: httpx.AsyncClient, base: str, tok: str, f:
                 if cust_name and cust_name in txn_desc.lower():
                     score += 100
                 # Match by invoice number reference
-                if inv_number and (inv_number in txn_desc or inv_number in txn_ref):
+                if inv_number and txn_desc and inv_number in txn_desc:
+                    score += 50
+                elif inv_number and txn_ref and inv_number in txn_ref:
                     score += 50
                 # Match by amount (closer = higher score)
                 amount_diff = abs(outstanding - abs_amount)
