@@ -1,197 +1,280 @@
-# Astar Island -- Observation Intelligence Plan v2
+# Astar Island -- Multi-Seed Intelligence Plan
 
-**Created:** 2026-03-21 23:00 CET | **Updated:** 2026-03-21 23:30 CET
-**Status:** Hail Mary plan COMPLETE. This is the NEXT plan.
-**Audit history:** v1 BLOCKED (3 issues). v2 addresses all.
+**Created:** 2026-03-22 01:00 CET
+**Deadline:** Sunday 2026-03-22 15:00 CET
+**Status:** overnight_v4 PAUSED. Cron DISABLED. R19 queries PRESERVED.
 
-## The Problem
+## Problem Statement
 
-61% of model importance comes from replay-only features that default to 1.0
-at prediction time. Our #2 feature (settle_growth_y25, 14.2%) is silent
-during live prediction. But observations give us year-50 terrain counts
-that could serve as proxies.
+4 of 5 seeds run blind. The model's top features (61% importance) default to
+constants for seeds 1-4 because observations and replay data only exist for
+the deep-stacked seed. This is 80% of our per-round submissions running on
+a model that can't distinguish death from growth.
 
-## Audit v1 Fixes Applied
+## The Fix
 
-A. Correlation analysis is the GATE. No proxy feature is used unless R2 >= 0.5
-   against the replay-derived feature across historical data. Features that
-   fail stay at 1.0 default.
+9 queries = complete 40x40 map for one seed.
+5 seeds x 9 queries = 45 queries.
+Budget = 50 queries.
+**We can map ALL 5 seeds completely with 5 queries to spare.**
 
-B. Soft regime blending REMOVED. LightGBM was trained on one-hot regime flags.
-   Feeding fractional values (0.3/0.5/0.2) causes unpredictable tree behavior.
-   Keep hard thresholds. Improve thresholds if data supports it.
+Every seed gets:
+- Full year-50 terrain map (1600 cells observed)
+- obs_settle_growth computed (our #2 feature, 14.2% importance)
+- obs_forest_ratio computed
+- Regime classification signal
+- Dirichlet blending (1 observation per cell)
+- No blind features
 
-C. The invented proxy wealth_decay = 1/settle_growth REMOVED. No measured
-   correlation. Must be validated like any other proxy, not assumed.
+## Two Parallel Paths
 
-D. Current query strategy (deep stack one seed) stays as DEFAULT.
-   Multi-seed observation is an EXPERIMENT that requires backtest proof.
+### Path 1: Multi-Seed Observation (on ml-brain)
 
-E. Out-of-distribution fallback ADDED. If any proxy value exceeds 2x the
-   max training value for that feature, fall back to 1.0 and log it.
+Modify observe_round() to spread queries across all 5 seeds.
 
----
-
-## Phase 1: Correlation Analysis (THE GATE)
-
-### Goal
-Determine which observation-derived features are valid proxies for
-replay-derived features. Only validated proxies proceed to Phase 2.
-
-### Method
-For all 17 rounds x 5 seeds (85 data points), using replay data:
-
-1. Compute "observation-like" features from replay year-50 frame:
-   - obs_settle_growth = settle_count_y50 / settle_count_y0
-   - obs_forest_ratio = forest_count_y50 / forest_count_y0
-   - obs_port_growth = port_count_y50 / max(port_count_y0, 1)
-
-2. Compute actual replay features (what the model was trained on):
-   - settle_growth_y25 = settle_count_y25 / settle_count_y0
-   - settle_growth_y10 = settle_count_y10 / settle_count_y0
-   - wealth_decay_y10 = avg_wealth_y10 / avg_wealth_y0
-   - faction_consol_y10 = factions_y10 / factions_y0
-   - pop_trend_y10 = avg_pop_y10 / avg_pop_y0
-   - food_trend_y10 = avg_food_y10 / avg_food_y0
-
-3. Compute Pearson R2 for each pair:
-   - obs_settle_growth vs settle_growth_y25
-   - obs_settle_growth vs settle_growth_y10
-   - obs_settle_growth vs wealth_decay_y10 (test, don't assume)
-   - obs_settle_growth vs faction_consol_y10
-   - obs_forest_ratio vs settle_growth_y25 (inverse signal)
-
-4. Decision gate:
-   - R2 >= 0.5: proxy is APPROVED for Phase 2
-   - R2 0.3-0.5: proxy is EXPERIMENTAL, test in backtest only
-   - R2 < 0.3: proxy is REJECTED, feature stays at 1.0
-
-### Note on observation vs replay year-50
-Observations are stacked Monte Carlo samples (closer to ground truth).
-Replay year-50 is a single simulation (noisier). Phase 1 uses replay
-year-50 as a pessimistic proxy. Real observations may correlate better.
-
-File: `observation_analysis.py`
-
----
-
-## Phase 2: Implement validated proxies (CONDITIONAL on Phase 1)
-
-Only features that passed the R2 >= 0.5 gate get implemented.
-
-### Changes to overnight_v4.py predict_and_submit()
-
-After observations are collected (obs_counts, obs_total), compute:
-
-```python
-# Count observed terrain classes from deep-stacked seed
-obs_argmax = obs_counts.argmax(axis=2)
-observed = obs_total > 0
-obs_settle = ((obs_argmax == 1) | (obs_argmax == 2)) & observed
-obs_forest = (obs_argmax == 4) & observed
-
-obs_settle_count = obs_settle.sum()
-obs_forest_count = obs_forest.sum()
-
-# Compute proxy (only if approved by Phase 1)
-obs_settle_growth = obs_settle_count / max(initial_settle_count, 1)
+**Current observe_round():**
+```
+5 queries: smell test on deep_seed
+45 queries: deep-stack deep_seed (re-observe same cells 5x)
+Result: 1 seed with ~5 obs per cell, 4 seeds with nothing
 ```
 
-### Out-of-distribution guard
-
-For each proxy feature, check against training distribution bounds:
-
-```python
-# Computed once from training data
-PROXY_BOUNDS = {
-    "settle_growth_y25": {"min": 0.0, "max": 8.0},  # from historical data
-    "settle_growth_y10": {"min": 0.0, "max": 5.0},
-}
-
-# At prediction time
-if obs_settle_growth > PROXY_BOUNDS["settle_growth_y25"]["max"] * 2:
-    obs_settle_growth = 1.0  # fall back to default
-    log("  OOD fallback: obs_settle_growth too high")
+**New observe_round():**
+```
+For each seed 0-4:
+  9 queries: full grid coverage (3x3 tiling of 15x15 viewports)
+5 remaining queries: extra observations on seed 0
+Result: ALL 5 seeds with 1 obs per cell, seed 0 with 1-2 obs per cell
 ```
 
-### Mapping proxies to features
+**Changes to predict_and_submit():**
+- Compute obs_settle_growth PER SEED (not just deep seed)
+- Each seed gets its own obs_counts and obs_total arrays
+- Regime classification from average obs_settle_growth across ALL 5 seeds
+  (5 independent samples of same hidden params = more reliable estimate)
+- Dirichlet blending on ALL seeds (1 obs per cell, alpha-weighted)
+- obs_settle_growth injected into trajectory features for ALL seeds
 
-Only approved proxies replace the 1.0 defaults in the trajectory dict.
-All other trajectory features stay at 1.0. No invented inverse relationships.
-
----
-
-## Phase 3: Regime threshold improvement (INDEPENDENT of Phase 2)
-
-### Current approach
+**Data structures:**
 ```python
-if survival < 0.15: regime = "death"
-elif survival > 0.60: regime = "growth"
+# Instead of: obs_counts (40,40,6), obs_total (40,40) for one seed
+# Now: per_seed_obs = {seed_idx: (obs_counts, obs_total)} for all 5
+```
+
+**Regime from 5 seeds:**
+```python
+# Average obs_settle_growth across all 5 seeds
+growth_ratios = [compute_obs_settle_growth(per_seed_obs[si], ig[si]) for si in range(5)]
+avg_growth = np.mean(growth_ratios)
+# Use avg for regime (5 samples = more robust than 1)
+if avg_growth < 0.9: regime = "death"
+elif avg_growth > 1.4: regime = "growth"
 else: regime = "stable"
 ```
 
-### Proposed improvement
-Use obs_settle_growth (computed from full grid, not just 5 cells) for
-regime classification. This uses ALL observed cells instead of 5 spots:
+### Path 2: Temperature Calibration + Physics Prior (on ml-churn)
+
+Run in parallel while Path 1 is implemented.
+
+**Temperature calibration:**
+For each of 17 rounds, grid-search temperature T per regime:
+```python
+calibrated = pred ** (1/T)
+calibrated /= calibrated.sum(axis=-1, keepdims=True)
+```
+Optimize T to minimize KL divergence against ground truth.
+Three T values: T_death, T_stable, T_growth.
+
+**Physics prior (transition model as Dirichlet base):**
+For cells with low observation coverage, use transition_model.py predictions
+instead of LightGBM as the Dirichlet prior. The transition model knows:
+- Settlements expand into forests
+- Ports only form on coasts
+- Ruins are transitional
+- Mountains/ocean never change
+
+Test: blend LightGBM + transition_model predictions and measure
+if the blend scores better than LightGBM alone on held-out rounds.
+
+---
+
+## Implementation Details
+
+### Path 1: observe_round_v2()
+
+New function that replaces observe_round():
 
 ```python
-obs_settle_growth = obs_settle_count / max(initial_settle_count, 1)
-if obs_settle_growth < 0.3: regime = "death"
-elif obs_settle_growth > 2.0: regime = "growth"
-else: regime = "stable"
+def observe_round_v2(session, round_id, detail, round_num):
+    """Observe ALL 5 seeds with full grid coverage."""
+    h, w = detail["map_height"], detail["map_width"]
+    seeds_count = detail.get("seeds_count", 5)
+
+    # 3x3 viewport tiling for full coverage
+    viewports = []
+    for vy in range(0, h, 15):
+        for vx in range(0, w, 15):
+            viewports.append((vx, vy, min(15, w-vx), min(15, h-vy)))
+
+    per_seed_obs = {}
+    budget_used = 0
+
+    for seed_idx in range(seeds_count):
+        oc = np.zeros((h, w, NUM_CLASSES))
+        ot = np.zeros((h, w))
+
+        for vx, vy, vw, vh in viewports:
+            obs = query_viewport(session, round_id, seed_idx, vx, vy, vw, vh)
+            accumulate_obs(obs, oc, ot)
+            budget_used += 1
+
+        per_seed_obs[seed_idx] = (oc, ot)
+        np.save(DATA_DIR / f"obs_counts_r{round_num}_seed{seed_idx}_full.npy", oc)
+        np.save(DATA_DIR / f"obs_total_r{round_num}_seed{seed_idx}_full.npy", ot)
+
+    # Extra queries on seed 0 (remaining budget)
+    remaining = 50 - budget_used
+    for _ in range(remaining):
+        vx, vy, vw, vh = viewports[_ % len(viewports)]
+        obs = query_viewport(session, round_id, 0, vx, vy, vw, vh)
+        oc0, ot0 = per_seed_obs[0]
+        accumulate_obs(obs, oc0, ot0)
+
+    # Regime from all seeds
+    growth_ratios = []
+    for seed_idx in range(seeds_count):
+        ig = detail["initial_states"][seed_idx]["grid"]
+        oc, ot = per_seed_obs[seed_idx]
+        obs_argmax = oc.argmax(axis=2)
+        observed = ot > 0
+        settle_count = int(((obs_argmax == 1) | (obs_argmax == 2))[observed].sum())
+        init_settle = sum(1 for y in range(h) for x in range(w)
+                         if TERRAIN_TO_CLASS.get(int(ig[y][x]), 0) in (1,2))
+        growth_ratios.append(settle_count / max(init_settle, 1))
+
+    avg_growth = np.mean(growth_ratios)
+    if avg_growth < 0.9: regime = "death"
+    elif avg_growth > 1.4: regime = "growth"
+    else: regime = "stable"
+
+    log(f"  Multi-seed regime: {regime} (avg_growth={avg_growth:.2f}, "
+        f"per_seed={[f'{g:.1f}' for g in growth_ratios]})")
+
+    return per_seed_obs, regime, growth_ratios
 ```
 
-Still hard thresholds (one-hot regime flags). Still 3 classes.
-But computed from full-grid observation data instead of 5 viewport samples.
+### Path 1: predict_and_submit_v2()
 
-### Calibration
-Use the 85 historical data points to find optimal thresholds.
-Grid search over (death_threshold, growth_threshold), pick values
-that minimize regime misclassification rate.
+Modified to accept per_seed_obs and apply Dirichlet + obs proxies per seed:
 
----
+Key changes:
+- Loop over seeds, each seed gets its own obs_counts/obs_total
+- obs_settle_growth computed per seed and injected into trajectory features
+- Dirichlet blending on ALL seeds (not just deep seed)
+- Per-regime alpha applied to all seeds
 
-## Phase 4: Backtest
+### Path 2: temperature_calibration.py
 
-For each of 17 rounds with replays:
-1. Simulate observations from year-50 replay frame
-2. Compute observation-derived proxy features
-3. Apply improved regime thresholds
-4. Predict with 51-feature model (proxies replacing defaults)
-5. Score against ground truth
-6. Compare to current approach (1.0 defaults, smell-test regime)
-
-### Decision
-- If proxies improve overall score by 2+ points: deploy
-- If proxies improve some regimes but hurt others: deploy per-regime
-- If proxies are neutral or worse: keep current approach
-
----
-
-## Phase 5: Deploy (CONDITIONAL on Phase 4 results)
-
-Update overnight_v4.py with validated improvements.
-Keep current approach as fallback.
-Spawn audit before deployment.
+```python
+def find_optimal_temperature(rounds_data):
+    """Grid search T per regime to minimize KL divergence."""
+    for regime in ("death", "stable", "growth"):
+        best_T, best_score = 1.0, 0.0
+        for T in np.arange(0.5, 3.0, 0.1):
+            scores = []
+            for round in rounds_of_regime:
+                pred = model.predict(round)
+                calibrated = pred ** (1/T)
+                calibrated /= calibrated.sum(axis=-1, keepdims=True)
+                scores.append(score_prediction(gt, calibrated))
+            avg = np.mean(scores)
+            if avg > best_score:
+                best_T, best_score = T, avg
+        print(f"{regime}: T={best_T:.1f}, score={best_score:.1f}")
+```
 
 ---
 
-## Query strategy (future, NOT in this plan)
+## Evaluation Protocol
 
-The current deep-stack strategy (50 queries on 1 seed) is PROVEN.
-R9=82.6 and R15=81.6 were scored with this strategy. Changing it
-requires backtest evidence that a multi-seed approach beats it.
+### Backtest before deployment
+For each of 17 rounds, simulate the new observation strategy:
+1. Use replay year-50 frames as simulated observations (1 per seed)
+2. Compute per-seed obs_settle_growth
+3. Compute 5-seed average regime
+4. Predict with LightGBM using obs proxies on all seeds
+5. Apply temperature calibration
+6. Score against ground truth
+7. Compare to current approach (deep-stack 1 seed, 4 blind)
 
-This is deferred to a separate plan if Phase 2 shows that
-observation-derived features significantly help the deep seed.
-Only then does spreading queries to other seeds make sense.
+### Metrics
+- Overall score (average across all rounds, all seeds)
+- Per-seed score (does seed 1-4 improve? Does seed 0 degrade?)
+- Per-regime score (death/stable/growth breakdown)
+- Regime classification accuracy (5-seed average vs 1-seed smell test)
+
+---
+
+## Environment Assignment
+
+| Environment | Path | Work |
+|-------------|------|------|
+| ml-brain | Path 1 | Multi-seed observation (overnight_v5.py) |
+| ml-churn | Path 2 | Temperature calibration + physics prior |
+| Local Mac | Neither | Plan writing, audit, code review only |
+
+Both paths deploy results to ml-brain for final integration.
+
+---
+
+## Risk Assessment
+
+| Risk | Mitigation |
+|------|-----------|
+| 1 obs per cell is too noisy for Dirichlet | With alpha=15, 1 obs gives 6% weight. Small but non-zero correction. Better than 0%. |
+| Seed 0 loses deep-stack advantage | Gets 14 queries (9 + 5 extra) = ~1.5 obs per cell. Modest reduction from ~5 obs. |
+| Regime from 5 seeds disagrees with itself | Average is more robust. Individual seed variance is expected (R15: 4.1 to 10.3). |
+| Code change breaks submission | Backtest on 17 rounds before deployment. overnight_v4 code preserved as fallback. |
 
 ---
 
 ## Execution
 
-Phase 1 is the gate. If no proxy passes R2 >= 0.5, Phases 2-5 are cancelled
-and we focus on other improvements (regime threshold calibration standalone).
+```
+Path 1 (ml-brain):
+  1. Write observe_round_v2() and predict_and_submit_v2()
+  2. Boris workflow (review, simplify, validate)
+  3. Backtest on 17 rounds (simulated multi-seed observations)
+  4. Deploy as overnight_v5.py if backtest shows improvement
 
-Each phase uses Boris workflow.
-Audit gates after Phase 1 results and before Phase 5 deployment.
+Path 2 (ml-churn):
+  1. Write temperature_calibration.py
+  2. Grid search T values on 17 rounds
+  3. Write physics_prior.py (transition model blending)
+  4. Test blend on 17 rounds
+  5. Deploy winning calibration to overnight_v5.py
+
+Integration:
+  - Merge Path 1 + Path 2 winners into overnight_v5.py
+  - Re-enable cron
+  - Start R19 submission
+```
+
+Boris workflow on each code change.
+Audit gate before final deployment.
+
+## Audit Fixes (mandatory before deployment)
+
+### Fix 1: Error handling in observe_round_v2
+Wrap each query_viewport call in try/except per seed. A single failed
+query must not abort remaining seeds. Return partial data gracefully.
+Validate budget_used against live API budget after the loop.
+
+### Fix 2: Resubmit file naming
+v5 saves obs files as `_full.npy`, v4 used `_stacked.npy`.
+Update run_cycle resubmit logic to check for both naming conventions.
+
+### Fix 3: Temperature calibration independence
+Run T calibration on multi-seed simulation data (Path 1 output),
+not on single-seed v4 baseline. T values must match the prediction
+distribution they will be applied to.

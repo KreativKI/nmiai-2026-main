@@ -541,8 +541,8 @@ def run_cycle(session, state):
                 should_resubmit = True
                 resubmit_reason = "replay data now available"
 
-        # Check if churn found new params
-        if remaining > 30 and PARAMS_FILE.exists():
+        # Check if churn found new params or code was updated
+        if remaining > 10 and PARAMS_FILE.exists():
             mtime = PARAMS_FILE.stat().st_mtime
             if mtime > state.get("last_submit_time", 0):
                 should_resubmit = True
