@@ -3,7 +3,7 @@
 **Track:** NLP | **Weight:** 33.33%
 **Last updated:** 2026-03-21 13:30 CET
 **Approach:** Structured workflows (LLM extracts fields, Python executes API calls)
-**Bot version:** tripletex_bot_v4.py (~1870 lines, 23 executors, rev 69 deployed)
+**Bot version:** tripletex_bot_v4.py (2280 lines, 26 executors, rev 70 deployed)
 **Efficiency plan:** See EFFICIENCY-PLAN.md for full strategy
 
 ## Leaderboard State (2026-03-21 00:50 CET)

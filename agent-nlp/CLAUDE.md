@@ -307,9 +307,14 @@ Bot logs `writes=N, errors_4xx=N` and full call sequence per request (Cloud Run 
 ### Phase 3: Tier 3 (LIVE as of Saturday March 21)
 - Tier 3 has 3.0x multiplier. Perfect + efficient = up to 6.0 per task.
 - One perfect Tier 3 = three perfect Tier 2 tasks = six perfect Tier 1 tasks.
-- Known Tier 3 task type: "Analyze ledger, find top N accounts with biggest change, create projects + activities"
-- Executor: exec_analyze_ledger_create_projects (23 task types total)
-- Other possible Tier 3 tasks: bank reconciliation from CSV, error correction in ledger, year-end closing
+- 26 executors total (23 Tier 1/2 + 3 Tier 3 + enhanced register_payment with currency)
+- Tier 3 executors built:
+  - exec_analyze_ledger_create_projects: analyze expense changes, create projects
+  - exec_year_end_closing: depreciation + closing entries in single voucher
+  - exec_bank_reconciliation: match CSV bank statement to open invoices
+  - exec_overdue_invoice_reminder: find overdue, post reminder fee, partial payment
+- Enhanced: exec_register_payment handles currency exchange (agio/disagio)
+- Fixed: exec_create_project_invoice handles multi-employee hours (list input)
 - Build efficiency-first: minimum calls (ALL calls count), zero 4xx errors
 
 ### Ongoing: Submit Frequently
