@@ -223,29 +223,7 @@ async function executeNextBatch(){
     }
 }
 
-let autoAdvancing=false;
-async function autoAdvanceBatch(labeled,total,m,sec,avg){
-    if(autoAdvancing)return;
-    autoAdvancing=true;
-    showToast('Batch done! Sending to CV agent...');
-    const r=await api('/api/complete-batch',{method:'POST',body:'{}'});
-    if(!r||!r.ok){autoAdvancing=false;document.getElementById('done-overlay').classList.remove('hidden');return}
-    showToast(labeled+'/'+total+' labeled. Sent to CV agent.');
-    if(r.next_batch){
-        const lr=await api('/api/load-next-batch',{method:'POST',body:JSON.stringify({folder:r.next_batch})});
-        if(lr&&lr.ok){
-            showToast('Next batch: '+lr.total+' images');
-            sessionSeconds=0;sessionStart=Date.now();
-            autoAdvancing=false;
-            loadNext();
-            return;
-        }
-    }
-    // No next batch: show the done screen
-    autoAdvancing=false;
-    document.getElementById('final-stats').innerText=labeled+' labeled | '+m+'m'+sec+'s | '+avg+'s/img | No more batches';
-    document.getElementById('done-overlay').classList.remove('hidden');
-}
+
 
 async function loadBrowser(path){
     const r=await api('/api/list-dir?path='+encodeURIComponent(path));if(!r)return;
@@ -321,8 +299,7 @@ async function updateProgress(){
         const m=Math.floor(sessionSeconds/60),sec=sessionSeconds%60;
         const avg=s.labeled>0?(sessionSeconds/s.labeled).toFixed(1):'-';
         document.getElementById('final-stats').innerText=s.labeled+' labeled | '+m+'m'+sec+'s | '+avg+'s/img';
-        // Auto-advance: complete batch and load next if available
-        autoAdvanceBatch(s.labeled,s.total,m,sec,avg);
+        document.getElementById('done-overlay').classList.remove('hidden');
     }
 }
 
