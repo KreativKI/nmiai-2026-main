@@ -13,16 +13,19 @@ Sunday **15:00 CET** (UTC+1). `OSLO = timezone(timedelta(hours=1))`
 - Missing rounds = 0 points forever
 
 ## Boris Workflow (mandatory, every code change, NO EXCEPTIONS)
-```
-EXPLORE: Read codebase, understand current state
-PLAN:    Write plan in plan.md before coding
-CODE:    Implement the change
-REVIEW:  Run feature-dev:code-reviewer agent (fresh context)
-SIMPLIFY: Run code-simplifier:code-simplifier agent (fresh context)
-VALIDATE: Run build-validator agent (fresh context)
-COMMIT:  Only after all three agents pass
-```
-Steps 4-6 are SEPARATE AGENTS with fresh context each. Run SEQUENTIALLY: fix review bugs before simplify, simplify before validate.
+
+The full pipeline, every step sequential, one at a time:
+
+1. **EXPLORE** — launch `feature-dev:code-explorer` agent (fresh context)
+2. **PLAN** — plan mode. Write plan in plan.md before coding.
+3. **CODE** — implement the approved plan
+4. **REVIEW** — launch `feature-dev:code-reviewer` agent (fresh context). Fix any bugs found BEFORE moving on.
+5. **SIMPLIFY** — launch `code-simplifier:code-simplifier` agent (fresh context). Apply changes BEFORE moving on.
+6. **VALIDATE** — launch `build-validator` agent (fresh context). Must pass BEFORE committing.
+7. **COMMIT** — only after all three agents pass sequentially.
+
+**NEVER run steps 4, 5, 6 in parallel.** They are SEQUENTIAL: review first, fix issues, THEN simplify, THEN validate. Each is a separate Agent call with its own fresh context.
+There is no "boris-workflow" subagent. Boris is a workflow using separate tools.
 "Too small to bother" and "time pressure" are not valid reasons to skip.
 
 ---
