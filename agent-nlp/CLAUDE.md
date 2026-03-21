@@ -128,18 +128,19 @@ No exceptions. Every iteration: **Plan -> Build -> Review -> Commit.**
 ---
 
 ## Boris Workflow (mandatory, every change)
-Each step is a SEPARATE agent with fresh context. Never use boris-workflow subagent.
+Each review step is a SEPARATE Agent call with its own fresh context. This is the entire point.
 ```
 EXPLORE: Read files, logs, scores. Identify the bottleneck.
 PLAN:    Write down: what change, why, expected impact.
 CODE:    Implement the change.
-REVIEW:  Launch feature-dev:code-reviewer agent (fresh session, independent review).
-SIMPLIFY: Launch pr-review-toolkit:code-simplifier agent (fresh session).
-VALIDATE: Launch build-validator agent (syntax, health, deps).
+REVIEW:  Agent(subagent_type="feature-dev:code-reviewer") -- fresh context
+SIMPLIFY: Agent(subagent_type="code-simplifier:code-simplifier") -- fresh context
+VALIDATE: Agent(subagent_type="build-validator") -- fresh context
 COMMIT:  git commit with description of changes.
 ```
+Never bundle review/simplify/validate into one agent or one session.
+Never use boris-workflow subagent (it defeats the purpose).
 No exceptions. "Quick fix" and "just try this" still follow the loop.
-The point: each review agent judges the code independently with fresh eyes.
 
 ---
 
