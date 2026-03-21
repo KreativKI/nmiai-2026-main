@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CV Labeler - NM i AI</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* Top bar */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: #16213e;
+    border-bottom: 2px solid #0f3460;
+    flex-shrink: 0;
+  }
+  .product-name {
+    font-size: 22px;
+    font-weight: 700;
+    color: #e94560;
+  }
+  .progress-info {
+    font-size: 14px;
+    color: #a0a0a0;
+  }
+  .progress-info span { color: #53d769; font-weight: 600; }
+
+  /* Canvas area */
+  .canvas-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    padding: 8px;
+  }
+  canvas {
+    cursor: crosshair;
+    max-width: 100%;
+    max-height: 100%;
+    border: 2px solid #0f3460;
+    border-radius: 4px;
+  }
+
+  /* Bottom bar */
+  .bottombar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: #16213e;
+    border-top: 2px solid #0f3460;
+    flex-shrink: 0;
+  }
+  .controls {
+    display: flex;
+    gap: 8px;
+  }
+  .btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-save {
+    background: #53d769;
+    color: #1a1a2e;
+  }
+  .btn-save:hover { background: #3fc254; }
+  .btn-skip {
+    background: #ff6b6b;
+    color: #fff;
+  }
+  .btn-skip:hover { background: #e05555; }
+  .btn-reset {
+    background: #4a90d9;
+    color: #fff;
+  }
+  .btn-reset:hover { background: #3a7bc8; }
+
+  .shortcuts {
+    font-size: 12px;
+    color: #888;
+  }
+  .shortcuts kbd {
+    background: #333;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+  }
+
+  /* Progress bar */
+  .progress-bar-wrap {
+    width: 200px;
+    height: 8px;
+    background: #333;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-left: 12px;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: #53d769;
+    transition: width 0.3s;
+  }
+
+  /* Done overlay */
+  .done-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    z-index: 100;
+  }
+  .done-overlay h1 { font-size: 48px; color: #53d769; margin-bottom: 16px; }
+  .done-overlay p { font-size: 18px; color: #ccc; }
+
+  /* Bbox info */
+  .bbox-info {
+    font-size: 13px;
+    color: #aaa;
+    font-family: monospace;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="product-name" id="productName">Loading...</div>
+    <div class="bbox-info" id="bboxInfo"></div>
+  </div>
+  <div style="display:flex;align-items:center;">
+    <div class="progress-info" id="progressInfo">--</div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progressBar" style="width:0%"></div>
+    </div>
+  </div>
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="canvas"></canvas>
+</div>
+
+<div class="bottombar">
+  <div class="controls">
+    <button class="btn btn-save" id="btnSave" onclick="saveLabel()">Save &amp; Next (Enter)</button>
+    <button class="btn btn-skip" onclick="skipImage()">Skip (S)</button>
+    <button class="btn btn-reset" onclick="resetBox()">Reset Box (R)</button>
+  </div>
+  <div class="shortcuts">
+    <kbd>Enter</kbd> / <kbd>&rarr;</kbd> Save &amp; Next &nbsp;
+    <kbd>S</kbd> Skip &nbsp;
+    <kbd>R</kbd> Reset box &nbsp;
+    <kbd>+</kbd> / <kbd>-</kbd> Resize box
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let currentImage = null;    // {filename, category_id, product_name, image_url}
+let img = new Image();
+let imgLoaded = false;
+
+// Bounding box in normalized coords (0-1)
+let bbox = { cx: 0.5, cy: 0.5, w: 0.5, h: 0.5 };
+
+// Drag state
+let dragging = false;
+let dragType = null;        // 'move', 'draw', 'resize-tl', 'resize-tr', 'resize-bl', 'resize-br', 'resize-t', 'resize-b', 'resize-l', 'resize-r'
+let dragStart = { x: 0, y: 0 };
+let bboxAtDragStart = null;
+
+// Image display geometry
+let imgRect = { x: 0, y: 0, w: 0, h: 0 };
+
+// ------ API ------
+async function fetchJSON(url, opts) {
+  const res = await fetch(url, opts);
+  return res.json();
+}
+
+async function loadNext() {
+  const data = await fetchJSON('/api/next');
+  if (data.done || !data.filename) {
+    showDone();
+    return;
+  }
+  currentImage = data;
+  document.getElementById('productName').textContent = data.product_name;
+  loadImage(data.image_url);
+  updateProgress();
+}
+
+async function saveLabel() {
+  if (!currentImage) return;
+  await fetchJSON('/api/label', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filename: currentImage.filename,
+      category_id: currentImage.category_id,
+      bbox: { cx: bbox.cx, cy: bbox.cy, w: bbox.w, h: bbox.h },
+    }),
+  });
+  loadNext();
+}
+
+async function skipImage() {
+  if (!currentImage) return;
+  await fetchJSON('/api/skip', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: currentImage.filename }),
+  });
+  loadNext();
+}
+
+async function updateProgress() {
+  const data = await fetchJSON('/api/status');
+  const pct = data.total > 0 ? ((data.labeled + data.skipped) / data.total * 100) : 0;
+  document.getElementById('progressInfo').innerHTML =
+    `<span>${data.labeled}</span> labeled, ${data.skipped} skipped, ${data.remaining} remaining (${data.total} total)`;
+  document.getElementById('progressBar').style.width = pct + '%';
+}
+
+function showDone() {
+  document.body.innerHTML = `
+    <div class="done-overlay">
+      <h1>All Done</h1>
+      <p>All images have been labeled or skipped.</p>
+    </div>`;
+}
+
+// ------ Image + Canvas ------
+function loadImage(url) {
+  imgLoaded = false;
+  img = new Image();
+  img.onload = () => {
+    imgLoaded = true;
+    // Default box: centered, covering ~50% of image
+    bbox = { cx: 0.5, cy: 0.5, w: 0.5, h: 0.5 };
+    resizeCanvas();
+    draw();
+  };
+  img.src = url;
+}
+
+function resizeCanvas() {
+  if (!imgLoaded) return;
+  const wrap = canvas.parentElement;
+  const maxW = wrap.clientWidth - 16;
+  const maxH = wrap.clientHeight - 16;
+  const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight, 1);
+  const dw = Math.round(img.naturalWidth * scale);
+  const dh = Math.round(img.naturalHeight * scale);
+  canvas.width = dw;
+  canvas.height = dh;
+  imgRect = { x: 0, y: 0, w: dw, h: dh };
+}
+
+function draw() {
+  if (!imgLoaded) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  // Draw bbox
+  const bx = (bbox.cx - bbox.w / 2) * canvas.width;
+  const by = (bbox.cy - bbox.h / 2) * canvas.height;
+  const bw = bbox.w * canvas.width;
+  const bh = bbox.h * canvas.height;
+
+  // Semi-transparent overlay outside box
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  // Top
+  ctx.fillRect(0, 0, canvas.width, by);
+  // Bottom
+  ctx.fillRect(0, by + bh, canvas.width, canvas.height - by - bh);
+  // Left
+  ctx.fillRect(0, by, bx, bh);
+  // Right
+  ctx.fillRect(bx + bw, by, canvas.width - bx - bw, bh);
+
+  // Box outline
+  ctx.strokeStyle = '#53d769';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(bx, by, bw, bh);
+
+  // Corner handles
+  const hs = 8; // handle size
+  ctx.fillStyle = '#53d769';
+  const corners = [
+    [bx, by], [bx + bw, by],
+    [bx, by + bh], [bx + bw, by + bh],
+  ];
+  for (const [cx, cy] of corners) {
+    ctx.fillRect(cx - hs/2, cy - hs/2, hs, hs);
+  }
+
+  // Edge midpoint handles
+  ctx.fillStyle = '#4a90d9';
+  const edges = [
+    [bx + bw/2, by],          // top
+    [bx + bw/2, by + bh],     // bottom
+    [bx, by + bh/2],          // left
+    [bx + bw, by + bh/2],     // right
+  ];
+  for (const [cx, cy] of edges) {
+    ctx.fillRect(cx - hs/2, cy - hs/2, hs, hs);
+  }
+
+  // Crosshair at center
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  const ccx = bx + bw/2;
+  const ccy = by + bh/2;
+  ctx.beginPath();
+  ctx.moveTo(ccx, by); ctx.lineTo(ccx, by + bh);
+  ctx.moveTo(bx, ccy); ctx.lineTo(bx + bw, ccy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Update info
+  document.getElementById('bboxInfo').textContent =
+    `[${bbox.cx.toFixed(3)}, ${bbox.cy.toFixed(3)}, ${bbox.w.toFixed(3)}, ${bbox.h.toFixed(3)}]`;
+}
+
+// ------ Mouse interaction ------
+function canvasToNorm(e) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) / rect.width,
+    y: (e.clientY - rect.top) / rect.height,
+  };
+}
+
+function getHandleAt(nx, ny) {
+  const thresh = 12 / canvas.width; // pixel tolerance in normalized coords
+  const x1 = bbox.cx - bbox.w / 2;
+  const y1 = bbox.cy - bbox.h / 2;
+  const x2 = bbox.cx + bbox.w / 2;
+  const y2 = bbox.cy + bbox.h / 2;
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+
+  const near = (a, b, c, d) => Math.abs(a - c) < thresh && Math.abs(b - d) < thresh;
+
+  // Corners
+  if (near(nx, ny, x1, y1)) return 'resize-tl';
+  if (near(nx, ny, x2, y1)) return 'resize-tr';
+  if (near(nx, ny, x1, y2)) return 'resize-bl';
+  if (near(nx, ny, x2, y2)) return 'resize-br';
+
+  // Edges
+  if (near(nx, ny, mx, y1)) return 'resize-t';
+  if (near(nx, ny, mx, y2)) return 'resize-b';
+  if (near(nx, ny, x1, my)) return 'resize-l';
+  if (near(nx, ny, x2, my)) return 'resize-r';
+
+  // Inside box = move
+  if (nx >= x1 && nx <= x2 && ny >= y1 && ny <= y2) return 'move';
+
+  // Outside = draw new box
+  return 'draw';
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  if (!imgLoaded) return;
+  const pos = canvasToNorm(e);
+  dragType = getHandleAt(pos.x, pos.y);
+  dragging = true;
+  dragStart = pos;
+  bboxAtDragStart = { ...bbox };
+
+  if (dragType === 'draw') {
+    bbox.cx = pos.x;
+    bbox.cy = pos.y;
+    bbox.w = 0;
+    bbox.h = 0;
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!imgLoaded) return;
+  const pos = canvasToNorm(e);
+
+  // Update cursor
+  if (!dragging) {
+    const handle = getHandleAt(pos.x, pos.y);
+    const cursors = {
+      'resize-tl': 'nwse-resize', 'resize-br': 'nwse-resize',
+      'resize-tr': 'nesw-resize', 'resize-bl': 'nesw-resize',
+      'resize-t': 'ns-resize', 'resize-b': 'ns-resize',
+      'resize-l': 'ew-resize', 'resize-r': 'ew-resize',
+      'move': 'grab', 'draw': 'crosshair',
+    };
+    canvas.style.cursor = cursors[handle] || 'crosshair';
+    return;
+  }
+
+  const dx = pos.x - dragStart.x;
+  const dy = pos.y - dragStart.y;
+  const b = bboxAtDragStart;
+
+  if (dragType === 'move') {
+    bbox.cx = clamp(b.cx + dx, b.w/2, 1 - b.w/2);
+    bbox.cy = clamp(b.cy + dy, b.h/2, 1 - b.h/2);
+  } else if (dragType === 'draw') {
+    const x1 = dragStart.x;
+    const y1 = dragStart.y;
+    const x2 = pos.x;
+    const y2 = pos.y;
+    bbox.cx = clamp((x1 + x2) / 2, 0, 1);
+    bbox.cy = clamp((y1 + y2) / 2, 0, 1);
+    bbox.w = clamp(Math.abs(x2 - x1), 0.01, 1);
+    bbox.h = clamp(Math.abs(y2 - y1), 0.01, 1);
+  } else {
+    // Resize handles
+    let x1 = b.cx - b.w / 2;
+    let y1 = b.cy - b.h / 2;
+    let x2 = b.cx + b.w / 2;
+    let y2 = b.cy + b.h / 2;
+
+    if (dragType.includes('l')) x1 = clamp(x1 + dx, 0, x2 - 0.01);
+    if (dragType.includes('r')) x2 = clamp(x2 + dx, x1 + 0.01, 1);
+    if (dragType.includes('t')) y1 = clamp(y1 + dy, 0, y2 - 0.01);
+    if (dragType.includes('b')) y2 = clamp(y2 + dy, y1 + 0.01, 1);
+
+    bbox.cx = (x1 + x2) / 2;
+    bbox.cy = (y1 + y2) / 2;
+    bbox.w = x2 - x1;
+    bbox.h = y2 - y1;
+  }
+
+  draw();
+});
+
+window.addEventListener('mouseup', () => {
+  dragging = false;
+  dragType = null;
+});
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+// ------ Keyboard shortcuts ------
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === 'ArrowRight') {
+    e.preventDefault();
+    saveLabel();
+  } else if (e.key === 's' || e.key === 'S') {
+    e.preventDefault();
+    skipImage();
+  } else if (e.key === 'r' || e.key === 'R') {
+    e.preventDefault();
+    resetBox();
+  } else if (e.key === '+' || e.key === '=') {
+    e.preventDefault();
+    resizeBoxBy(0.02);
+  } else if (e.key === '-' || e.key === '_') {
+    e.preventDefault();
+    resizeBoxBy(-0.02);
+  }
+});
+
+function resetBox() {
+  bbox = { cx: 0.5, cy: 0.5, w: 0.5, h: 0.5 };
+  draw();
+}
+
+function resizeBoxBy(delta) {
+  bbox.w = clamp(bbox.w + delta, 0.02, 1);
+  bbox.h = clamp(bbox.h + delta, 0.02, 1);
+  // Keep within bounds
+  bbox.cx = clamp(bbox.cx, bbox.w/2, 1 - bbox.w/2);
+  bbox.cy = clamp(bbox.cy, bbox.h/2, 1 - bbox.h/2);
+  draw();
+}
+
+// ------ Window resize ------
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  draw();
+});
+
+// ------ Init ------
+loadNext();
+</script>
+</body>
+</html>
