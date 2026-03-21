@@ -18,24 +18,20 @@ Usage:
 import argparse
 import json
 from pathlib import Path
-from datetime import datetime, timezone
 
 import numpy as np
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 from backtest import (
-    load_cached_rounds, TERRAIN_TO_CLASS, STATIC_TERRAIN, NUM_CLASSES, PROB_FLOOR,
+    load_cached_rounds, log, TERRAIN_TO_CLASS, STATIC_TERRAIN, NUM_CLASSES,
 )
 from regime_model import classify_round
 
 DATA_DIR = Path(__file__).parent / "data"
 REPLAY_DIR = DATA_DIR / "replays"
 
-
-def log(msg):
-    ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
-    print(f"[{ts}] {msg}")
+OCEAN_RAW = {10, 11}
 
 
 def get_settlement_at(settlements, x, y):
@@ -46,24 +42,31 @@ def get_settlement_at(settlements, x, y):
     return None
 
 
-def extract_cell_features(grid, y, x, h, w, replay_data=None, year=0):
+def extract_cell_features(grid, y, x, h, w, replay_data=None):
     """Extract full feature vector for one cell.
 
     Returns dict of named features (makes it easy to add/remove features).
     """
     my_cls = TERRAIN_TO_CLASS.get(int(grid[y][x]), 0)
 
-    # 8-neighbor counts
+    # 8-neighbor scan: class counts, ocean adjacency, and land adjacency in one pass
     n_counts = [0] * NUM_CLASSES
+    ocean_adj = 0
+    has_land = False
     for dy in (-1, 0, 1):
         for dx in (-1, 0, 1):
             if dy == 0 and dx == 0:
                 continue
             ny, nx = y + dy, x + dx
             if 0 <= ny < h and 0 <= nx < w:
-                n_counts[TERRAIN_TO_CLASS.get(int(grid[ny][nx]), 0)] += 1
+                raw = int(grid[ny][nx])
+                n_counts[TERRAIN_TO_CLASS.get(raw, 0)] += 1
+                if raw in OCEAN_RAW:
+                    ocean_adj += 1
+                else:
+                    has_land = True
 
-    # Distance to nearest settlement
+    # Extended neighborhood (radius 5): settlement distance, settlement/forest density
     min_dist = 99
     settle_r3 = 0
     forest_r2 = 0
@@ -80,22 +83,7 @@ def extract_cell_features(grid, y, x, h, w, replay_data=None, year=0):
                 if ncls == 4 and d <= 2:
                     forest_r2 += 1
 
-    # Ocean adjacency (terrain codes 10 and 11 are both ocean/empty)
-    OCEAN_RAW = {10, 11}
-    ocean_adj = sum(
-        1 for dy in (-1, 0, 1) for dx in (-1, 0, 1)
-        if (dy, dx) != (0, 0) and 0 <= y+dy < h and 0 <= x+dx < w
-        and int(grid[y+dy][x+dx]) in OCEAN_RAW
-    )
-
-    # Edge distance
     edge_dist = min(y, x, h - 1 - y, w - 1 - x)
-
-    # Is on coastline (has both ocean and non-ocean neighbors)
-    has_land = any(
-        0 <= y+dy < h and 0 <= x+dx < w and int(grid[y+dy][x+dx]) not in OCEAN_RAW
-        for dy in (-1, 0, 1) for dx in (-1, 0, 1) if (dy, dx) != (0, 0)
-    )
     is_coastal = 1 if ocean_adj > 0 and has_land else 0
 
     features = {
@@ -114,21 +102,39 @@ def extract_cell_features(grid, y, x, h, w, replay_data=None, year=0):
         "is_coastal": is_coastal,
     }
 
-    # Settlement stats from replay (year 0 frame)
-    food, pop, wealth, defense, has_port, alive = 0.0, 0.0, 0.0, 0.0, 0, 1
+    # Settlement stats and temporal features from replay
+    food, pop, wealth, defense, has_port = 0.0, 0.0, 0.0, 0.0, 0
     owner_id = -1
+    frames = replay_data.get("frames") if replay_data else None
 
-    if replay_data and "frames" in replay_data:
-        frame0 = replay_data["frames"][0]
-        sett = get_settlement_at(frame0.get("settlements", []), x, y)
+    if frames:
+        sett = get_settlement_at(frames[0].get("settlements", []), x, y)
         if sett:
             food = sett.get("food", 0.0)
             pop = sett.get("population", 0.0)
             wealth = sett.get("wealth", 0.0)
             defense = sett.get("defense", 0.0)
             has_port = 1 if sett.get("has_port", False) else 0
-            alive = 1 if sett.get("alive", True) else 0
             owner_id = sett.get("owner_id", -1)
+
+        # Temporal snapshots at year 10 and 25
+        for yr in (10, 25):
+            if len(frames) > yr:
+                frame = frames[yr]
+                cls_yr = TERRAIN_TO_CLASS.get(int(frame["grid"][y][x]), 0)
+                features[f"terrain_y{yr}"] = cls_yr
+                features[f"is_settle_y{yr}"] = 1 if cls_yr in (1, 2) else 0
+                features[f"n_settle_y{yr}"] = sum(
+                    1 for dy in (-1, 0, 1) for dx in (-1, 0, 1)
+                    if (dy, dx) != (0, 0) and 0 <= y+dy < h and 0 <= x+dx < w
+                    and TERRAIN_TO_CLASS.get(int(frame["grid"][y+dy][x+dx]), 0) in (1, 2)
+                )
+
+        # Settlement stats at year 10
+        if len(frames) > 10:
+            sett10 = get_settlement_at(frames[10].get("settlements", []), x, y)
+            features["food_y10"] = sett10.get("food", 0.0) if sett10 else 0.0
+            features["pop_y10"] = sett10.get("population", 0.0) if sett10 else 0.0
 
     features["food_y0"] = food
     features["pop_y0"] = pop
@@ -136,46 +142,6 @@ def extract_cell_features(grid, y, x, h, w, replay_data=None, year=0):
     features["defense_y0"] = defense
     features["has_port"] = has_port
     features["owner_id"] = owner_id
-
-    # Temporal features from replay intermediate frames
-    if replay_data and "frames" in replay_data:
-        frames = replay_data["frames"]
-
-        # What's this cell at year 10?
-        if len(frames) > 10:
-            cls_y10 = TERRAIN_TO_CLASS.get(int(frames[10]["grid"][y][x]), 0)
-            features["terrain_y10"] = cls_y10
-            # Is it still a settlement at year 10?
-            features["is_settle_y10"] = 1 if cls_y10 in (1, 2) else 0
-
-            # Settlement stats at year 10
-            sett10 = get_settlement_at(frames[10].get("settlements", []), x, y)
-            features["food_y10"] = sett10.get("food", 0.0) if sett10 else 0.0
-            features["pop_y10"] = sett10.get("population", 0.0) if sett10 else 0.0
-
-        # What's this cell at year 25?
-        if len(frames) > 25:
-            cls_y25 = TERRAIN_TO_CLASS.get(int(frames[25]["grid"][y][x]), 0)
-            features["terrain_y25"] = cls_y25
-            features["is_settle_y25"] = 1 if cls_y25 in (1, 2) else 0
-
-        # Neighborhood settlement count at year 10 and 25
-        if len(frames) > 10:
-            g10 = frames[10]["grid"]
-            features["n_settle_y10"] = sum(
-                1 for dy in (-1, 0, 1) for dx in (-1, 0, 1)
-                if (dy, dx) != (0, 0) and 0 <= y+dy < h and 0 <= x+dx < w
-                and TERRAIN_TO_CLASS.get(int(g10[y+dy][x+dx]), 0) in (1, 2)
-            )
-        if len(frames) > 25:
-            g25 = frames[25]["grid"]
-            features["n_settle_y25"] = sum(
-                1 for dy in (-1, 0, 1) for dx in (-1, 0, 1)
-                if (dy, dx) != (0, 0) and 0 <= y+dy < h and 0 <= x+dx < w
-                and TERRAIN_TO_CLASS.get(int(g25[y+dy][x+dx]), 0) in (1, 2)
-            )
-    else:
-        pass  # Defaults applied below
 
     # Ensure ALL temporal features exist (handles no replay AND partial replay)
     temporal_defaults = {
@@ -235,11 +201,15 @@ def build_master_dataset(rounds_data=None, replay_dir=REPLAY_DIR, exclude_round=
             si = int(si_str)
             ig = rd["initial_states"][si]["grid"]
 
-            # Count global features per seed (each seed has different initial grid)
-            total_settle = sum(1 for y in range(h) for x in range(w)
-                              if TERRAIN_TO_CLASS.get(int(ig[y][x]), 0) == 1)
-            total_ports = sum(1 for y in range(h) for x in range(w)
-                             if TERRAIN_TO_CLASS.get(int(ig[y][x]), 0) == 2)
+            # Count global terrain features (single pass over grid)
+            total_settle, total_ports = 0, 0
+            for row in ig:
+                for cell in row:
+                    cls = TERRAIN_TO_CLASS.get(int(cell), 0)
+                    if cls == 1:
+                        total_settle += 1
+                    elif cls == 2:
+                        total_ports += 1
             gt = np.array(sd["ground_truth"])
 
             # Load replay if available
@@ -259,10 +229,9 @@ def build_master_dataset(rounds_data=None, replay_dir=REPLAY_DIR, exclude_round=
 
                     feats = extract_cell_features(ig, y, x, h, w, replay_data)
 
-                    # Add round-level features
-                    feats["regime_death"] = 1 if regime == "death" else 0
-                    feats["regime_growth"] = 1 if regime == "growth" else 0
-                    feats["regime_stable"] = 1 if regime == "stable" else 0
+                    # Regime one-hot encoding
+                    for r in ("death", "growth", "stable"):
+                        feats[f"regime_{r}"] = 1 if regime == r else 0
                     feats["total_settlements"] = total_settle
                     feats["total_ports"] = total_ports
 
@@ -286,13 +255,13 @@ def main():
 
     X, Y, meta = build_master_dataset()
 
-    np.savez_compressed(args.output, X=X, Y=Y)
-    # Save feature names for reference
-    with open(str(args.output).replace(".npz", "_features.json"), "w") as f:
+    out = Path(args.output)
+    stem = str(out).replace(".npz", "")
+    np.savez_compressed(out, X=X, Y=Y)
+    with open(f"{stem}_features.json", "w") as f:
         json.dump(FEATURE_NAMES, f, indent=2)
-    # Save metadata
-    with open(str(args.output).replace(".npz", "_meta.json"), "w") as f:
-        json.dump(meta[:10], f, indent=2)  # Just first 10 for reference
+    with open(f"{stem}_meta.json", "w") as f:
+        json.dump(meta[:10], f, indent=2)
 
     log(f"Saved to {args.output}")
     log(f"Features: {len(FEATURE_NAMES)}")

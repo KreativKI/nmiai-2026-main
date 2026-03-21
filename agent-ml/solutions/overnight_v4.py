@@ -16,7 +16,6 @@ Usage:
 
 import argparse
 import json
-import os
 import time
 import traceback
 from pathlib import Path
@@ -29,17 +28,15 @@ import lightgbm as lgb
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 from backtest import (
-    load_cached_rounds, score_prediction, get_session, cache_round,
+    load_cached_rounds, get_session, cache_round,
     TERRAIN_TO_CLASS, STATIC_TERRAIN, NUM_CLASSES, PROB_FLOOR, BASE,
 )
 from build_dataset import (
     build_master_dataset, FEATURE_NAMES, extract_cell_features,
 )
-from regime_model import classify_round
 
 DATA_DIR = Path(__file__).parent / "data"
 REPLAY_DIR = DATA_DIR / "replays"
-GT_DIR = DATA_DIR / "ground_truth_cache"
 STATE_FILE = Path(__file__).parent.parent / "overnight_v4_state.json"
 LOG_FILE = Path.home() / "overnight_v4.log"
 PARAMS_FILE = DATA_DIR / "brain_v4_params.json"
@@ -65,7 +62,7 @@ def log(msg):
         print(line, file=sys.stderr, flush=True)
 
 
-# ── State ──
+# -- State --
 
 def load_state():
     if STATE_FILE.exists():
@@ -89,7 +86,17 @@ def load_lgb_params():
     return DEFAULT_PARAMS.copy()
 
 
-# ── Observation ──
+# -- Observation --
+
+def accumulate_obs(obs, obs_counts, obs_total):
+    """Accumulate a viewport observation into counts and totals."""
+    vp = obs["viewport"]
+    for dy, row in enumerate(obs["grid"]):
+        for dx, terrain in enumerate(row):
+            ya, xa = vp["y"] + dy, vp["x"] + dx
+            obs_counts[ya, xa, TERRAIN_TO_CLASS.get(terrain, 0)] += 1
+            obs_total[ya, xa] += 1
+
 
 def query_viewport(session, round_id, seed_idx, x, y, w=15, h=15):
     resp = session.post(f"{BASE}/astar-island/simulate", json={
@@ -101,6 +108,17 @@ def query_viewport(session, round_id, seed_idx, x, y, w=15, h=15):
     return resp.json()
 
 
+def classify_regime(alive, checked):
+    """Classify round regime from smell test survival ratio."""
+    survival = alive / max(1, checked)
+    if survival < 0.15:
+        return "death"
+    elif survival > 0.60:
+        return "growth"
+    else:
+        return "stable"
+
+
 def observe_round(session, round_id, detail, round_num, deep_seed):
     """Smell test + deep stack one seed. Returns (obs_counts, obs_total, regime)."""
     h, w = detail["map_height"], detail["map_width"]
@@ -109,20 +127,17 @@ def observe_round(session, round_id, detail, round_num, deep_seed):
     obs_counts = np.zeros((h, w, NUM_CLASSES))
     obs_total = np.zeros((h, w))
 
-    # Viewports tiling
+    # Viewport tiling
     viewports = []
     for vy in range(0, h, 15):
         for vx in range(0, w, 15):
             viewports.append((vx, vy, min(15, w - vx), min(15, h - vy)))
 
-    # Smell test: 5 queries on settlement cells
+    # Smell test: up to 5 queries on settlement/port cells
     settle_cells = [(y, x) for y in range(h) for x in range(w)
                     if TERRAIN_TO_CLASS.get(int(ig[y][x]), 0) in (1, 2)]
-    if len(settle_cells) > 5:
-        indices = np.linspace(0, len(settle_cells) - 1, 5, dtype=int)
-        test_cells = [settle_cells[i] for i in indices]
-    else:
-        test_cells = settle_cells[:5]
+    sample_indices = np.linspace(0, max(0, len(settle_cells) - 1), min(5, len(settle_cells)), dtype=int)
+    test_cells = [settle_cells[i] for i in sample_indices]
 
     test_vps = []
     used = set()
@@ -136,11 +151,7 @@ def observe_round(session, round_id, detail, round_num, deep_seed):
     for vx, vy, vw, vh in test_vps[:5]:
         try:
             obs = query_viewport(session, round_id, deep_seed, vx, vy, vw, vh)
-            for dy, row in enumerate(obs["grid"]):
-                for dx, terrain in enumerate(row):
-                    ya, xa = obs["viewport"]["y"] + dy, obs["viewport"]["x"] + dx
-                    obs_counts[ya, xa, TERRAIN_TO_CLASS.get(terrain, 0)] += 1
-                    obs_total[ya, xa] += 1
+            accumulate_obs(obs, obs_counts, obs_total)
         except Exception as e:
             log(f"  Smell query failed: {e}")
             break
@@ -149,12 +160,11 @@ def observe_round(session, round_id, detail, round_num, deep_seed):
                 and (obs_counts[sy, sx, 1] + obs_counts[sy, sx, 2]) > 0)
     dead = sum(1 for sy, sx in test_cells if obs_total[sy, sx] > 0
                and (obs_counts[sy, sx, 1] + obs_counts[sy, sx, 2]) == 0)
-    checked = alive + dead
-    survival = alive / max(1, checked)
-    regime = "death" if survival < 0.15 else ("growth" if survival > 0.60 else "stable")
-    log(f"  Smell: {alive}/{checked} alive = {regime}")
+    regime = classify_regime(alive, alive + dead)
+    log(f"  Smell: {alive}/{alive + dead} alive = {regime}")
 
     # Deep stack: all remaining queries on deep_seed
+    budget = {"queries_max": 50, "queries_used": 5}
     for _retry in range(3):
         try:
             resp = session.get(f"{BASE}/astar-island/budget")
@@ -164,10 +174,9 @@ def observe_round(session, round_id, detail, round_num, deep_seed):
         except Exception as e:
             log(f"  Budget check failed (attempt {_retry+1}): {e}")
             time.sleep(2)
-            budget = {"queries_max": 50, "queries_used": 5}  # Conservative fallback
     rem = budget["queries_max"] - budget["queries_used"]
 
-    # Pass 1: fill gaps
+    # Pass 1: fill gaps (cells with no observations yet)
     for vx, vy, vw, vh in viewports:
         if rem <= 0:
             break
@@ -175,49 +184,53 @@ def observe_round(session, round_id, detail, round_num, deep_seed):
             continue
         try:
             obs = query_viewport(session, round_id, deep_seed, vx, vy, vw, vh)
-            for dy, row in enumerate(obs["grid"]):
-                for dx, terrain in enumerate(row):
-                    ya, xa = obs["viewport"]["y"] + dy, obs["viewport"]["x"] + dx
-                    obs_counts[ya, xa, TERRAIN_TO_CLASS.get(terrain, 0)] += 1
-                    obs_total[ya, xa] += 1
+            accumulate_obs(obs, obs_counts, obs_total)
             rem -= 1
         except Exception:
             break
 
-    # Pass 2+: multi-sample
+    # Pass 2+: multi-sample (stack additional observations)
     while rem > 0:
-        qthis = 0
+        queries_this_pass = 0
         for vx, vy, vw, vh in viewports:
             if rem <= 0:
                 break
             try:
                 obs = query_viewport(session, round_id, deep_seed, vx, vy, vw, vh)
-                for dy, row in enumerate(obs["grid"]):
-                    for dx, terrain in enumerate(row):
-                        ya, xa = obs["viewport"]["y"] + dy, obs["viewport"]["x"] + dx
-                        obs_counts[ya, xa, TERRAIN_TO_CLASS.get(terrain, 0)] += 1
-                        obs_total[ya, xa] += 1
+                accumulate_obs(obs, obs_counts, obs_total)
                 rem -= 1
-                qthis += 1
+                queries_this_pass += 1
             except Exception as e:
                 log(f"  Deep stack query error: {e}")
                 time.sleep(1)
                 continue
-        if qthis == 0:
+        if queries_this_pass == 0:
             break
 
     avg_obs = obs_total[obs_total > 0].mean() if (obs_total > 0).any() else 0
     log(f"  Deep stack seed {deep_seed}: {(obs_total > 0).sum()}/1600 cells, "
         f"avg {avg_obs:.1f} obs/cell")
 
-    # Save observations
     np.save(DATA_DIR / f"obs_counts_r{round_num}_seed{deep_seed}_stacked.npy", obs_counts)
     np.save(DATA_DIR / f"obs_total_r{round_num}_seed{deep_seed}_stacked.npy", obs_total)
 
     return obs_counts, obs_total, regime
 
 
-# ── Prediction ──
+# -- Prediction --
+
+def count_terrain_classes(grid, h, w):
+    """Count settlements and ports in initial grid (single pass)."""
+    total_s, total_p = 0, 0
+    for y in range(h):
+        for x in range(w):
+            cls = TERRAIN_TO_CLASS.get(int(grid[y][x]), 0)
+            if cls == 1:
+                total_s += 1
+            elif cls == 2:
+                total_p += 1
+    return total_s, total_p
+
 
 def predict_and_submit(session, round_id, detail, round_num, deep_seed,
                        obs_counts, obs_total, regime):
@@ -225,14 +238,13 @@ def predict_and_submit(session, round_id, detail, round_num, deep_seed,
     h, w = detail["map_height"], detail["map_width"]
     seeds_count = detail["seeds_count"]
 
-    # Load churn params or defaults (includes alpha_dirichlet if churn found one)
     lgb_params = load_lgb_params()
-    alpha = lgb_params.pop("alpha_dirichlet", 20)  # Extract alpha before passing to LGB
+    alpha = lgb_params.pop("alpha_dirichlet", 20)
     lgb_params["objective"] = "regression"
     lgb_params["metric"] = "mse"
     lgb_params["verbose"] = -1
 
-    # Train V4 on master dataset (all cached rounds)
+    # Train one regressor per terrain class on master dataset
     rounds_data = load_cached_rounds()
     X, Y, _ = build_master_dataset(rounds_data)
     log(f"  Training: {X.shape[0]} rows, {X.shape[1]} features, "
@@ -244,41 +256,41 @@ def predict_and_submit(session, round_id, detail, round_num, deep_seed,
         m.fit(X, Y[:, cls])
         models[cls] = m
 
-    # Round-level features
-    ig0 = detail["initial_states"][0]["grid"]
-    total_s = sum(1 for y in range(h) for x in range(w)
-                  if TERRAIN_TO_CLASS.get(int(ig0[y][x]), 0) == 1)
-    total_p = sum(1 for y in range(h) for x in range(w)
-                  if TERRAIN_TO_CLASS.get(int(ig0[y][x]), 0) == 2)
+    # Round-level features (computed once from seed 0)
+    total_s, total_p = count_terrain_classes(detail["initial_states"][0]["grid"], h, w)
+
+    regime_flags = {
+        "regime_death": 1 if regime == "death" else 0,
+        "regime_growth": 1 if regime == "growth" else 0,
+        "regime_stable": 1 if regime == "stable" else 0,
+    }
 
     for seed_idx in range(seeds_count):
         ig = detail["initial_states"][seed_idx]["grid"]
 
-        # Extract 32 features per cell
+        # Extract features for dynamic cells
         cells, coords = [], []
         for y in range(h):
             for x in range(w):
                 if int(ig[y][x]) in STATIC_TERRAIN:
                     continue
                 fd = extract_cell_features(ig, y, x, h, w, replay_data=None)
-                fd["regime_death"] = 1 if regime == "death" else 0
-                fd["regime_growth"] = 1 if regime == "growth" else 0
-                fd["regime_stable"] = 1 if regime == "stable" else 0
+                fd.update(regime_flags)
                 fd["total_settlements"] = total_s
                 fd["total_ports"] = total_p
                 cells.append([fd.get(n, 0) for n in FEATURE_NAMES])
                 coords.append((y, x))
 
-        # Predict
+        # Predict dynamic cells
         pred = np.zeros((h, w, NUM_CLASSES))
         if cells:
             Xp = np.array(cells, dtype=np.float32)
+            coord_y = [c[0] for c in coords]
+            coord_x = [c[1] for c in coords]
             for cls in range(NUM_CLASSES):
-                preds = models[cls].predict(Xp)
-                for i, (y, x) in enumerate(coords):
-                    pred[y, x, cls] = preds[i]
+                pred[coord_y, coord_x, cls] = models[cls].predict(Xp)
 
-        # Static cells
+        # Static cells: near-certain prediction
         for y in range(h):
             for x in range(w):
                 if int(ig[y][x]) in STATIC_TERRAIN:
@@ -299,7 +311,7 @@ def predict_and_submit(session, round_id, detail, round_num, deep_seed,
         pred = np.maximum(pred, PROB_FLOOR)
         pred /= pred.sum(axis=-1, keepdims=True)
 
-        # Submit
+        # Submit with retry on rate limit
         conf = pred.max(axis=-1).mean()
         tag = "deep-stacked" if seed_idx == deep_seed else "model-only"
         for attempt in range(5):
@@ -320,7 +332,7 @@ def predict_and_submit(session, round_id, detail, round_num, deep_seed,
         time.sleep(0.5)
 
 
-# ── Post-Round Pipeline ──
+# -- Post-Round Pipeline --
 
 def post_round_pipeline(session, round_data, state):
     """After a round closes: cache GT, download replay, rebuild dataset, calibrate."""
@@ -376,15 +388,13 @@ def post_round_pipeline(session, round_data, state):
                 weighted = actual * rd.get("round_weight", 0) if actual else 0
                 log(f"  R{rn} SCORE: {actual} rank={rank} weighted={weighted:.1f}")
 
-                # Update calibration file
                 if actual and CAL_FILE.exists():
                     with open(CAL_FILE) as f:
                         cal = json.load(f)
-                    # Find the backtest estimate if we recorded one
                     cal["rounds"] = [r for r in cal.get("rounds", []) if r["round"] != rn]
                     cal["rounds"].append({
                         "round": rn, "actual": actual,
-                        "regime": "unknown",  # Will be filled when we have regime
+                        "regime": "unknown",
                     })
                     with open(CAL_FILE, "w") as f:
                         json.dump(cal, f, indent=2)
@@ -395,7 +405,15 @@ def post_round_pipeline(session, round_data, state):
     save_state(state)
 
 
-# ── Main Loop ──
+# -- Main Loop --
+
+def parse_closes_at(closes_at_str):
+    """Parse ISO timestamp string to timezone-aware datetime."""
+    closes = datetime.fromisoformat(closes_at_str.replace("Z", "+00:00"))
+    if closes.tzinfo is None:
+        closes = closes.replace(tzinfo=timezone.utc)
+    return closes
+
 
 def run_cycle(session, state):
     """One cycle: check rounds, submit, collect data."""
@@ -410,63 +428,49 @@ def run_cycle(session, state):
         rounds = resp.json()
     except Exception as e:
         log(f"  API error fetching rounds: {e}")
-        return True  # Retry next cycle
+        return True
 
     # Phase A: collect data from completed rounds
-    completed = [r for r in rounds if r["status"] == "completed"]
-    for r in completed:
-        rn = r["round_number"]
-        if rn not in state["cached_rounds"]:
+    for r in rounds:
+        if r["status"] == "completed" and r["round_number"] not in state["cached_rounds"]:
             try:
                 post_round_pipeline(session, r, state)
             except Exception as e:
-                log(f"  Pipeline R{rn} failed: {e}")
+                log(f"  Pipeline R{r['round_number']} failed: {e}")
 
     # Phase B: handle active round
-    active = None
-    for r in rounds:
-        if r["status"] == "active":
-            active = r
-            break
-
+    active = next((r for r in rounds if r["status"] == "active"), None)
     if active is None:
         log("No active round. Waiting...")
         return True
 
     round_id = active["id"]
     round_num = active["round_number"]
-    closes_str = active["closes_at"].replace("Z", "+00:00")
-    closes = datetime.fromisoformat(closes_str)
-    if closes.tzinfo is None:
-        closes = closes.replace(tzinfo=timezone.utc)
+    closes = parse_closes_at(active["closes_at"])
     remaining = (closes - now).total_seconds() / 60
 
     log(f"R{round_num} active, {remaining:.0f} min left, weight={active['round_weight']:.4f}")
 
     if round_num in state["submitted_rounds"]:
         # Already submitted: check for resubmit opportunity
-        if remaining > 30:
-            # Check if churn updated params
-            if PARAMS_FILE.exists():
-                mtime = PARAMS_FILE.stat().st_mtime
-                last_submit_time = state.get("last_submit_time", 0)
-                if mtime > last_submit_time:
-                    log(f"  Churn found new params, resubmitting...")
-                    detail = session.get(f"{BASE}/astar-island/rounds/{round_id}").json()
-                    deep_seed = (round_num + state.get("deep_seed_offset", 0)) % 5
+        if remaining > 30 and PARAMS_FILE.exists():
+            mtime = PARAMS_FILE.stat().st_mtime
+            if mtime > state.get("last_submit_time", 0):
+                log(f"  Churn found new params, resubmitting...")
+                detail = session.get(f"{BASE}/astar-island/rounds/{round_id}").json()
+                deep_seed = (round_num + state.get("deep_seed_offset", 0)) % 5
 
-                    # Load saved observations
-                    oc_path = DATA_DIR / f"obs_counts_r{round_num}_seed{deep_seed}_stacked.npy"
-                    ot_path = DATA_DIR / f"obs_total_r{round_num}_seed{deep_seed}_stacked.npy"
-                    if oc_path.exists() and ot_path.exists():
-                        oc = np.load(oc_path)
-                        ot = np.load(ot_path)
-                        regime = state.get(f"regime_r{round_num}", "stable")
-                        predict_and_submit(session, round_id, detail, round_num,
-                                           deep_seed, oc, ot, regime)
-                        state["last_submit_time"] = time.time()
-                        save_state(state)
-                        log(f"  R{round_num} RESUBMITTED with new churn params")
+                oc_path = DATA_DIR / f"obs_counts_r{round_num}_seed{deep_seed}_stacked.npy"
+                ot_path = DATA_DIR / f"obs_total_r{round_num}_seed{deep_seed}_stacked.npy"
+                if oc_path.exists() and ot_path.exists():
+                    oc = np.load(oc_path)
+                    ot = np.load(ot_path)
+                    regime = state.get(f"regime_r{round_num}", "stable")
+                    predict_and_submit(session, round_id, detail, round_num,
+                                       deep_seed, oc, ot, regime)
+                    state["last_submit_time"] = time.time()
+                    save_state(state)
+                    log(f"  R{round_num} RESUBMITTED with new churn params")
         else:
             log(f"  R{round_num} already submitted.")
         return True
@@ -475,7 +479,6 @@ def run_cycle(session, state):
     log(f"  NEW ROUND {round_num}!")
     detail = session.get(f"{BASE}/astar-island/rounds/{round_id}").json()
 
-    # Rotate deep stack seed
     deep_seed = (round_num + state.get("deep_seed_offset", 0)) % 5
     log(f"  Deep stack seed: {deep_seed}")
 
@@ -505,7 +508,7 @@ def main():
     state = load_state()
 
     log("=" * 60)
-    log("OVERNIGHT V4 — 32-FEATURE AUTONOMOUS")
+    log("OVERNIGHT V4 -- 32-FEATURE AUTONOMOUS")
     log(f"  Submitted: {state['submitted_rounds']}")
     log(f"  Cached: {state['cached_rounds']}")
     params = load_lgb_params()

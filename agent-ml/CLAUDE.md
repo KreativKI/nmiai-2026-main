@@ -9,10 +9,24 @@ Sunday **15:00 CET** (UTC+1). Norway is CET until March 29.
 `OSLO = timezone(timedelta(hours=1))`
 
 ## Autonomy
-- overnight_v3 handles rounds autonomously on GCP when enabled
-- JC may pause overnight_v3 and control queries manually
+- overnight_v4 handles rounds autonomously on GCP ml-brain VM
+- JC may pause overnight_v4 and control queries manually
 - Before every submission: floor probs at 0.01, renormalize, validate shape 40x40x6 x 5 seeds
 - Missing rounds = 0 points forever
+
+## Boris Workflow (mandatory, every code change, NO EXCEPTIONS)
+```
+EXPLORE: Read codebase, understand current state
+PLAN:    Write plan in plan.md before coding
+CODE:    Implement the change
+REVIEW:  Run feature-dev:code-reviewer agent (fresh context, background OK)
+SIMPLIFY: Run code-simplifier:code-simplifier agent (fresh context, background OK)
+VALIDATE: Run build-validator agent (fresh context, background OK)
+COMMIT:  Only after all three agents pass
+```
+Steps 4-6 are SEPARATE AGENTS, not eyeballed by the main session.
+Run them in parallel to save time. Fix any issues they find before committing.
+"Too small to bother" and "time pressure" are not valid reasons to skip.
 
 ---
 
