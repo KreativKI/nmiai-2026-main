@@ -619,8 +619,119 @@ def _fit_temps_quick(rounds_data, alphas):
 # Main Loop
 # ──────────────────────────────────────────────
 
+def resubmit_with_improved_brain(session, round_id, detail, round_num, all_obs, regime_info):
+    """Resubmit predictions using the latest Brain params. Called during improvement window."""
+    height, width = detail["map_height"], detail["map_width"]
+    seeds_count = detail["seeds_count"]
+    regime = regime_info.get("regime", "stable")
+    alphas, temps = load_params()
+
+    brain = RegimeModel()
+    for rd in load_cached_rounds():
+        brain.add_training_data(rd)
+    brain.finalize()
+
+    # Round-specific transitions
+    r_trans = {}
+    for si in all_obs:
+        oc, ot = all_obs[si]
+        ig = detail["initial_states"][si]["grid"]
+        for y in range(height):
+            for x in range(width):
+                if ot[y, x] == 0 or int(ig[y][x]) in STATIC_TERRAIN:
+                    continue
+                init_cls = TERRAIN_TO_CLASS.get(int(ig[y][x]), 0)
+                final_cls = oc[y, x].argmax()
+                if init_cls not in r_trans:
+                    r_trans[init_cls] = np.zeros(NUM_CLASSES)
+                r_trans[init_cls][final_cls] += 1
+    for cls in r_trans:
+        if r_trans[cls].sum() > 0:
+            r_trans[cls] /= r_trans[cls].sum()
+
+    for seed_idx in range(seeds_count):
+        grid = detail["initial_states"][seed_idx]["grid"]
+        pred = brain.predict_grid(detail, seed_idx, regime=regime)
+
+        if seed_idx in all_obs:
+            oc, ot = all_obs[seed_idx]
+            for y in range(height):
+                for x in range(width):
+                    if ot[y, x] == 0:
+                        continue
+                    init_cls = TERRAIN_TO_CLASS.get(int(grid[y][x]), 0)
+                    av = alphas.get(init_cls, 8.0)
+                    alpha = av * pred[y, x]
+                    alpha = np.maximum(alpha, PROB_FLOOR)
+                    pred[y, x] = (alpha + oc[y, x]) / (alpha.sum() + ot[y, x])
+
+        for y in range(height):
+            for x in range(width):
+                if grid[y][x] in STATIC_TERRAIN:
+                    continue
+                init_cls = TERRAIN_TO_CLASS.get(int(grid[y][x]), 0)
+                if init_cls in (1, 2) and init_cls in r_trans:
+                    rp = r_trans[init_cls].copy()
+                    if seed_idx in all_obs and all_obs[seed_idx][1][y, x] > 0:
+                        od = all_obs[seed_idx][0][y, x] / all_obs[seed_idx][1][y, x]
+                        pred[y, x] = 0.7 * od + 0.15 * pred[y, x] + 0.15 * rp
+                    else:
+                        pred[y, x] = 0.5 * rp + 0.5 * pred[y, x]
+
+        oa = compute_ocean_adjacency(grid, height, width)
+        for y in range(height):
+            for x in range(width):
+                if oa[y, x] == 0:
+                    pred[y, x, 2] = PROB_FLOOR
+
+        for y in range(height):
+            for x in range(width):
+                if grid[y][x] in STATIC_TERRAIN:
+                    continue
+                p = np.maximum(pred[y, x], 1e-10)
+                ent = -np.sum(p * np.log(p))
+                t = temps["low"] if ent < 0.3 else (temps["mid"] if ent < 1.0 else temps["high"])
+                pred[y, x] = pred[y, x] ** (1.0 / t)
+
+        for y in range(height):
+            for x in range(width):
+                if grid[y][x] in STATIC_TERRAIN:
+                    continue
+                probs = pred[y, x]
+                mask = probs < 0.016
+                if mask.any() and not mask.all():
+                    probs[mask] = PROB_FLOOR
+                    pred[y, x] = probs / probs.sum()
+
+        sm = np.copy(pred)
+        for c in range(NUM_CLASSES):
+            sm[:, :, c] = gaussian_filter(pred[:, :, c], sigma=0.3)
+        for y in range(height):
+            for x in range(width):
+                if grid[y][x] in STATIC_TERRAIN:
+                    sm[y, x] = pred[y, x]
+        pred = np.maximum(sm, PROB_FLOOR)
+        pred = pred / pred.sum(axis=-1, keepdims=True)
+
+        for attempt in range(5):
+            try:
+                resp = session.post(f"{BASE}/astar-island/submit", json={
+                    "round_id": round_id, "seed_index": seed_idx,
+                    "prediction": pred.tolist(),
+                })
+                resp.raise_for_status()
+                log(f"  Seed {seed_idx} RESUBMITTED (conf={pred.max(axis=-1).mean():.3f})")
+                break
+            except requests.HTTPError as e:
+                if e.response and e.response.status_code == 429:
+                    time.sleep(3 * (attempt + 1))
+                    continue
+                log(f"  Seed {seed_idx} FAILED: {e}")
+                break
+
+
 def run_cycle(session, state):
-    """One cycle: check rounds, submit or improve."""
+    """One cycle: check rounds, submit, improve, resubmit. Uses the full round window."""
     now = datetime.now(timezone.utc)
     if now >= COMPETITION_END:
         log("COMPETITION ENDED. Stopping.")
@@ -643,7 +754,7 @@ def run_cycle(session, state):
             except Exception as e:
                 log(f"  Cache R{rn} failed: {e}")
 
-    # Run self-improvement if new data available
+    # Run self-improvement if new data available (between rounds)
     if new_completed:
         try:
             self_improve(session, state)
@@ -669,8 +780,53 @@ def run_cycle(session, state):
 
     log(f"R{round_num} active, {remaining:.0f} min left, weight={active['round_weight']:.4f}")
 
+    # Already submitted: use remaining time to improve and resubmit
     if round_num in state["submitted_rounds"]:
-        log(f"  R{round_num} already submitted.")
+        # Check if enough time for improvement cycle (~15 min needed)
+        if remaining > 20 and state.get("last_resubmit_round") != round_num:
+            n_cached = len(load_cached_rounds())
+            if n_cached > state.get("last_model_rounds", 0):
+                log(f"  R{round_num} submitted but {remaining:.0f} min left. Improving Brain and resubmitting...")
+                try:
+                    self_improve(session, state)
+                except Exception as e:
+                    log(f"  Improvement failed: {e}")
+
+                # Reload observations and resubmit
+                detail = session.get(f"{BASE}/astar-island/rounds/{round_id}").json()
+                seeds_count = detail.get("seeds_count", 5)
+                all_obs = {}
+                for si in range(seeds_count):
+                    for label in [f"seed{si}_stacked", f"seed{si}_overview"]:
+                        pc = DATA_DIR / f"obs_counts_r{round_num}_{label}.npy"
+                        pt = DATA_DIR / f"obs_total_r{round_num}_{label}.npy"
+                        if pc.exists() and pt.exists():
+                            oc, ot = np.load(pc), np.load(pt)
+                            if si in all_obs:
+                                p_oc, p_ot = all_obs[si]
+                                mask = ot > p_ot
+                                p_oc[mask] = oc[mask]
+                                p_ot[mask] = ot[mask]
+                            else:
+                                all_obs[si] = (oc.copy(), ot.copy())
+
+                regime_path = DATA_DIR / f"regime_r{round_num}.json"
+                regime_info = {"regime": "stable"}
+                if regime_path.exists():
+                    with open(regime_path) as f:
+                        regime_info = json.load(f)
+
+                try:
+                    resubmit_with_improved_brain(session, round_id, detail, round_num, all_obs, regime_info)
+                    state["last_resubmit_round"] = round_num
+                    save_state(state)
+                    log(f"  R{round_num} RESUBMITTED with improved Brain")
+                except Exception as e:
+                    log(f"  Resubmit failed: {e}")
+            else:
+                log(f"  R{round_num} already submitted. No new data to improve with.")
+        else:
+            log(f"  R{round_num} already submitted and resubmitted.")
         return True
 
     # New round: run Chef v8
