@@ -24,18 +24,34 @@ Each Tier 3 task at 100% + efficiency = up to 6.0 points.
 
 ---
 
-## Done This Session (21:00 - 21:30 CET)
+## Done This Session (21:00 - 22:00 CET)
+### Round 1: Tier 3 payment fixes (rev 85-86)
 - Fixed /:payment 404s: replaced with voucher postings (debit bank 1920, credit AR 1500)
 - Fixed bank_reconciliation: use vouchers for all payments (was 7-8 x 404 per run)
 - Fixed overdue_invoice_reminder: voucher for partial payment (was 1 x 404 per run, now 0 errors)
 - Fixed analyze_ledger_create_projects: removed failing activity creation (6 x 422 per run, now 0 errors)
 - Added /:payment -> voucher fallback to register_payment and create_invoice_with_payment
 - Extracted lookup_account and post_payment_voucher helpers (simplifier)
-- Created audit-and-submit.sh pipeline: syntax + health + MALFORMED + smoke test gates submission
-- Deployed rev 86, submitted 20 runs: overdue_invoice_reminder now succeeds with 0 errors
+- Created audit-and-submit.sh pipeline with hard-blocker gates
+
+### Round 2: Full audit findings (rev 87)
+- Fixed currency payment paidAmount: was sending original NOK amount, now sends curr_amt * pay_rate
+- Fixed year_end_closing: prepaid-only tasks no longer blocked by early return
+- Fixed bank account unconditional PUT: now checks if bankAccountNumber already set
+- Fixed supplier invoice: added missing VAT line (3-posting voucher: expense + VAT + liability)
+- Fixed travel expense: zone enum ("NORWAY"/"ABROAD") instead of city name string
+- Fixed email null guard: no longer sends "email": null for NO_ACCESS employees
+- Fixed currency in create_invoice_with_payment (same fix as register_payment)
+- Fixed year_end_closing expense account lookup: only runs when assets present
+- Fixed travel zone fallback: checks travelLocation, location, destination fields
+
+## Remaining audit items (implement before 01:00 CET)
+- [ ] Project manager 422: skip employee creation when PM name matches admin
+- [ ] Ledger error correction: use correctAccount for duplicate type, not 1920
+- [ ] Identify 3 missing task types from competition docs
 
 ## Phase 1: Analyze (01:00 - 02:00 CET)
-After rate limit reset, submit 10-15 to get fresh data with rev 86.
+After rate limit reset, submit 10-15 to get fresh data with rev 87.
 Run efficiency_analyzer.py on the results to see total_calls per task type.
 Identify which specific fields are still wrong on the 4 Tier 3 groups.
 

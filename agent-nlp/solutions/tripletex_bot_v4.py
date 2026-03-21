@@ -582,9 +582,10 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
         "lastName": last,
         "department": {"id": dept_id},
         "userType": user_type,
-        "email": email,
         "dateOfBirth": f.get("dateOfBirth", "1990-01-15"),
     }
+    if email:
+        emp_body["email"] = email
     if f.get("mobile"): emp_body["phoneNumberMobile"] = f["mobile"]
     if f.get("nationalIdentityNumber"): emp_body["nationalIdentityNumber"] = f["nationalIdentityNumber"]
 
@@ -805,11 +806,11 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             return cust_r
 
     # Step 2: Register bank account (REQUIRED - invoices fail without it)
-    # GET account ID (can't hardcode, changes per sandbox) then PUT unconditionally (skip conditional check)
+    # Only PUT if not already set (saves 1 write per run for efficiency)
     acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
     if acct_r.get("success") and acct_r.get("data"):
         accts = as_list(acct_r["data"])
-        if accts:
+        if accts and not accts[0].get("bankAccountNumber"):
             await tx(c, base, tok, "PUT", f"/ledger/account/{accts[0]['id']}", {
                 "bankAccountNumber": "19201234568",
                 "bankAccountCountry": {"id": 161},
@@ -879,8 +880,13 @@ async def exec_create_invoice_with_payment(c: httpx.AsyncClient, base: str, tok:
     if not inv_id:
         return inv_result
 
-    # Step 2: Register payment on the created invoice (use invoice total, not LLM amount)
+    # Step 2: Register payment on the created invoice
     amount = float(inv_result.get("data", {}).get("amount") or f.get("amount", 0))
+    # Apply currency conversion if present
+    currency_amount = f.get("currencyAmount")
+    payment_rate = f.get("paymentExchangeRate") or f.get("exchangeRate")
+    if currency_amount and payment_rate:
+        amount = round(float(currency_amount) * float(payment_rate), 2)
     # Hardcoded payment type (saves 1 GET per request). Fresh sandbox default is always ID 1.
     pt_id = 1
 
@@ -936,8 +942,8 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
         pay_rate = None
         curr_amt = None
 
-    # Always pay the sandbox invoice amount (what was owed)
-    pay_amount_nok = amount
+    # NOK equivalent of what the customer actually paid
+    pay_amount_nok = round(curr_amt * pay_rate, 2) if (curr_amt and pay_rate) else amount
 
     # paidAmountCurrency = foreign currency amount (EUR), paidAmount = NOK equivalent
     paid_currency_str = str(curr_amt) if curr_amt else str(pay_amount_nok)
@@ -1096,11 +1102,16 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
     # Step 4: Add per diem compensation if specified
     per_diem_rate = f.get("perDiemRate")
     if per_diem_days_raw:
+        # location must be a zone enum, not a city name
+        loc_str = (f.get("travelLocation") or f.get("location") or f.get("destination") or "").strip().upper()
+        zone = "ABROAD" if loc_str and loc_str not in (
+            "NORGE", "NORWAY", "OSLO", "BERGEN", "STAVANGER", "TRONDHEIM",
+            "KRISTIANSAND", "TROMSO", "DRAMMEN", "FREDRIKSTAD", "SANDNES",
+        ) else "NORWAY"
         pd_body = {
             "travelExpense": {"id": te_id},
             "count": per_diem_days_int,
-            "location": f.get("travelLocation", "Norge"),
-            "address": f.get("travelLocation", ""),
+            "location": zone,
             "overnightAccommodation": "HOTEL",
         }
         if per_diem_rate:
@@ -1388,20 +1399,42 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
     if not expense_acct_id or not credit_acct_id:
         return {"success": False, "error": "Could not resolve ledger accounts"}
 
-    # Balanced voucher: expense debit + credit
-    # Don't force vatType - some accounts are locked to specific VAT codes
-    posting_debit = {
-        "row": 1, "date": invoice_date,
+    # Balanced voucher: expense (net) + VAT (if any) + credit supplier (total incl VAT)
+    postings = []
+    row = 1
+
+    # Row 1: expense account (net if VAT present, full amount otherwise)
+    expense_amount = net_amount if vat_amount > 0 else total_incl_vat
+    posting_expense = {
+        "row": row, "date": invoice_date,
         "account": {"id": expense_acct_id},
-        "amountGross": total_incl_vat,
-        "amountGrossCurrency": total_incl_vat,
+        "amountGross": expense_amount,
+        "amountGrossCurrency": expense_amount,
         "currency": {"id": 1},
         "description": description,
     }
     if supplier_id:
-        posting_debit["supplier"] = {"id": supplier_id}
+        posting_expense["supplier"] = {"id": supplier_id}
+    postings.append(posting_expense)
+    row += 1
+
+    # Row 2 (conditional): input VAT account 2710
+    if vat_amount > 0:
+        vat_acct_id = await lookup_account(c, base, tok, 2710)
+        if vat_acct_id:
+            postings.append({
+                "row": row, "date": invoice_date,
+                "account": {"id": vat_acct_id},
+                "amountGross": vat_amount,
+                "amountGrossCurrency": vat_amount,
+                "currency": {"id": 1},
+                "description": f"Inngaende MVA {int(vat_rate)}%",
+            })
+            row += 1
+
+    # Credit: supplier liability (total incl VAT)
     posting_credit = {
-        "row": 2, "date": invoice_date,
+        "row": row, "date": invoice_date,
         "account": {"id": credit_acct_id},
         "amountGross": -total_incl_vat,
         "amountGrossCurrency": -total_incl_vat,
@@ -1410,7 +1443,9 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
     }
     if supplier_id:
         posting_credit["supplier"] = {"id": supplier_id}
-    voucher_body = {"date": invoice_date, "description": description, "postings": [posting_debit, posting_credit]}
+    postings.append(posting_credit)
+
+    voucher_body = {"date": invoice_date, "description": description, "postings": postings}
     return await tx(c, base, tok, "POST", "/ledger/voucher", voucher_body)
 
 
@@ -1800,21 +1835,23 @@ async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: di
     """Perform simplified year-end closing: calculate and post depreciation for assets.
     Each asset gets: debit depreciation expense account, credit asset account."""
     assets = f.get("assets") or []
-    if not assets:
-        return {"success": False, "error": "No assets provided for year-end closing"}
+    prepaid_acct_num = f.get("prepaidAccount")  # e.g., 1710/1720 for monthly accruals
+    prepaid_amount = f.get("prepaidAmount") or f.get("accrualAmount")
+    if not assets and not (prepaid_acct_num and prepaid_amount):
+        return {"success": False, "error": "No assets or prepaid accrual provided for year-end closing"}
 
     depreciation_expense_acct_num = int(f.get("depreciationExpenseAccount") or f.get("debitAccount") or 6010)
     accumulated_depr_acct_num = f.get("accumulatedDepreciationAccount") or f.get("creditAccount")
-    prepaid_acct_num = f.get("prepaidAccount")  # e.g., 1710/1720 for monthly accruals
-    prepaid_amount = f.get("prepaidAmount") or f.get("accrualAmount")
     voucher_date = f.get("date") or f.get("period1End") or f"{time.strftime('%Y')}-12-31"
     description = f.get("description") or "Arsavslutning - avskrivninger"
 
-    # Look up the depreciation expense account once (shared across all assets)
-    expense_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": depreciation_expense_acct_num})
-    if not expense_acct_r.get("success") or not expense_acct_r.get("data"):
-        return {"success": False, "error": f"Could not find account {depreciation_expense_acct_num}"}
-    expense_acct_id = as_list(expense_acct_r["data"])[0]["id"]
+    # Look up the depreciation expense account only if we have assets to depreciate
+    expense_acct_id = None
+    if assets:
+        expense_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": depreciation_expense_acct_num})
+        if not expense_acct_r.get("success") or not expense_acct_r.get("data"):
+            return {"success": False, "error": f"Could not find account {depreciation_expense_acct_num}"}
+        expense_acct_id = as_list(expense_acct_r["data"])[0]["id"]
 
     # For monthly closing tasks, use monthly depreciation (annual / 12)
     is_monthly = bool(f.get("period") or f.get("monthly"))
