@@ -99,7 +99,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - create_invoice (use ONLY when creating a simple invoice WITHOUT payment registration and WITHOUT project/hours)
 - create_invoice_with_payment (use when prompt asks to create an invoice AND register/record payment for it, or convert order to invoice and register payment)
 - create_project_invoice (use when prompt mentions registering hours on a project AND generating an invoice based on those hours)
-- register_payment (existing customer and invoice, register that payment was received)
+- register_payment (ONLY use when the invoice ALREADY EXISTS in the system and the prompt says to register/record a payment on it. Do NOT use this if the prompt asks to CREATE an invoice first -- use create_invoice_with_payment instead. Also handles currency exchange payments with agio/disagio.)
 - create_credit_note (create credit note on existing invoice, also use when payment was returned/reversed by bank)
 - create_travel_expense (use when prompt mentions reiseregning/travel expense/travel report, even if it also says to create an employee first. Extract perDiemDays and perDiemRate if daily allowance/dagpenger/ajudas de custo is mentioned)
 - delete_employee
