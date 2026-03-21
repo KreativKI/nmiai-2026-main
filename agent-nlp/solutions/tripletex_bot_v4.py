@@ -735,29 +735,17 @@ async def exec_create_project(c: httpx.AsyncClient, base: str, tok: str, f: dict
                     log.info("Found existing employee for PM: %s (id=%d)", pm_name, pm_id)
                     break
 
-    if not pm_id and pm_name:
-        # Create the PM as EXTENDED user (needs PM access)
+    if not pm_id and pm_name and admin_id:
+        # Fresh sandbox: only 1 employee (admin). Rename admin to PM instead of creating new
+        # employee with synthesized email (which causes 422 email conflicts).
         pm_parts = pm_name.strip().split()
         pm_first = pm_parts[0] if pm_parts else "PM"
         pm_last = " ".join(pm_parts[1:]) if len(pm_parts) > 1 else ""
-        dept_id = await ensure_department(c, base, tok)
-        pm_body = {
-            "firstName": pm_first,
-            "lastName": pm_last,
-            "department": {"id": dept_id or 1},
-            "userType": "EXTENDED",
-            "email": pm_email or f"{pm_first.lower()}@company.no",
-            "dateOfBirth": "1990-01-15",
-        }
-        pm_r = await tx(c, base, tok, "POST", "/employee", pm_body)
-        if not pm_r.get("success") and any(w in str(pm_r.get("error", "")).lower() for w in ("e-post", "email", "duplicate", "already")):
-            # Email conflict: admin has this email. Use admin as PM and update name.
-            pm_id = admin_id
-            await tx(c, base, tok, "PUT", f"/employee/{admin_id}", {
-                "firstName": pm_first, "lastName": pm_last,
-            })
-        elif pm_r.get("success") and pm_r.get("data"):
-            pm_id = pm_r["data"]["id"]
+        await tx(c, base, tok, "PUT", f"/employee/{admin_id}", {
+            "firstName": pm_first, "lastName": pm_last,
+        })
+        pm_id = admin_id
+        log.info("Renamed admin to PM: %s %s (id=%d)", pm_first, pm_last, admin_id)
 
     if not pm_id:
         pm_id = admin_id
@@ -1602,26 +1590,16 @@ async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str,
                     log.info("Found existing employee for PM: %s (id=%d)", emp_name, pm_id)
                     break
 
-    if not pm_id and emp_name:
+    if not pm_id and emp_name and admin_id:
+        # Fresh sandbox: rename admin to PM (avoids 422 email conflict)
         parts = emp_name.strip().split()
         emp_first = parts[0]
         emp_last = " ".join(parts[1:]) if len(parts) > 1 else ""
-        dept_id = await ensure_department(c, base, tok)
-        emp_body = {
+        await tx(c, base, tok, "PUT", f"/employee/{admin_id}", {
             "firstName": emp_first, "lastName": emp_last,
-            "department": {"id": dept_id or 1}, "userType": "EXTENDED",
-            "email": emp_email or f"{emp_first.lower()}@company.no",
-            "dateOfBirth": "1990-01-15",
-        }
-        emp_r = await tx(c, base, tok, "POST", "/employee", emp_body)
-        if not emp_r.get("success") and any(w in str(emp_r.get("error", "")).lower() for w in ("e-post", "email", "duplicate", "already")):
-            # Email conflict: admin has this email. Use admin and update name.
-            pm_id = admin_id
-            await tx(c, base, tok, "PUT", f"/employee/{admin_id}", {
-                "firstName": emp_first, "lastName": emp_last,
-            })
-        elif emp_r.get("success"):
-            pm_id = emp_r["data"]["id"]
+        })
+        pm_id = admin_id
+        log.info("Renamed admin to PM: %s %s (id=%d)", emp_first, emp_last, admin_id)
 
     if not pm_id:
         pm_id = admin_id
@@ -2196,13 +2174,15 @@ async def exec_ledger_error_correction(c: httpx.AsyncClient, base: str, tok: str
 
         elif err_type == "duplicate" and err_account:
             dup_id = await _get_acct(int(err_account))
-            bank_id = await _get_acct(1920)
-            if dup_id and bank_id:
+            # Credit account: use correctAccount if provided, else 2400 (AP), not 1920 (bank)
+            credit_num = int(err.get("correctAccount") or 2400)
+            credit_id = await _get_acct(credit_num)
+            if dup_id and credit_id:
                 postings.append({"row": row, "date": voucher_date, "account": {"id": dup_id},
                     "amountGross": -amount, "amountGrossCurrency": -amount,
                     "currency": {"id": 1}, "description": f"Korreksjon: duplikat konto {err_account}"})
                 row += 1
-                postings.append({"row": row, "date": voucher_date, "account": {"id": bank_id},
+                postings.append({"row": row, "date": voucher_date, "account": {"id": credit_id},
                     "amountGross": amount, "amountGrossCurrency": amount,
                     "currency": {"id": 1}, "description": f"Korreksjon: duplikat"})
                 row += 1
