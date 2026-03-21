@@ -24,6 +24,8 @@ Usage:
 
 import argparse
 import json
+import os
+import tempfile
 import time
 import traceback
 from pathlib import Path
@@ -53,12 +55,12 @@ COMPETITION_END = datetime(2026, 3, 22, 14, 0, 0, tzinfo=timezone.utc)
 def log(msg):
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     line = f"[{ts}] {msg}"
-    print(line, flush=True)
+    # Write only to log file (stdout redirected there by nohup, avoid duplicates)
     try:
         with open(LOG_FILE, "a") as f:
             f.write(line + "\n")
     except Exception:
-        pass
+        print(line, flush=True)
 
 
 def load_state():
@@ -73,14 +75,23 @@ def save_state(state):
 
 
 def load_params():
+    defaults = ({0: 8.0, 1: 4.0, 2: 3.0, 3: 3.0, 4: 10.0, 5: 50.0},
+                {"low": 0.9, "mid": 1.1, "high": 1.3})
     if PARAMS_FILE.exists():
-        with open(PARAMS_FILE) as f:
-            p = json.load(f)
-        alphas = {int(k): v for k, v in p.get("alphas", {}).items()}
-        temps = p.get("temps", {"low": 0.9, "mid": 1.1, "high": 1.3})
-        return alphas, temps
-    return {0: 8.0, 1: 4.0, 2: 3.0, 3: 3.0, 4: 10.0, 5: 50.0}, \
-           {"low": 0.9, "mid": 1.1, "high": 1.3}
+        for attempt in range(3):
+            try:
+                with open(PARAMS_FILE) as f:
+                    p = json.load(f)
+                alphas = {int(k): v for k, v in p.get("alphas", {}).items()}
+                temps = p.get("temps", {"low": 0.9, "mid": 1.1, "high": 1.3})
+                return alphas, temps
+            except (json.JSONDecodeError, ValueError):
+                if attempt < 2:
+                    time.sleep(0.1)  # Brief wait for atomic rename to complete
+                    continue
+                log("  WARNING: brain_v3_params.json corrupt, using defaults")
+                return defaults
+    return defaults
 
 
 def save_params(alphas, temps, score, baseline):
@@ -93,8 +104,18 @@ def save_params(alphas, temps, score, baseline):
         "delta": round(float(score - baseline), 2),
         "fitted_at": datetime.now(timezone.utc).isoformat(),
     }
-    with open(PARAMS_FILE, "w") as f:
-        json.dump(params, f, indent=2)
+    # Atomic write: write to temp file then rename to avoid partial reads
+    fd, tmp_path = tempfile.mkstemp(dir=str(DATA_DIR), suffix=".json.tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(params, f, indent=2)
+        os.replace(tmp_path, str(PARAMS_FILE))
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 # ──────────────────────────────────────────────
@@ -713,6 +734,7 @@ def resubmit_with_improved_brain(session, round_id, detail, round_num, all_obs, 
         pred = np.maximum(sm, PROB_FLOOR)
         pred = pred / pred.sum(axis=-1, keepdims=True)
 
+        time.sleep(0.5)  # Rate limit spacing between seeds
         for attempt in range(5):
             try:
                 resp = session.post(f"{BASE}/astar-island/submit", json={
@@ -723,8 +745,10 @@ def resubmit_with_improved_brain(session, round_id, detail, round_num, all_obs, 
                 log(f"  Seed {seed_idx} RESUBMITTED (conf={pred.max(axis=-1).mean():.3f})")
                 break
             except requests.HTTPError as e:
-                if e.response and e.response.status_code == 429:
-                    time.sleep(3 * (attempt + 1))
+                if e.response is not None and e.response.status_code == 429:
+                    wait = 5 * (attempt + 1)
+                    log(f"  Seed {seed_idx} rate limited, waiting {wait}s (attempt {attempt + 1}/5)")
+                    time.sleep(wait)
                     continue
                 log(f"  Seed {seed_idx} FAILED: {e}")
                 break
@@ -796,46 +820,46 @@ def run_cycle(session, state):
         if remaining > 20 and (params_updated or new_data):
             reason = "new params from parallel experiments" if params_updated else "new ground truth data"
             log(f"  R{round_num} submitted but {remaining:.0f} min left. Resubmitting ({reason})...")
+
+            # Run self-improvement if new ground truth data is available
             if new_data:
                 try:
                     self_improve(session, state)
                 except Exception as e:
                     log(f"  Improvement failed: {e}")
 
-                # Reload observations and resubmit
-                detail = session.get(f"{BASE}/astar-island/rounds/{round_id}").json()
-                seeds_count = detail.get("seeds_count", 5)
-                all_obs = {}
-                for si in range(seeds_count):
-                    for label in [f"seed{si}_stacked", f"seed{si}_overview"]:
-                        pc = DATA_DIR / f"obs_counts_r{round_num}_{label}.npy"
-                        pt = DATA_DIR / f"obs_total_r{round_num}_{label}.npy"
-                        if pc.exists() and pt.exists():
-                            oc, ot = np.load(pc), np.load(pt)
-                            if si in all_obs:
-                                p_oc, p_ot = all_obs[si]
-                                mask = ot > p_ot
-                                p_oc[mask] = oc[mask]
-                                p_ot[mask] = ot[mask]
-                            else:
-                                all_obs[si] = (oc.copy(), ot.copy())
+            # Reload observations and resubmit (runs for BOTH new_data and params_updated)
+            detail = session.get(f"{BASE}/astar-island/rounds/{round_id}").json()
+            seeds_count = detail.get("seeds_count", 5)
+            all_obs = {}
+            for si in range(seeds_count):
+                for label in [f"seed{si}_stacked", f"seed{si}_overview"]:
+                    pc = DATA_DIR / f"obs_counts_r{round_num}_{label}.npy"
+                    pt = DATA_DIR / f"obs_total_r{round_num}_{label}.npy"
+                    if pc.exists() and pt.exists():
+                        oc, ot = np.load(pc), np.load(pt)
+                        if si in all_obs:
+                            p_oc, p_ot = all_obs[si]
+                            mask = ot > p_ot
+                            p_oc[mask] = oc[mask]
+                            p_ot[mask] = ot[mask]
+                        else:
+                            all_obs[si] = (oc.copy(), ot.copy())
 
-                regime_path = DATA_DIR / f"regime_r{round_num}.json"
-                regime_info = {"regime": "stable"}
-                if regime_path.exists():
-                    with open(regime_path) as f:
-                        regime_info = json.load(f)
+            regime_path = DATA_DIR / f"regime_r{round_num}.json"
+            regime_info = {"regime": "stable"}
+            if regime_path.exists():
+                with open(regime_path) as f:
+                    regime_info = json.load(f)
 
-                try:
-                    resubmit_with_improved_brain(session, round_id, detail, round_num, all_obs, regime_info)
-                    state["last_resubmit_round"] = round_num
-                    state["last_resubmit_time"] = time.time()
-                    save_state(state)
-                    log(f"  R{round_num} RESUBMITTED with improved Brain")
-                except Exception as e:
-                    log(f"  Resubmit failed: {e}")
-            else:
-                log(f"  R{round_num} submitted. Waiting for experiments or new data. ({remaining:.0f} min left)")
+            try:
+                resubmit_with_improved_brain(session, round_id, detail, round_num, all_obs, regime_info)
+                state["last_resubmit_round"] = round_num
+                state["last_resubmit_time"] = time.time()
+                save_state(state)
+                log(f"  R{round_num} RESUBMITTED with improved Brain")
+            except Exception as e:
+                log(f"  Resubmit failed: {e}")
         else:
             log(f"  R{round_num} already submitted and resubmitted.")
         return True

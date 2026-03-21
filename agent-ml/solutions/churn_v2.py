@@ -26,6 +26,8 @@ Usage:
 """
 
 import json
+import os
+import tempfile
 import time
 import random
 from pathlib import Path
@@ -51,12 +53,12 @@ COMPETITION_END = datetime(2026, 3, 22, 14, 0, 0, tzinfo=timezone.utc)
 def log(msg):
     ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
     line = f"[{ts}] {msg}"
-    print(line, flush=True)
+    # Write only to log file (stdout redirected there by nohup, avoid duplicates)
     try:
         with open(CHURN_LOG, "a") as f:
             f.write(line + "\n")
     except Exception:
-        pass
+        print(line, flush=True)
 
 
 def load_best():
@@ -82,15 +84,39 @@ def save_if_better(score, alphas, temps, collapse, sigma, experiment_name):
             "experiment": experiment_name,
             "fitted_at": datetime.now(timezone.utc).isoformat(),
         }
-        with open(PARAMS_FILE, "w") as f:
-            json.dump(params, f, indent=2)
+        # Atomic write: write to temp file then rename to avoid partial reads
+        fd, tmp_path = tempfile.mkstemp(dir=str(DATA_DIR), suffix=".json.tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(params, f, indent=2)
+            os.replace(tmp_path, str(PARAMS_FILE))
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
         log(f"  NEW BEST: {score:.2f} (was {best_score:.2f}, +{score - best_score:.2f}) [{experiment_name}]")
         return True
     return False
 
 
+def _load_obs_for_round(round_num, seed_idx):
+    """Load saved observation data for a round/seed, if available."""
+    for label in [f"seed{seed_idx}_stacked", f"seed{seed_idx}_overview"]:
+        pc = DATA_DIR / f"obs_counts_r{round_num}_{label}.npy"
+        pt = DATA_DIR / f"obs_total_r{round_num}_{label}.npy"
+        if pc.exists() and pt.exists():
+            return np.load(pc), np.load(pt)
+    return None, None
+
+
 def score_variant(rounds_data, alphas, temps, collapse, sigma):
-    """Leave-one-out backtest with given params. Tests on last 5 rounds for speed."""
+    """Leave-one-out backtest with given params. Tests on last 5 rounds for speed.
+
+    Now includes Dirichlet alpha blending using saved observations (or simulated
+    from ground truth argmax), so alpha optimization actually affects the score.
+    """
     test_rounds = rounds_data[-5:] if len(rounds_data) > 5 else rounds_data
     scores = []
     for rd in test_rounds:
@@ -110,6 +136,30 @@ def score_variant(rounds_data, alphas, temps, collapse, sigma):
             gt = np.array(sd["ground_truth"])
             ig = rd["initial_states"][si]["grid"]
             pred = brain.predict_grid(rd, si, regime=regime)
+
+            # Dirichlet alpha blending with observations
+            # Try real observations first, fall back to simulated from GT
+            obs_counts, obs_total = _load_obs_for_round(rn, si)
+            if obs_counts is None:
+                # Simulate observations from ground truth argmax (1 obs per cell)
+                obs_counts = np.zeros((h, w, NUM_CLASSES))
+                obs_total = np.ones((h, w))
+                for y in range(h):
+                    for x in range(w):
+                        if int(ig[y][x]) in STATIC_TERRAIN:
+                            obs_total[y, x] = 0
+                            continue
+                        obs_counts[y, x, gt[y, x].argmax()] = 1.0
+
+            for y in range(h):
+                for x in range(w):
+                    if obs_total[y, x] == 0:
+                        continue
+                    init_cls = TERRAIN_TO_CLASS.get(int(ig[y][x]), 0)
+                    av = alphas.get(init_cls, 8.0)
+                    alpha = av * pred[y, x]
+                    alpha = np.maximum(alpha, PROB_FLOOR)
+                    pred[y, x] = (alpha + obs_counts[y, x]) / (alpha.sum() + obs_total[y, x])
 
             # Entropy-aware temperature
             for y in range(h):
