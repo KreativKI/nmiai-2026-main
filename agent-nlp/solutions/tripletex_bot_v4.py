@@ -1049,7 +1049,8 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
     if not expense_acct_id or not credit_acct_id:
         return {"success": False, "error": "Could not resolve ledger accounts"}
 
-    # Balanced voucher: expense debit + credit on bank account
+    # Balanced voucher: expense debit + credit
+    # Don't force vatType - some accounts are locked to specific VAT codes
     posting_debit = {
         "row": 1, "date": invoice_date,
         "account": {"id": expense_acct_id},
@@ -1057,7 +1058,6 @@ async def exec_register_supplier_invoice(c: httpx.AsyncClient, base: str, tok: s
         "amountGrossCurrency": total_incl_vat,
         "currency": {"id": 1},
         "description": description,
-        "vatType": {"id": input_vat_id},
     }
     if supplier_id:
         posting_debit["supplier"] = {"id": supplier_id}
