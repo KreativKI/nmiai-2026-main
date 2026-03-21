@@ -775,10 +775,20 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
         if pts:
             pt_id = pts[0]["id"]
 
-    # Step 3: Create travel expense (no costs inline)
+    # Step 3: Create travel expense with travelDetails (makes it reiseregning, not ansattutlegg)
+    today = time.strftime("%Y-%m-%d")
+    location = f.get("travelLocation", "")
+    per_diem_days = f.get("perDiemDays")
     te_body = {
         "employee": {"id": emp_id},
         "title": f.get("title", "Reiseregning"),
+        "travelDetails": {
+            "departureDate": today,
+            "returnDate": today,
+            "departureFrom": location or "Oslo",
+            "destination": location or "Oslo",
+            "purpose": f.get("title", "Tjenestereise"),
+        },
     }
     te_r = await tx(c, base, tok, "POST", "/travelExpense", te_body)
     if not te_r.get("success"):
