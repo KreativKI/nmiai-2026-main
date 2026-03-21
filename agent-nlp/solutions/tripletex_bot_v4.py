@@ -488,21 +488,12 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
 
 
 async def exec_create_product(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    vat_map = await lookup_vat_map(c, base, tok)
     body = {"name": f.get("productName") or f.get("name", "")}
     if f.get("productNumber"): body["number"] = f["productNumber"]
     if f.get("price") is not None:
         body["priceExcludingVatCurrency"] = float(f["price"])
-    vat_rate = f.get("vatRate")
-    if vat_rate is not None and int(vat_rate) != 25:
-        body["vatType"] = {"id": vat_id_sync(vat_rate, vat_map)}
-    # Omit vatType for standard 25% -- sandbox default handles it correctly
-    r = await tx(c, base, tok, "POST", "/product", body)
-    if not r.get("success") and "vattype" in str(r.get("error", "")).lower():
-        log.info("Product POST failed on vatType, retrying without it")
-        body.pop("vatType", None)
-        r = await tx(c, base, tok, "POST", "/product", body)
-    return r
+    # Never send vatType - sandbox defaults handle it, explicit vatType causes 422 errors
+    return await tx(c, base, tok, "POST", "/product", body)
 
 
 async def exec_create_department(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
@@ -606,31 +597,7 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             return cust_r
         cust_id = cust_r["data"]["id"]
 
-    # Step 2: Register bank account on account 1920
-    acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": 1920})
-    if acct_r.get("success") and acct_r.get("data"):
-        accts = as_list(acct_r["data"])
-        if accts:
-            acct_id = accts[0]["id"]
-            # Check if account already has a bank number
-            existing_bank = accts[0].get("bankAccountNumber")
-            if not existing_bank:
-                bank_r = await tx(c, base, tok, "PUT", f"/ledger/account/{acct_id}", {
-                    "bankAccountNumber": "19201234568",
-                    "bankAccountCountry": {"id": 161},
-                    "currency": {"id": 1},
-                })
-                if not bank_r.get("success"):
-                    log.info("Bank account PUT failed (%d), trying alt number",
-                             bank_r.get("status_code", 0))
-                    # Try alternative bank number
-                    await tx(c, base, tok, "PUT", f"/ledger/account/{acct_id}", {
-                        "bankAccountNumber": "86011117947",
-                        "bankAccountCountry": {"id": 161},
-                        "currency": {"id": 1},
-                    })
-
-    # Step 3: Build order lines
+    # Step 2: Build order lines (bank account registration removed - unnecessary write call)
     today = f.get("invoiceDate", time.strftime("%Y-%m-%d"))
     due = f.get("dueDate", today)
     items = f.get("items", [])
@@ -651,20 +618,19 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             "unitPriceExcludingVatCurrency": float(item.get("unitPrice", 0)),
             "vatType": {"id": vat_id_sync(item.get("vatRate"), vat_map)},
         }
-        # Create or find product if productNumber given
+        # Find or create product if productNumber given (GET first to avoid 422 errors)
         prod_num = item.get("productNumber")
         if prod_num:
-            prod_body = {"name": item.get("description", "Produkt"), "number": prod_num}
-            if item.get("unitPrice") is not None:
-                prod_body["priceExcludingVatCurrency"] = float(item["unitPrice"])
-            prod_r = await tx(c, base, tok, "POST", "/product", prod_body)
-            if prod_r.get("success") and prod_r.get("data"):
-                line["product"] = {"id": prod_r["data"]["id"]}
-            elif "i bruk" in str(prod_r.get("error", "")).lower() or "in use" in str(prod_r.get("error", "")).lower():
-                # Product number already exists, find it
-                existing = await tx(c, base, tok, "GET", "/product", params={"number": prod_num, "count": 1})
-                if existing.get("success") and existing.get("data"):
-                    line["product"] = {"id": as_list(existing["data"])[0]["id"]}
+            existing_prod = await tx(c, base, tok, "GET", "/product", params={"number": prod_num, "count": 1})
+            if existing_prod.get("success") and existing_prod.get("data"):
+                line["product"] = {"id": as_list(existing_prod["data"])[0]["id"]}
+            else:
+                prod_body = {"name": item.get("description", "Produkt"), "number": prod_num}
+                if item.get("unitPrice") is not None:
+                    prod_body["priceExcludingVatCurrency"] = float(item["unitPrice"])
+                prod_r = await tx(c, base, tok, "POST", "/product", prod_body)
+                if prod_r.get("success") and prod_r.get("data"):
+                    line["product"] = {"id": prod_r["data"]["id"]}
         order_lines.append(line)
 
     # Step 4: Create invoice with inline order
@@ -679,14 +645,7 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
             "orderLines": order_lines,
         }],
     }
-    r = await tx(c, base, tok, "POST", "/invoice", invoice_body)
-    if not r.get("success") and "vattype" in str(r.get("error", "")).lower():
-        # Retry without vatType on order lines (some sandboxes reject explicit VAT codes)
-        log.info("Invoice POST failed on vatType, retrying without it")
-        for ol in order_lines:
-            ol.pop("vatType", None)
-        r = await tx(c, base, tok, "POST", "/invoice", invoice_body)
-    return r
+    return await tx(c, base, tok, "POST", "/invoice", invoice_body)
 
 
 async def exec_create_invoice_with_payment(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
