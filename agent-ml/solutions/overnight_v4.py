@@ -223,8 +223,8 @@ def observe_round(session, round_id, detail, round_num, deep_seed):
 # -- Prediction --
 
 def count_terrain_classes(grid, h, w):
-    """Count settlements and ports in initial grid (single pass)."""
-    total_s, total_p = 0, 0
+    """Count settlements, ports, and forests in initial grid (single pass)."""
+    total_s, total_p, total_f = 0, 0, 0
     for y in range(h):
         for x in range(w):
             cls = TERRAIN_TO_CLASS.get(int(grid[y][x]), 0)
@@ -232,7 +232,9 @@ def count_terrain_classes(grid, h, w):
                 total_s += 1
             elif cls == 2:
                 total_p += 1
-    return total_s, total_p
+            elif cls == 4:
+                total_f += 1
+    return total_s, total_p, total_f
 
 
 def predict_and_submit(session, round_id, detail, round_num, deep_seed,
@@ -260,7 +262,43 @@ def predict_and_submit(session, round_id, detail, round_num, deep_seed,
         models[cls] = m
 
     # Round-level features (computed once from seed 0)
-    total_s, total_p = count_terrain_classes(detail["initial_states"][0]["grid"], h, w)
+    total_s, total_p, init_forest = count_terrain_classes(
+        detail["initial_states"][0]["grid"], h, w)
+
+    # Compute observation-derived trajectory proxies
+    # These fill the 61% replay-only feature gap at prediction time
+    obs_proxy = {}
+    if (obs_total > 0).any():
+        obs_argmax = obs_counts.argmax(axis=2)
+        observed = obs_total > 0
+        obs_settle_count = int(((obs_argmax == 1) | (obs_argmax == 2))[observed].sum())
+        obs_forest_count = int((obs_argmax == 4)[observed].sum())
+
+        obs_settle_growth = obs_settle_count / max(total_s, 1)
+        obs_forest_ratio = obs_forest_count / max(init_forest, 1)
+
+        # OOD guard: if proxy exceeds 2x training max, fall back to default
+        if obs_settle_growth <= 9.7:  # 2x max training value (4.846)
+            obs_proxy["settle_growth_y25"] = obs_settle_growth
+            obs_proxy["settle_growth_y10"] = min(obs_settle_growth, 4.1)  # cap at 2x train max
+            log(f"  Obs proxy: settle_growth={obs_settle_growth:.2f}, "
+                f"forest_ratio={obs_forest_ratio:.2f}")
+        else:
+            log(f"  Obs proxy OOD: settle_growth={obs_settle_growth:.2f}, using default")
+
+    # Reclassify regime using full-grid obs data (better than 5-cell smell test)
+    # Calibrated thresholds from observation_analysis.py: death<0.9, growth>1.4
+    if "settle_growth_y25" in obs_proxy:
+        osg = obs_proxy["settle_growth_y25"]
+        old_regime = regime
+        if osg < 0.9:
+            regime = "death"
+        elif osg > 1.4:
+            regime = "growth"
+        else:
+            regime = "stable"
+        if regime != old_regime:
+            log(f"  Regime reclassified: {old_regime} -> {regime} (obs_settle_growth={osg:.2f})")
 
     regime_flags = {
         "regime_death": 1 if regime == "death" else 0,
@@ -281,6 +319,9 @@ def predict_and_submit(session, round_id, detail, round_num, deep_seed,
             except Exception:
                 pass
         traj = _compute_trajectory_features(replay_data, total_s)
+        # Override defaults with obs-derived proxies (only for deep seed, only when no replay)
+        if seed_idx == deep_seed and not replay_data and obs_proxy:
+            traj.update(obs_proxy)
         round_feats = {**regime_flags, "total_settlements": total_s, "total_ports": total_p, **traj}
 
         # Extract features for dynamic cells
