@@ -704,7 +704,8 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
         return inv_r
     inv = inv_r["invoice"]
     inv_id = inv["id"]
-    amount = f.get("amount") or inv.get("amount", 0)
+    # Use invoice amount by default (includes VAT). LLM amount may be ex-VAT.
+    amount = float(inv.get("amount") or f.get("amount", 0))
 
     pt_r = await tx(c, base, tok, "GET", "/invoice/paymentType")
     pt_id = 1
@@ -1137,9 +1138,9 @@ async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str,
         return cust_r
     cust_id = cust_r["data"]["id"]
 
-    # Step 2: Create employee (the person who worked the hours)
-    emp_name = f.get("employeeName", "")
-    emp_email = f.get("employeeEmail", "")
+    # Step 2: Create employee (PM or the person who worked the hours)
+    emp_name = f.get("employeeName") or f.get("projectManagerName", "")
+    emp_email = f.get("employeeEmail") or f.get("projectManagerEmail", "")
     if emp_name:
         parts = emp_name.strip().split()
         emp_first = parts[0]
