@@ -92,3 +92,4 @@ shared/tools/.leaderboard_snapshots/
 agent-cv/submission_*/
 *.zip
 agent-cv/submission_*/
+*.zip
