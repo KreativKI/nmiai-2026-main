@@ -1,63 +1,56 @@
-# CV Session Handoff — 2026-03-21 08:00 CET
+# CV Session Handoff — 2026-03-22 00:45 CET
 
-## Leaderboard: 0.6584 | ~31 hours to deadline (Sun 15:00 CET)
+## Leaderboard: 0.6584 | ~14 hours to deadline (Sun 15:00 CET)
 
-## Strategy: Quality Over Quantity
-Low-quality synthetic data barely moved the needle (+0.011). New approach: use Gemini 3.1 Flash ("Nano Banana") with MULTI-REFERENCE IMAGES to generate 994 realistic shelf images for all 134 weak products.
+## CRITICAL: R5 Training is RUNNING on cv-train-1
+- **What:** YOLO11m fine-tuning from maxdata best weights (val 0.816)
+- **Data:** 577 images (211 real + 366 JC-labeled Gemini shelf images)
+- **Config:** batch=8, lr=0.0003, fliplr=0, degrees=0, hsv_s=0.3, patience=10, close_mosaic=10
+- **Log:** `~/retrain_r5.log` on cv-train-1
+- **ETA:** ~01:15 CET (50 epochs, patience may stop early)
+- **Check:** `gcloud compute ssh cv-train-1 --zone=europe-west1-c --project=ai-nm26osl-1779 --command='grep "all " ~/retrain_r5.log | tail -5'`
 
-## CONFIRMED AND TESTED
-- Gemini 3.1 Flash multi-reference: 5/5 images generated, 36s avg per image
-- Up to 10 reference images per product (object fidelity mode)
-- Feeding actual product photos (front/back/left/right) produces much more accurate results
-- Imagen 3.0 also available but text-only (no reference images)
+## When R5 finishes:
+1. Check val mAP50 (target: beat 0.816)
+2. If improved: export ONNX, build ZIP with canonical `solutions/run.py`, validate with cv_pipeline.sh
+3. Submit as first slot (6 available after 01:00 reset)
+4. If NOT improved: investigate, consider more JC labels or config changes
 
-## Next Session: Execute Full Pipeline
+## Key Files on GCP (cv-train-1, europe-west1-c)
+- Best existing weights: `~/retrain/yolo11m_maxdata_200ep/weights/best.pt` (val 0.816)
+- R5 training output: `~/retrain_r5/yolo11m_gemini/`
+- JC labels: `~/gemini_labels/` (366 files)
+- Generated images: `~/gemini_shelf_gen/` (616 images)
+- Canonical run.py: `~/run_canonical.py`
+- Retrain script: `~/scripts/retrain_with_gemini.py` (FIXED augmentation)
+- Build script: `~/scripts/build_submission.sh`
+- Validation: `~/shared/tools/cv_pipeline.sh`
 
-### Step 1: Write generation script
-- Load ALL available reference images per product (studio photos + shelf crops + existing Gemini)
-- Feed to Gemini 3.1 Flash with shelf scene prompt
-- Save images with product name + category_id in filename
-- Save manifest.json mapping filename -> category
+## Key Files Local
+- Plan: `agent-cv/plan.md` (fully updated with audit findings)
+- Canonical run.py: `agent-cv/solutions/run.py` (RGB, *.jpeg glob, per-class NMS)
+- Labeled batches: `agent-cv/labeled_complete/batch_001-004/` (390 labels total, 366 on VM)
+- Pending batches: `agent-cv/label_batches/batch_005/ (100), batch_006/ (17)`
 
-### Step 2: Generate ~2150 images on 2 VMs (~10h parallel)
-- cv-train-1: categories 0-177
-- cv-train-3: categories 178-355
-- 15 variations for "seen once", 10 for "barely known", 8 for "somewhat known", 3 for "well-known"
+## Why Previous Rounds Failed (Root Cause)
+- R1 (val 0.802): only 100 JC labels, bad augmentation (fliplr=0.5, degrees=5)
+- R2 (val 0.795): center-crop fallback labels poisoned auto-labeled data
+- R3 (killed): same poison, only 267 of 390 labels used (99 images on wrong VM)
+- R4 (val 0.796): corrected augmentation but still only 267 labels (missing 99 fixed now)
+- **R5 (RUNNING): ALL 366 labels, corrected augmentation, full dataset**
 
-### Step 3: JC labels bounding boxes using Butler's GUI tool
-- Butler building labeling tool (assignment in intelligence/for-ops-agent/)
-- JC draws one box per image, category pre-filled
-- Output: YOLO format labels
-
-### Step 4: Retrain + Submit
-- Merge real images + human-labeled Gemini shelf images
-- Retrain YOLO11m, 200 epochs
-- Evaluate, validate, submit
-
-## Product Weakness Tiers
-| Tier | Count | Generate per product | Total images |
-|------|-------|---------------------|-------------|
-| Seen once | 54 | 10 | 540 |
-| Barely known (2 imgs) | 18 | 8 | 144 |
-| Somewhat known (3-9 imgs) | 62 | 5 | 310 |
-| **Total** | **134** | | **994** |
+## Audit Findings Still TODO
+1. Fix build_submission.sh: remove embedded run.py, copy canonical instead (BGR bug + MAX_DETECTIONS)
+2. Build master_pipeline.sh (unified pipeline replacing 3 scripts)
+3. Automated score comparison (score_log.json)
+4. Label upload automation (label_uploader.sh)
+5. First submission at 01:00: rebuild maxdata ZIP with fixed canonical run.py (tests BGR fix)
 
 ## GCP VMs
-- cv-train-1: europe-west1-c (has all data, models, Gemini ADC) -- USE FOR GENERATION
-- cv-train-3: europe-west1-b -- USE FOR GENERATION
-- cv-train-4: europe-west3-a -- available for training later
-- ml-churn: ML agent, don't touch
+| VM | Zone | Status |
+|----|------|--------|
+| cv-train-1 | europe-west1-c | R5 TRAINING |
+| cv-train-4 | europe-west3-a | Pass 3 generation (may be done) |
+| ml-churn | europe-west1-b | ML agent |
 
-## API Details
-- Model: gemini-3.1-flash-image-preview
-- Location: "global" (for Vertex AI)
-- Rate limit: 60 RPM per project (we use ~4 RPM with 2 VMs)
-- Generation time: 36s average per image (25-58s range)
-- Reference images: up to 10 per product (object fidelity)
-
-## Calibration (predict leaderboard from val)
-| Val mAP50 | Leaderboard | Ratio |
-|-----------|-------------|-------|
-| 0.767 | 0.6475 | 0.845 |
-| 0.816 | 0.6584 | 0.807 |
-Use ~0.82 ratio to estimate. Only the LAST submission on Sunday matters.
+## Submissions: 6 fresh at 01:00 CET
