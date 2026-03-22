@@ -229,7 +229,7 @@ def predict_and_submit_v2(session, round_id, detail, round_num,
     if regime == "growth" and avg_growth > 5.0:
         alpha = 3  # Extreme growth: trust observations over model
     else:
-        alpha = {"death": 5, "stable": 30, "growth": 15}.get(regime, base_alpha)
+        alpha = {"death": 15, "stable": 12, "growth": 6}.get(regime, base_alpha)
 
     regime_flags = {
         "regime_death": 1 if regime == "death" else 0,
