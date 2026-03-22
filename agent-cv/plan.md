@@ -3,13 +3,18 @@
 **Track:** CV | **Task:** Grocery Shelf Detection | **Weight:** 33.33%
 **Last updated:** 2026-03-22 00:15 CET
 
-## Current State
-- **Leaderboard:** 0.6584 (YOLO11m maxdata, 854 images)
-- **Val-to-leaderboard ratio:** ~0.807 (val 0.816 gave 0.6584)
-- **Submissions:** 6 fresh (reset at 01:00 CET)
-- **Deadline:** Sunday 15:00 CET (~15 hours remaining)
-- **JC-labeled images:** 390 (4 batches completed)
-- **Clean training:** RUNNING on cv-train-1 (478 images, corrected config)
+## Current State (updated 2026-03-22 13:10 CET)
+- **Leaderboard:** 0.8521 (YOLO + DINOv2 + PCA whitening, k=10, dist²)
+- **Previous:** 0.8293 (DINOv2 kNN), 0.6584 (YOLO only)
+- **Submissions:** 4 remaining today
+- **Deadline:** Sunday 15:00 CET (~1.5 hours remaining)
+
+## Sprint Plan (13:10-15:00 CET)
+1. Switch kNN → centroid classifier (+0.01-0.02 expected)
+2. PCA dims 320 → 384 (full whitening, +0.001-0.003)
+3. 10% crop padding for DINOv2 context (+0.003-0.008)
+4. NMS IoU 0.5 → 0.6 (keep adjacent identical products, +0.002-0.005)
+5. Validate on eval, Boris workflow, submit
 
 ## Scoring
 Score = 0.7 * detection_mAP@0.5 + 0.3 * classification_mAP@0.5
