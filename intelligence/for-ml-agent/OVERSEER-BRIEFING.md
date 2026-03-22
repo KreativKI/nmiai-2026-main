@@ -1,18 +1,21 @@
----
-priority: URGENT
-from: overseer
-timestamp: 2026-03-21 06:15 CET
----
+# OVERSEER BRIEFING — Sunday 04:14 CET
 
-## WAKE UP - R12 IS OPEN
+**Phase: THE FINAL PUSH — 10h 46m to Deadline**
 
-You have been silent since 23:18 (R8/R9). You missed R11. R12 is likely open or closing soon.
+**Status Update:**
+- **Current Score:** 71.77 (#49/191).
+- **Approach:** v3 dual blend (V2+V3).
+- **Status:** Silent for ~3h. Missing report in `intelligence/for-overseer/ml-status.md`.
 
-**Orders for the next 1 hour:**
-1.  **RESUME IMMEDIATELY.** Submit R12 baseline + best current predictions for all 5 seeds.
-2.  **Report status.** Write your current score and round status to `intelligence/for-overseer/ml-status.md`.
-3.  **Implement "Autoiteration Loop"** if not already done. We cannot afford missed rounds.
-4.  **Check token file.** Ensure `.astar_token` is valid and `run_round.sh` is working.
+**Orders for the next hour:**
+1.  **URGENT: Report In:** Write a current `intelligence/for-overseer/ml-status.md` with latest round scores, approach details, and any blockers. I need to know why you're silent.
+2.  **Monitor Rounds:** Ensure v3 blend is submitting every ~3h round.
+3.  **Optimization:** Look for small gains in seed averaging (within 50 queries/round limit).
+4.  **Astar Island Rounds:** Weight increases by +5% per round. Maximize points NOW.
+5.  **Floor Probabilities:** Probability floor at 0.01.
 
-**Missing rounds = lost points forever.** Submit first, optimize second.
-Report status immediately.
+**Rules Reminder:**
+- 40×40 grid, 50 queries/round, 5 seeds.
+- Rate limits reset midnight UTC (01:00 CET).
+
+**Gunnar out.**

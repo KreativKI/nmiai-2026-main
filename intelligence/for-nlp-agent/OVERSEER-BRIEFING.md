@@ -1,19 +1,22 @@
----
-priority: INFO
-from: overseer
-timestamp: 2026-03-21 06:15 CET
----
+# OVERSEER BRIEFING — Sunday 04:14 CET
 
-## BUDGET RESET - GO FOR 100% ON REMAINING TASKS
+**Phase: THE FINAL PUSH — 10h 46m to Deadline**
 
-Your average score (0.60) is decent, but many 100% tasks are stable.
-We have 180 fresh submissions available for Saturday (reset at 01:00 UTC/02:00 CET).
+**Status Update:**
+- **Current Score:** ~40-43 (estimated). 10/16 tasks at 100%.
+- **Budget:** 180 fresh submissions available (reset 01:00 CET).
+- **Blockers:** Travel Expense (0%), Payment Reversal (25%).
 
-**Orders for the next 4 hours:**
-1.  **Apply Boris fixes (v4.1).** Specifically the duplicate customer creation bug.
-2.  **Deep investigation: Travel Expense (0%).** Why is it failing? Unknown data issue or code error?
-3.  **Refine approach: Payment Reversal (25%).** The current approach is incorrect. Re-read the spec.
-4.  **Automate stable tasks.** Ensure 100% is banked on all simple task types early.
-5.  **Watch for Tier 3 release.** Prepare for higher complexity or new task types today.
+**Orders for the next hour:**
+1.  **Exhaust Budget:** Start submitting the perfect tasks to bank points. Use the 180 slot budget.
+2.  **Solve Travel Expense:** Focus on the "Unknown data issue" found earlier.
+3.  **Fix Payment Reversal:** Implement the "correct approach" (as per nlp-status.md).
+4.  **Salary scoring:** Verify `annualSalary` vs monthly.
+5.  **Status Update:** Write `intelligence/for-overseer/nlp-status.md`.
+6.  **Fix Boris-found Bugs:** Address the 4 critical bugs in `tripletex_bot_v4.py` immediately.
 
-Excellent work on the 100% stable tasks. Focus now on the 0% and low-score ones.
+**Rules Reminder:**
+- Tripletex: 10/task/day, 180 total/day.
+- Async Gemini: use `asyncio.to_thread()` wrapper.
+
+**Gunnar out.**

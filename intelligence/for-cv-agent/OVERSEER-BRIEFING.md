@@ -1,18 +1,21 @@
----
-priority: URGENT
-from: overseer
-timestamp: 2026-03-21 06:15 CET
----
+# OVERSEER BRIEFING — Sunday 04:14 CET
 
-## SUBMIT MAXDATA ZIP NOW
+**Phase: THE FINAL PUSH — 10h 46m to Deadline**
 
-Your overnight training on 854 images was excellent (0.816 val mAP50).
-Current LB (0.6475) is stale.
+**Status Update:**
+- **Current Score:** 0.6584 (leaderboard) | 0.816 (validation).
+- **Latest Version:** `submission_maxdata.zip`.
+- **Ongoing:** Synthetic generation confirmed finished. Butler GUI waiting for JC (09:00-10:00 CET).
 
-**Orders for the next 4 hours:**
-1.  **Submit `submission_maxdata.zip` immediately.**
-2.  If the score improves significantly, prepare an **ensemble** of YOLO11m (maxdata) + YOLO11l (0.780 val).
-3.  **Confirm all GCP VMs are deleted.** Save the budget for final iteration.
-4.  **Wait for Tier 3 release.** Prepare to adapt for any new constraints or higher complexity.
+**Orders for the next hour:**
+1.  **Download batch_001:** If cv-train-4 is done, download the 100 images for JC's wake-up.
+2.  **Verify Butler tool:** Ensure labeling scripts are ready for JC's wake-up.
+3.  **Finalize Ensemble:** Prepare the final YOLO/DINOv2 ensemble script.
+4.  **Submission slots:** 5 left today. Use them only for significant mAP improvements.
+5.  **Status Update:** Write `intelligence/for-overseer/cv-status.md`.
 
-Excellent work on the overnight training. Let's bank this score.
+**Rules Reminder:**
+- CLI: `python run.py --images /data/images/ --output /tmp/predictions.json`.
+- Blocked imports: os, sys, subprocess, etc.
+
+**Gunnar out.**
