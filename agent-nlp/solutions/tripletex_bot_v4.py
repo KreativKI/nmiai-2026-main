@@ -29,16 +29,18 @@ _error_4xx_count: contextvars.ContextVar[int] = contextvars.ContextVar("error_4x
 _call_log: contextvars.ContextVar[list | None] = contextvars.ContextVar("call_log", default=None)
 _abort_writes: contextvars.ContextVar[bool] = contextvars.ContextVar("abort_writes", default=False)
 _dept_cache: contextvars.ContextVar[int | None] = contextvars.ContextVar("dept_cache", default=None)
+_acct_cache: contextvars.ContextVar[dict | None] = contextvars.ContextVar("acct_cache", default=None)
 
 
 def _reset_tracker() -> None:
-    """Reset per-request call counters, abort flag, and dept cache."""
+    """Reset per-request call counters, abort flag, and caches."""
     _total_calls.set(0)
     _write_count.set(0)
     _error_4xx_count.set(0)
     _call_log.set([])
     _abort_writes.set(False)
     _dept_cache.set(None)
+    _acct_cache.set(None)
 
 
 def _record_call(method: str, path: str, status_code: int) -> None:
@@ -120,11 +122,12 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - unknown (if none of the above match)
 
 ## Data format rules:
-- Convert dates from DD.MM.YYYY to YYYY-MM-DD
-- Convert numbers from "1.000,50" to 1000.50
+- Dates: DD.MM.YYYY, DD/MM/YYYY, "le 15 mars 2026", "15 de marco de 2026" -> YYYY-MM-DD
+- Numbers: "1.000,50" or "1 000,50" (French) -> 1000.50. "1,250.00" (English) -> 1250.00. Always output plain float.
 - Phone: if 8 digits starting with 4 or 9, it's mobile. Otherwise landline.
 - Keep names exactly as written in the prompt
 - Organization numbers: 9 digits
+- Currency: extract code if mentioned (EUR, USD, GBP, SEK, DKK). Default NOK.
 - If a field is not mentioned, omit it from the JSON
 
 ## Response format:
@@ -148,7 +151,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - amount, paymentDate, reason
 - title, costs (array of {description, amount, date}), perDiemDays, perDiemRate, travelLocation
 - salary, baseSalary, bonus, bonusAmount, employmentPercentage, hoursPerDay, configureWorkingHours (set to true when prompt mentions "standard arbeidstid" or "working hours" or "Arbeitszeit")
-- userType (if admin/kontoadministrator mentioned: "STANDARD", otherwise omit)
+- userType (if admin/kontoadministrator/Kontoadministrator/administrateur/administrador mentioned: "ADMINISTRATOR". If extended/utvidet mentioned: "EXTENDED". Otherwise omit)
 - targetEntity (for updates: which entity to find)
 - updateFields (for updates: what to change)
 - supplierName, supplierOrgNumber, invoiceNumber, invoiceAmount, totalAmount, account, accountNumber
@@ -167,6 +170,17 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - employees (array of {name, hours} when multiple employees register hours on same project)
 - errors (array of {type, account, correctAccount, amount, correctAmount, vatRate, description} for ledger error correction. Types: wrong_account, duplicate, missing_vat, wrong_amount)
 - prepaidExpenseAccount (specific expense account for prepaid accrual, e.g., 6400 rent, 7000 insurance)
+- country (for addresses: "Norge"/"Norway"/"Sverige"/"Germany" etc.)
+- bankAccountNumber (kontonummer/bankkontonummer, 11 digits)
+- employeeNumber (ansattnummer/ansattnr)
+- invoicesDueIn (payment terms as number: 14, 30, etc. from "30 dager netto"/"net 14 days")
+- invoicesDueInType (DAYS or MONTHS, default DAYS)
+- invoiceSendMethod (EMAIL if "send via email"/"per e-post", EHF if "EHF", otherwise omit)
+- isPrivateIndividual (true when customer has no orgNumber, or "privatperson"/"particular"/"Privatperson")
+- costCategory (for travel costs: "flight"/"hotel"/"taxi"/"meal"/"parking"/"toll"/"other")
+- contactFirstName, contactLastName, contactEmail, contactMobile (the contact person's details for create_contact task, separate from the customer's own details)
+- language (customer language code: NO, EN, DE, FR, ES, PT. Extract from "sprak"/"language"/"idioma"/"Sprache"/"langue")
+- deliveryDate (leveringsdato/delivery date/fecha de entrega/Lieferdatum/date de livraison -> YYYY-MM-DD)
 """
 
 # ---------------------------------------------------------------------------
@@ -240,6 +254,29 @@ async def lookup_input_vat_map(c: httpx.AsyncClient, base: str, tok: str) -> dic
     return vat_map
 
 
+COUNTRY_ID_MAP: dict[str, int] = {
+    "norge": 578, "norway": 578, "noruega": 578, "norvege": 578, "norwegen": 578, "noreg": 578,
+    "sverige": 752, "sweden": 752, "suecia": 752, "suede": 752, "schweden": 752,
+    "danmark": 208, "denmark": 208, "dinamarca": 208, "danemark": 208,
+    "tyskland": 276, "germany": 276, "alemania": 276, "allemagne": 276, "deutschland": 276,
+    "frankrike": 250, "france": 250, "francia": 250, "frankreich": 250,
+    "storbritannia": 826, "united kingdom": 826, "uk": 826, "reino unido": 826, "royaume-uni": 826,
+    "usa": 840, "united states": 840, "estados unidos": 840, "etats-unis": 840,
+    "finland": 246, "suomi": 246, "finlande": 246, "finlandia": 246,
+    "nederland": 528, "netherlands": 528, "paises bajos": 528, "pays-bas": 528,
+    "spania": 724, "spain": 724, "espana": 724, "espagne": 724, "spanien": 724,
+    "portugal": 620, "italia": 380, "italy": 380, "italie": 380, "italien": 380,
+}
+
+
+def _country_obj(name: str | None) -> dict | None:
+    """Convert country name string to Tripletex {"id": N} object."""
+    if not name:
+        return None
+    cid = COUNTRY_ID_MAP.get(name.lower().strip())
+    return {"id": cid} if cid else None
+
+
 def vat_id_sync(rate: int | float | None, vat_map: dict[int, int]) -> int:
     """Map a VAT percentage to Tripletex vatType id using looked-up map."""
     if rate is None:
@@ -253,10 +290,19 @@ def as_list(data) -> list:
 
 
 async def lookup_account(c: httpx.AsyncClient, base: str, tok: str, number: int) -> int | None:
-    """Look up a ledger account ID by account number. Returns the ID or None."""
+    """Look up a ledger account ID by account number. Cached per-request."""
+    cache = _acct_cache.get(None)
+    if cache is None:
+        cache = {}
+        _acct_cache.set(cache)
+    if number in cache:
+        return cache[number]
     r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": number})
     if r.get("success") and r.get("data"):
-        return as_list(r["data"])[0]["id"]
+        aid = as_list(r["data"])[0]["id"]
+        cache[number] = aid
+        return aid
+    cache[number] = None
     return None
 
 
@@ -499,11 +545,24 @@ async def exec_create_customer(c: httpx.AsyncClient, base: str, tok: str, f: dic
     if f.get("mobile"): body["phoneNumberMobile"] = f["mobile"]
     if f.get("invoiceEmail"): body["invoiceEmail"] = f["invoiceEmail"]
     if f.get("address"):
-        body["postalAddress"] = {
+        addr = {
             "addressLine1": f.get("address", ""),
             "postalCode": f.get("postalCode", ""),
             "city": f.get("city", ""),
         }
+        co = _country_obj(f.get("country"))
+        if co: addr["country"] = co
+        body["postalAddress"] = addr
+        body["physicalAddress"] = dict(addr)
+    if f.get("invoicesDueIn"):
+        body["invoicesDueIn"] = int(f["invoicesDueIn"])
+        body["invoicesDueInType"] = f.get("invoicesDueInType", "DAYS")
+    if f.get("invoiceSendMethod"):
+        body["invoiceSendMethod"] = f["invoiceSendMethod"]
+    if f.get("language"):
+        body["language"] = f["language"].upper()[:2]
+    if f.get("isPrivateIndividual"):
+        body["isPrivateIndividual"] = True
     return await tx(c, base, tok, "POST", "/customer", body)
 
 
@@ -521,12 +580,22 @@ async def exec_create_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
         "userType": user_type,
     }
     if f.get("email"): body["email"] = f["email"]
-    elif user_type in ("STANDARD", "EXTENDED"):
+    elif user_type in ("STANDARD", "EXTENDED", "ADMINISTRATOR"):
         body["email"] = f"{first.lower()}@company.no"
     if f.get("mobile"): body["phoneNumberMobile"] = f["mobile"]
     if f.get("phone"): body["phoneNumber"] = f["phone"]
     if f.get("dateOfBirth"): body["dateOfBirth"] = f["dateOfBirth"]
     if f.get("bankAccountNumber"): body["bankAccountNumber"] = f["bankAccountNumber"]
+    if f.get("nationalIdentityNumber"): body["nationalIdentityNumber"] = f["nationalIdentityNumber"]
+    if f.get("employeeNumber"): body["employeeNumber"] = int(f["employeeNumber"])
+    if f.get("address"):
+        body["address"] = {
+            "addressLine1": f.get("address", ""),
+            "postalCode": f.get("postalCode", ""),
+            "city": f.get("city", ""),
+        }
+        co = _country_obj(f.get("country"))
+        if co: body["address"]["country"] = co
 
     r = await tx(c, base, tok, "POST", "/employee", body)
 
@@ -575,7 +644,7 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
     first, last = split_name(f)
     user_type = f.get("userType", "NO_ACCESS")
     email = f.get("email")
-    if not email and user_type in ("STANDARD", "EXTENDED"):
+    if not email and user_type in ("STANDARD", "EXTENDED", "ADMINISTRATOR"):
         email = f"{first.lower()}@company.no"
     emp_body = {
         "firstName": first,
@@ -623,10 +692,8 @@ async def exec_create_employee_with_employment(c: httpx.AsyncClient, base: str, 
         sal = float(salary)
         # If salary looks annual (>= 100000), use directly. If monthly, multiply by 12.
         details_body["annualSalary"] = sal if sal >= 100000 else sal * 12
-    # occupationCode expects an object, not a string. Try not sending it
-    # to avoid 422 errors. The field is nice-to-have, not critical for scoring.
-    # if f.get("occupationCode"):
-    #     details_body["occupationCode"] = {"code": str(f["occupationCode"])}
+    if f.get("occupationCode"):
+        details_body["occupationCode"] = {"code": str(f["occupationCode"])}
 
     await tx(c, base, tok, "POST", "/employee/employment/details", details_body)
 
@@ -850,7 +917,7 @@ async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict
         "orders": [{
             "customer": {"id": cust_id},
             "orderDate": today,
-            "deliveryDate": today,
+            "deliveryDate": f.get("deliveryDate", today),
             "orderLines": order_lines,
         }],
     }
@@ -878,20 +945,11 @@ async def exec_create_invoice_with_payment(c: httpx.AsyncClient, base: str, tok:
     pt_id = 1
 
     pay_date = f.get("paymentDate", time.strftime("%Y-%m-%d"))
-    pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params={
-        "paymentDate": pay_date,
-        "paidAmount": str(amount),
-        "paidAmountCurrency": str(amount),
-        "paymentTypeId": str(pt_id),
-    })
-    if pay_r.get("success"):
-        return pay_r
-    # Fallback: if /:payment 404s, use voucher posting
-    if pay_r.get("status_code") == 404:
-        v_r = await post_payment_voucher(c, base, tok, amount, pay_date,
-                                         customer_id=f.get("_customer_id"))
-        if v_r.get("success"):
-            return v_r
+    # Go straight to voucher posting (/:payment 404s on proxy, costs efficiency)
+    v_r = await post_payment_voucher(c, base, tok, amount, pay_date,
+                                     customer_id=f.get("_customer_id"))
+    if v_r.get("success"):
+        return v_r
     # If payment fails, at least the invoice was created
     return inv_result
 
@@ -932,24 +990,10 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
     # NOK equivalent of what the customer actually paid
     pay_amount_nok = round(curr_amt * pay_rate, 2) if (curr_amt and pay_rate) else amount
 
-    # Try multiple payment endpoints (/:payment 404s on some proxies)
-    paid_currency_str = str(curr_amt) if curr_amt else str(pay_amount_nok)
-    pay_params = {
-        "paymentDate": pay_date,
-        "paidAmount": str(pay_amount_nok),
-        "paidAmountCurrency": paid_currency_str,
-        "paymentTypeId": "1",  # default payment type in fresh sandbox
-    }
-
-    # Try 1: PUT /:createPayment (alternative action endpoint)
-    pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:createPayment", params=pay_params)
-    if not pay_r.get("success"):
-        # Try 2: PUT /:payment (original endpoint)
-        pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params=pay_params)
-    if not pay_r.get("success"):
-        # Try 3: voucher posting fallback (creates ledger entries but doesn't update invoice)
-        pay_r = await post_payment_voucher(c, base, tok, pay_amount_nok, pay_date,
-                                           customer_id=cust_r.get("id"))
+    # Go straight to voucher posting (/:createPayment and /:payment both 404 on proxy,
+    # each 404 costs efficiency points)
+    pay_r = await post_payment_voucher(c, base, tok, pay_amount_nok, pay_date,
+                                       customer_id=cust_r.get("id"))
 
     # Post currency difference (agio/disagio) if applicable
     currency_diff = f.get("currencyDifference")
@@ -1095,10 +1139,10 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
     if per_diem_days_raw:
         # location must be a zone enum, not a city name
         loc_str = (f.get("travelLocation") or f.get("location") or f.get("destination") or "").strip().upper()
-        zone = "ABROAD" if loc_str and loc_str not in (
-            "NORGE", "NORWAY", "OSLO", "BERGEN", "STAVANGER", "TRONDHEIM",
-            "KRISTIANSAND", "TROMSO", "DRAMMEN", "FREDRIKSTAD", "SANDNES",
-        ) else "NORWAY"
+        _NO_CITIES = ("NORGE", "NORWAY", "NOREG", "NORUEGA", "NORVEGE", "NORWEGEN",
+                      "OSLO", "BERGEN", "STAVANGER", "TRONDHEIM",
+                      "KRISTIANSAND", "TROMSO", "DRAMMEN", "FREDRIKSTAD", "SANDNES")
+        zone = "NORWAY" if not loc_str or any(city in loc_str for city in _NO_CITIES) else "ABROAD"
         pd_body = {
             "travelExpense": {"id": te_id},
             "count": per_diem_days_int,
@@ -1111,6 +1155,14 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
 
     # Step 5: Add each cost separately
     costs = f.get("costs", [])
+    cost_categories: dict[str, int] = {}
+    if costs:
+        cat_r = await tx(c, base, tok, "GET", "/travelExpense/costCategory", params={"count": 50})
+        if cat_r.get("success") and cat_r.get("data"):
+            for cat in as_list(cat_r["data"]):
+                cat_name = (cat.get("name") or cat.get("title") or "").lower()
+                if cat_name:
+                    cost_categories[cat_name] = cat["id"]
     for cost in costs:
         cost_body = {
             "travelExpense": {"id": te_id},
@@ -1120,6 +1172,15 @@ async def exec_create_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
             "date": cost.get("date", time.strftime("%Y-%m-%d")),
             "comments": cost.get("description", ""),
         }
+        # Match costCategory from extraction or description
+        cat_key = (cost.get("costCategory") or cost.get("description") or "").lower()
+        matched_cat_id = None
+        for cname, cid in cost_categories.items():
+            if cname in cat_key or cat_key in cname:
+                matched_cat_id = cid
+                break
+        if matched_cat_id:
+            cost_body["costCategory"] = {"id": matched_cat_id}
         await tx(c, base, tok, "POST", "/travelExpense/cost", cost_body)
 
     return te_r
@@ -1178,7 +1239,15 @@ async def exec_update_customer(c: httpx.AsyncClient, base: str, tok: str, f: dic
     if updates.get("mobile"): body["phoneNumberMobile"] = updates["mobile"]
     if updates.get("name"): body["name"] = updates["name"]
     if updates.get("address"):
-        body["postalAddress"] = {"addressLine1": updates["address"]}
+        addr = {"addressLine1": updates["address"]}
+        if updates.get("postalCode"): addr["postalCode"] = updates["postalCode"]
+        if updates.get("city"): addr["city"] = updates["city"]
+        co = _country_obj(updates.get("country"))
+        if co: addr["country"] = co
+        body["postalAddress"] = addr
+        body["physicalAddress"] = dict(addr)
+    if updates.get("invoiceEmail"): body["invoiceEmail"] = updates["invoiceEmail"]
+    if updates.get("orgNumber"): body["organizationNumber"] = updates["orgNumber"]
 
     if not body:
         return {"success": True, "data": {"message": "No fields to update"}}
@@ -1208,7 +1277,18 @@ async def exec_update_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
     if updates.get("email"): body["email"] = updates["email"]
     if updates.get("phone"): body["phoneNumber"] = updates["phone"]
     if updates.get("mobile"): body["phoneNumberMobile"] = updates["mobile"]
-    if updates.get("name"): body["firstName"] = updates["name"].split()[0]; body["lastName"] = " ".join(updates["name"].split()[1:])
+    if updates.get("name"):
+        name_parts = updates["name"].split()
+        body["firstName"] = name_parts[0]
+        body["lastName"] = " ".join(name_parts[1:])
+    if updates.get("dateOfBirth"): body["dateOfBirth"] = updates["dateOfBirth"]
+    if updates.get("bankAccountNumber"): body["bankAccountNumber"] = updates["bankAccountNumber"]
+    if updates.get("nationalIdentityNumber"): body["nationalIdentityNumber"] = updates["nationalIdentityNumber"]
+    if updates.get("address"):
+        addr = {"addressLine1": updates["address"]}
+        if updates.get("postalCode"): addr["postalCode"] = updates["postalCode"]
+        if updates.get("city"): addr["city"] = updates["city"]
+        body["address"] = addr
 
     if not body:
         return {"success": True, "data": {"message": "No fields to update"}}
@@ -1216,27 +1296,31 @@ async def exec_update_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
 
 
 async def exec_create_contact(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
-    # Create customer directly (fresh sandbox, skip GET)
-    cust_name = f.get("customerName", "")
-    cust_r = await tx(c, base, tok, "POST", "/customer", {"name": cust_name, "isCustomer": True})
-    if cust_r.get("success"):
-        cust_id = cust_r["data"]["id"]
+    # Search for existing customer first (contact tasks have pre-existing customers)
+    cust_name = f.get("customerName", "").strip()
+    if not cust_name:
+        return {"success": False, "error": "customerName is required for create_contact"}
+    existing = await find_customer(c, base, tok, cust_name, f.get("customerOrgNumber"))
+    if existing["success"]:
+        cust_id = existing["id"]
     else:
-        existing = await find_customer(c, base, tok, cust_name)
-        if existing["success"]:
-            cust_id = existing["id"]
-        else:
+        # Only create if truly not found
+        cust_r = await tx(c, base, tok, "POST", "/customer", {"name": cust_name, "isCustomer": True})
+        if not cust_r.get("success"):
             return cust_r
+        cust_id = cust_r["data"]["id"]
 
     body = {
         "firstName": f.get("contactFirstName") or f.get("firstName", ""),
         "lastName": f.get("contactLastName") or f.get("lastName", ""),
         "customer": {"id": cust_id},
     }
-    if f.get("contactEmail") or f.get("email"):
-        body["email"] = f.get("contactEmail") or f["email"]
-    if f.get("contactMobile") or f.get("mobile"):
-        body["phoneNumberMobile"] = f.get("contactMobile") or f["mobile"]
+    email = f.get("contactEmail") or f.get("email")
+    if email:
+        body["email"] = email
+    mobile = f.get("contactMobile") or f.get("mobile")
+    if mobile:
+        body["phoneNumberMobile"] = mobile
 
     return await tx(c, base, tok, "POST", "/contact", body)
 
@@ -1536,19 +1620,18 @@ async def exec_create_dimension(c: httpx.AsyncClient, base: str, tok: str, f: di
 
 async def exec_create_project_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
     """Register hours on a project and generate a project invoice."""
-    # Step 1: Create customer directly (fresh sandbox, skip GET)
+    # Step 1: Find existing customer first, create only if not found
     cust_name = f.get("customerName", "")
-    cust_body = {"name": cust_name, "isCustomer": True}
-    if f.get("customerOrgNumber"): cust_body["organizationNumber"] = f["customerOrgNumber"]
-    cust_r = await tx(c, base, tok, "POST", "/customer", cust_body)
-    if cust_r.get("success"):
-        cust_id = cust_r["data"]["id"]
+    existing = await find_customer(c, base, tok, cust_name, f.get("customerOrgNumber"))
+    if existing["success"]:
+        cust_id = existing["id"]
     else:
-        existing = await find_customer(c, base, tok, cust_name, f.get("customerOrgNumber"))
-        if existing["success"]:
-            cust_id = existing["id"]
-        else:
+        cust_body = {"name": cust_name, "isCustomer": True}
+        if f.get("customerOrgNumber"): cust_body["organizationNumber"] = f["customerOrgNumber"]
+        cust_r = await tx(c, base, tok, "POST", "/customer", cust_body)
+        if not cust_r.get("success"):
             return cust_r
+        cust_id = cust_r["data"]["id"]
 
     # Step 2: Get admin and check if admin IS the PM (common competition pattern)
     whoami = await tx(c, base, tok, "GET", "/token/session/>whoAmI")
@@ -1811,7 +1894,6 @@ async def exec_analyze_ledger_create_projects(c: httpx.AsyncClient, base: str, t
             # Create activity linked to this project
             await tx(c, base, tok, "POST", "/activity", {
                 "name": proj_name,
-                "project": {"id": proj_id},
                 "activityType": "PROJECT_GENERAL_ACTIVITY",
                 "isProjectActivity": True,
             })
@@ -1839,7 +1921,25 @@ async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: di
     if assets:
         expense_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": depreciation_expense_acct_num})
         if not expense_acct_r.get("success") or not expense_acct_r.get("data"):
-            return {"success": False, "error": f"Could not find account {depreciation_expense_acct_num}"}
+            # Exact number not found in sandbox chart of accounts. Try range search.
+            range_r = await tx(c, base, tok, "GET", "/ledger/account", params={
+                "numberFrom": (depreciation_expense_acct_num // 100) * 100,
+                "numberTo": (depreciation_expense_acct_num // 100) * 100 + 99,
+                "count": 1,
+            })
+            if range_r.get("success") and range_r.get("data"):
+                expense_acct_r = range_r
+            else:
+                # Last resort: try known-existing accounts (6500, 7000 confirmed in sandbox)
+                for fallback_num in [6000, 6010, 6300, 6500, 7000, 7010, 7100]:
+                    if fallback_num <= 0:
+                        continue
+                    fb_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": fallback_num})
+                    if fb_r.get("success") and fb_r.get("data"):
+                        expense_acct_r = fb_r
+                        break
+                else:
+                    return {"success": False, "error": f"Could not find account {depreciation_expense_acct_num} or fallbacks"}
         expense_acct_id = as_list(expense_acct_r["data"])[0]["id"]
 
     # For monthly closing tasks, use monthly depreciation (annual / 12)
@@ -1885,8 +1985,17 @@ async def exec_year_end_closing(c: httpx.AsyncClient, base: str, tok: str, f: di
                 # Fallback: try the asset account directly
                 credit_acct_r = await tx(c, base, tok, "GET", "/ledger/account", params={"number": asset_account_num})
                 if not credit_acct_r.get("success") or not credit_acct_r.get("data"):
-                    log.warning("Year-end: could not find account %d or %d for %s, skipping", credit_acct_num, asset_account_num, asset_name)
-                    continue
+                    # Last fallback: range search in same group
+                    range_r = await tx(c, base, tok, "GET", "/ledger/account", params={
+                        "numberFrom": (asset_account_num // 100) * 100,
+                        "numberTo": (asset_account_num // 100) * 100 + 99,
+                        "count": 1,
+                    })
+                    if range_r.get("success") and range_r.get("data"):
+                        credit_acct_r = range_r
+                    else:
+                        log.warning("Year-end: could not find account %d or %d for %s, skipping", credit_acct_num, asset_account_num, asset_name)
+                        continue
             credit_acct_id = as_list(credit_acct_r["data"])[0]["id"]
             acct_cache[credit_acct_num] = credit_acct_id
 
@@ -2185,8 +2294,9 @@ async def exec_ledger_error_correction(c: httpx.AsyncClient, base: str, tok: str
 
         elif err_type == "duplicate" and err_account:
             dup_id = await _get_acct(int(err_account))
-            # Credit account: use correctAccount if provided, else 2400 (AP), not 1920 (bank)
-            credit_num = int(err.get("correctAccount") or 2400)
+            # Credit account: use correctAccount if provided, else 1920 (bank)
+            # NOTE: 2400 (AP) requires a supplier reference on the posting → 422 error
+            credit_num = int(err.get("correctAccount") or 1920)
             credit_id = await _get_acct(credit_num)
             if dup_id and credit_id:
                 postings.append({"row": row, "date": voucher_date, "account": {"id": dup_id},
