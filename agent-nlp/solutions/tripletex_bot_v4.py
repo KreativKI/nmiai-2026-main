@@ -945,9 +945,11 @@ async def exec_create_invoice_with_payment(c: httpx.AsyncClient, base: str, tok:
     pt_id = 1
 
     pay_date = f.get("paymentDate", time.strftime("%Y-%m-%d"))
+    # Extract customer_id from the invoice response for the payment voucher
+    cust_id = inv_result.get("data", {}).get("customer", {}).get("id")
     # Go straight to voucher posting (/:payment 404s on proxy, costs efficiency)
     v_r = await post_payment_voucher(c, base, tok, amount, pay_date,
-                                     customer_id=f.get("_customer_id"))
+                                     customer_id=cust_id)
     if v_r.get("success"):
         return v_r
     # If payment fails, at least the invoice was created
