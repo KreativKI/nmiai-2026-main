@@ -1,71 +1,36 @@
-# ML Session Handoff -- 2026-03-21 23:50 CET
+# ML Session Handoff -- 2026-03-22 01:00 CET
 
-## Score: R17=67.9. R18 pending (51-feat + obs proxies + regime reclassification).
+## Score: R18=28.6 (WORST ROUND). R17=67.9. overnight_v5 running.
+
+## R18 Post-Mortem (from actual data, not guessing)
+R18 was explosive growth: 30-54 initial -> 386-720 at year 50 (12-15x).
+Growth rate 11.6x from ground truth, highest ever seen.
+Our training max was 4.8x. The model had no experience with this level
+of growth and predicted wrong. Regime was correctly detected as growth.
+Problem: out-of-distribution growth magnitude, not regime detection.
 
 ## What's Running
-- ml-brain: overnight_v4 with full pipeline (51 features, obs proxies, regime reclassification)
-- churn: KILLED (produced zero improvement over defaults, wasted compute)
-- Cron watchdog still active for overnight_v4
+- ml-brain: overnight_v5 (MULTI-SEED observation, 9 queries per seed)
+  - Cron watchdog active (~/start_v5.sh)
+  - 51 features, obs proxies on ALL seeds, per-regime alpha
+  - Catching up on caching old rounds (fresh state file)
+- ml-churn: IDLE (available for temperature calibration)
 
-## What Happened This Session
+## What Changed This Session
+A. Hail Mary plan: 51 features, deep analysis, tournament (completed)
+B. Observation Intelligence: proxy features from observations (R2 gate passed)
+C. Multi-seed observation: 9 queries per seed, all 5 seeds get full coverage
+D. Bug fixes: per-regime alpha, calibration regime tag, replay resubmission
+E. Killed churn (zero improvement over defaults)
+F. R18 post-mortem: explosive growth OOD, not regime misclassification
 
-### Hail Mary Plan (4 audit rounds, approved)
-A. Extended build_dataset.py from 32 to 51 features
-   - Year-10 wealth/defense, Year-25 full stats, survival tracking
-   - Round-level trajectory features (growth rates, wealth decay, factions)
-   - All features have prediction-time defaults
+## In Progress
+- Temperature calibration (temperature_calibration.py written, not yet run)
+- Plan includes: per-regime models, physics prior, model ensemble
 
-B. Built evaluation framework (evaluate.py)
-   - Leave-one-round-out CV: baseline scores 78.1
-
-C. Tested 3 model approaches:
-   - 51-feat regressors: 78.1 (WINNER)
-   - Multiclass LightGBM: 26.3 (FAILED, argmax destroys probability info)
-   - CA-Markov: 19.0 (FAILED, static neighborhoods)
-
-D. Feature importance analysis: top features are ALL trajectory-based
-   - 61% of importance is replay-only (defaults to 1.0 at prediction time)
-   - This is the architectural ceiling
-
-### Observation Intelligence Plan (2 audit rounds, approved)
-E. Correlation analysis: 4 observation proxies passed R2 >= 0.5 gate
-   - obs_settle_growth vs settle_growth_y25: R2=0.807
-   - obs_settle_growth vs settle_growth_y10: R2=0.660
-   - obs_settle_growth vs faction_consol_y10: R2=0.576
-   - obs_forest_ratio vs settle_growth_y25: R2=0.775
-
-F. Implemented obs proxies in overnight_v4.py
-   - Counts observed settlements from deep-stacked observations
-   - Computes obs_settle_growth and injects into trajectory features
-   - OOD guard: falls back to default if > 2x training max
-
-G. Regime reclassification from full-grid observations
-   - Uses calibrated thresholds (death<0.9, growth>1.4) instead of 5-cell smell test
-   - Already corrected R18: smell test said "stable", obs said "growth" (6.25x)
-
-### Infrastructure
-H. deep_analysis.py: 8 hypotheses validated on 80 replays
-I. transition_model.py: 1.77M transitions, 4-level hierarchical fallback
-J. observation_analysis.py: correlation gate for proxy validation
-K. feature_importance.py: 51-feature importance breakdown
-L. All data complete: 17 rounds GT, 85 replays
-
-## Key Learnings
-- Multiclass LightGBM is WRONG for probabilistic prediction with KL scoring
-- CA-Markov can't compete with discriminative models
-- 61% of model importance is replay-only features (architectural ceiling)
-- Observation-derived proxies can fill ~24% of the gap (settle_growth features)
-- Regime reclassification from full-grid obs is better than 5-cell smell test
-- Churn produced zero improvement over defaults (killed)
-
-## Data on GCP
-- 17 rounds GT + 85 replays (all complete)
-- 51-feature master dataset (115K rows)
-- Obs data saved for R16-R18
-
-## Next Session
-- Check R18 score (first round with obs proxies + regime reclassification)
-- If obs proxies helped: the approach is validated
-- If not: check if OOD guard triggered or regime was already correct
-- Feature freeze Sunday 09:00 CET
-- Competition ends Sunday 15:00 CET
+## Next Steps
+1. Run temperature calibration (LOO-CV)
+2. Deploy temperature + v5 multi-seed for R19
+3. Investigate OOD handling for extreme growth rounds
+4. Feature freeze Sunday 09:00 CET
+5. Competition ends Sunday 15:00 CET

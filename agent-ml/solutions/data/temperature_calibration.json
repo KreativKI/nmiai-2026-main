@@ -1,0 +1,29 @@
+{
+  "overall": {
+    "T": 1.05,
+    "score": 77.6
+  },
+  "per_regime": {
+    "death": {
+      "T": 1.0,
+      "score": 84.6,
+      "baseline": 84.6,
+      "improvement": 0.0,
+      "n_seeds": 35
+    },
+    "stable": {
+      "T": 1.0,
+      "score": 79.4,
+      "baseline": 79.4,
+      "improvement": 0.0,
+      "n_seeds": 15
+    },
+    "growth": {
+      "T": 1.15,
+      "score": 71.8,
+      "baseline": 70.5,
+      "improvement": 1.3,
+      "n_seeds": 40
+    }
+  }
+}
