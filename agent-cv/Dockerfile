@@ -10,5 +10,5 @@ RUN pip install --no-cache-dir \
     ensemble-boxes==1.0.9 \
     scipy==1.12.0
 RUN mkdir -p /data/images /output
-COPY submission/ /app/
+COPY submission_pretrained/ /app/
 CMD ["python", "run.py", "--images", "/data/images", "--output", "/tmp/predictions.json"]

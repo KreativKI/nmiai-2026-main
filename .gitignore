@@ -87,3 +87,8 @@ shared/tools/nlp_submission_log.json
 shared/tools/.ml_round_state.json
 shared/tools/.aggregate_status.json
 shared/tools/.leaderboard_snapshots/
+.zip files
+*.zip
+agent-cv/submission_*/
+*.zip
+agent-cv/submission_*/

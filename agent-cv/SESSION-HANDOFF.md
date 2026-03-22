@@ -1,56 +1,81 @@
-# CV Session Handoff — 2026-03-22 00:45 CET
+# CV Session Handoff — 2026-03-22 15:00 CET (COMPETITION END)
 
-## Leaderboard: 0.6584 | ~14 hours to deadline (Sun 15:00 CET)
+## Final Score: 0.8783 (public leaderboard)
 
-## CRITICAL: R5 Training is RUNNING on cv-train-1
-- **What:** YOLO11m fine-tuning from maxdata best weights (val 0.816)
-- **Data:** 577 images (211 real + 366 JC-labeled Gemini shelf images)
-- **Config:** batch=8, lr=0.0003, fliplr=0, degrees=0, hsv_s=0.3, patience=10, close_mosaic=10
-- **Log:** `~/retrain_r5.log` on cv-train-1
-- **ETA:** ~01:15 CET (50 epochs, patience may stop early)
-- **Check:** `gcloud compute ssh cv-train-1 --zone=europe-west1-c --project=ai-nm26osl-1779 --command='grep "all " ~/retrain_r5.log | tail -5'`
+## Score Progression
+| Time | Score | What changed |
+|------|-------|-------------|
+| ~01:00 | 0.6584 | YOLO11m only (maxdata weights, val 0.816) |
+| ~12:00 | 0.8293 | + DINOv2 ViT-S kNN reclassification (gallery 9,949 crops) |
+| ~13:00 | 0.8521 | + PCA whitening 320d, k=10, distance²-weighted voting |
+| ~14:06 | 0.8783 | + LinearSVC replacing kNN, conf=0.15, IoU=0.6 |
+| ~14:35 | 0.8783 | Pre-computed SVC (same score, 53s faster: 146s vs 199s) |
+| ~14:58 | FAILED | Multiscale tiling + WBF (exit code 1, fixed but too late) |
 
-## When R5 finishes:
-1. Check val mAP50 (target: beat 0.816)
-2. If improved: export ONNX, build ZIP with canonical `solutions/run.py`, validate with cv_pipeline.sh
-3. Submit as first slot (6 available after 01:00 reset)
-4. If NOT improved: investigate, consider more JC labels or config changes
+## Submissions Used: 5 of 6
+1. submission_twostage.zip → 0.8293 (DINOv2 kNN, gallery_rich)
+2. submission_pca.zip → 0.8521 (PCA whitening, k=10, dist²)
+3. submission_svc.zip → 0.8783 (LinearSVC, conf=0.15, IoU=0.6)
+4. submission_pretrained_clean.zip → 0.8783 (pre-computed SVC, 146s)
+5. submission_multiscale_clean.zip → FAILED (ONNX fixed input 1280, tried 1920)
 
-## Key Files on GCP (cv-train-1, europe-west1-c)
-- Best existing weights: `~/retrain/yolo11m_maxdata_200ep/weights/best.pt` (val 0.816)
-- R5 training output: `~/retrain_r5/yolo11m_gemini/`
-- JC labels: `~/gemini_labels/` (366 files)
-- Generated images: `~/gemini_shelf_gen/` (616 images)
-- Canonical run.py: `~/run_canonical.py`
-- Retrain script: `~/scripts/retrain_with_gemini.py` (FIXED augmentation)
-- Build script: `~/scripts/build_submission.sh`
-- Validation: `~/shared/tools/cv_pipeline.sh`
+## What Worked
+- Two-stage pipeline (YOLO detect + DINOv2 classify) was the single biggest gain (+0.1709)
+- PCA whitening removed noisy DINOv2 dimensions (+0.0228)
+- LinearSVC learned proper decision boundaries vs kNN voting (+0.0262)
+- Validated every change on eval before submitting (avoided regressions)
+- Boris workflow caught real bugs (post-DINOv2 NMS risk, negative hash, dummy crops)
+- PMM competitor team audit identified LinearSVC and PCA whitening
 
-## Key Files Local
-- Plan: `agent-cv/plan.md` (fully updated with audit findings)
-- Canonical run.py: `agent-cv/solutions/run.py` (RGB, *.jpeg glob, per-class NMS)
-- Labeled batches: `agent-cv/labeled_complete/batch_001-004/` (390 labels total, 366 on VM)
-- Pending batches: `agent-cv/label_batches/batch_005/ (100), batch_006/ (17)`
+## What Failed / Was Rejected (validated on eval)
+- Combined gallery (studio photos): ZERO improvement
+- Crop padding 10%: HURT (0.8050 vs 0.8340)
+- Centroid classifier: HURT (0.7550 vs 0.8340)
+- TTA: negligible (+0.002)
+- SAHI: hurt
+- Ensemble YOLO11m+26m: +0.000
+- Multiscale YOLO (1920): crashed (fixed input shape), fixed with tiling but too late
+- R5 training (YOLO retrain with JC labels): val 0.802 < 0.816 baseline
 
-## Why Previous Rounds Failed (Root Cause)
-- R1 (val 0.802): only 100 JC labels, bad augmentation (fliplr=0.5, degrees=5)
-- R2 (val 0.795): center-crop fallback labels poisoned auto-labeled data
-- R3 (killed): same poison, only 267 of 390 labels used (99 images on wrong VM)
-- R4 (val 0.796): corrected augmentation but still only 267 labels (missing 99 fixed now)
-- **R5 (RUNNING): ALL 366 labels, corrected augmentation, full dataset**
+## What We Never Got To
+- Full 22,731-crop SVC training (GCP SSH overloaded)
+- DINOv2 ViT-B (larger encoder, 768d embeddings)
+- Per-class confidence calibration
+- Soft-NMS
+- Multi-scale tiling (fixed too late)
+- Query-time augmentation (embed multiple augmented versions)
 
-## Audit Findings Still TODO
-1. Fix build_submission.sh: remove embedded run.py, copy canonical instead (BGR bug + MAX_DETECTIONS)
-2. Build master_pipeline.sh (unified pipeline replacing 3 scripts)
-3. Automated score comparison (score_log.json)
-4. Label upload automation (label_uploader.sh)
-5. First submission at 01:00: rebuild maxdata ZIP with fixed canonical run.py (tests BGR fix)
+## Key Decisions & Timing
+- Spent first ~2h on R5 training (waiting, not productive)
+- Competitor analysis at ~10:00 identified two-stage approach
+- DINOv2 was previously marked as "REJECT" in plan but had never been properly tested (failed due to .npz packaging, not accuracy)
+- Gallery evaluation showed combined vs rich gallery = identical, saved a wasted submission
+- PCA hyperopt grid search found optimal k=10, PCA=320, dist² in one run
+- LinearSVC idea came from PMM audit team role-play
 
-## GCP VMs
-| VM | Zone | Status |
+## Architecture (final)
+```
+YOLO11m (ONNX, 78MB)
+  → detect boxes (conf=0.15, NMS IoU=0.6)
+  → crop each detection from original image
+DINOv2 ViT-S (ONNX, 84MB)
+  → embed crops (batched, 16 at a time)
+  → PCA whiten (384→320 dims, computed at runtime from gallery)
+LinearSVC (pre-computed weights in classifier_params.json, 4.7MB)
+  → classify: decision = X @ coef.T + intercept
+  → confidence: sigmoid(max_decision)
+Output score = det_conf * cls_confidence
+```
+
+## Files
+- Best submission code: solutions/run_svc.py (runtime SVC) or solutions/run_pretrained_clean.py (pre-computed)
+- Gallery builder: scripts/build_rich_gallery.py
+- PCA hyperopt: scripts/eval_knn_hyperopt.py
+- SVC precompute: scripts/precompute_svc.py
+- All eval scripts: scripts/eval_*.py
+
+## GCP VMs (STOP THESE TO SAVE MONEY)
+| VM | Zone | Action |
 |----|------|--------|
-| cv-train-1 | europe-west1-c | R5 TRAINING |
-| cv-train-4 | europe-west3-a | Pass 3 generation (may be done) |
-| ml-churn | europe-west1-b | ML agent |
-
-## Submissions: 6 fresh at 01:00 CET
+| cv-train-1 | europe-west1-c | STOP |
+| cv-train-4 | europe-west3-a | STOP |

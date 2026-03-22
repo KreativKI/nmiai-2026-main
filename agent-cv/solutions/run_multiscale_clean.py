@@ -22,7 +22,8 @@ from ensemble_boxes import weighted_boxes_fusion
 YOLO_MODEL = "best.onnx"
 DINO_MODEL = "dinov2_vits.onnx"
 CLASSIFIER_PARAMS = "classifier_params.json"
-YOLO_SCALES = [1280, 1920]
+YOLO_INPUT_SIZE = 1280
+TILE_OVERLAP = 0.2
 DINO_INPUT_SIZE = 518
 CONF_THRESHOLD = 0.15
 IOU_THRESHOLD = 0.6
@@ -76,16 +77,51 @@ def decode_yolo(output, scale, pad, orig_h, orig_w, conf_thresh):
     return coords, confidences, class_ids
 
 
-def run_yolo_at_scale(yolo_sess, yolo_input, img, orig_h, orig_w, scale_size):
-    """Run YOLO inference at a given input scale and return decoded detections."""
-    img_lb, scale, pad = letterbox(img, scale_size)
+def run_yolo_single(yolo_sess, yolo_input_name, img, orig_h, orig_w):
+    """Run YOLO on a single image/tile, return detections in tile coordinates."""
+    img_lb, scale, pad = letterbox(img, YOLO_INPUT_SIZE)
     img_rgb = cv2.cvtColor(img_lb, cv2.COLOR_BGR2RGB)
     img_norm = img_rgb.astype(np.float32) / 255.0
     img_batch = np.transpose(img_norm, (2, 0, 1))[np.newaxis, ...]
-    yolo_out = yolo_sess.run(None, {yolo_input: img_batch})
-    boxes, scores, labels = decode_yolo(
-        yolo_out[0], scale, pad, orig_h, orig_w, CONF_THRESHOLD)
-    return boxes, scores, labels
+    yolo_out = yolo_sess.run(None, {yolo_input_name: img_batch})
+    return decode_yolo(yolo_out[0], scale, pad, orig_h, orig_w, CONF_THRESHOLD)
+
+
+def run_yolo_with_tiles(yolo_sess, yolo_input_name, img, orig_h, orig_w):
+    """Run YOLO on full image + overlapping tiles for large images, return all detections."""
+    all_boxes = []
+    all_scores = []
+    all_labels = []
+
+    # Full image pass
+    boxes, scores, labels = run_yolo_single(yolo_sess, yolo_input_name, img, orig_h, orig_w)
+    all_boxes.append(boxes)
+    all_scores.append(scores)
+    all_labels.append(labels)
+
+    # Tile pass only for large images (where 1280 letterbox loses detail)
+    if max(orig_h, orig_w) >= 2000:
+        tile_size = 1280
+        step = int(tile_size * (1 - TILE_OVERLAP))
+        for ty in range(0, orig_h, step):
+            for tx in range(0, orig_w, step):
+                tx2 = min(tx + tile_size, orig_w)
+                ty2 = min(ty + tile_size, orig_h)
+                tx1 = max(0, tx2 - tile_size)
+                ty1 = max(0, ty2 - tile_size)
+                tile = img[ty1:ty2, tx1:tx2]
+                th, tw = tile.shape[:2]
+                t_boxes, t_scores, t_labels = run_yolo_single(
+                    yolo_sess, yolo_input_name, tile, th, tw)
+                if len(t_boxes) > 0:
+                    # Offset to full image coordinates
+                    t_boxes[:, [0, 2]] += tx1
+                    t_boxes[:, [1, 3]] += ty1
+                    all_boxes.append(t_boxes)
+                    all_scores.append(t_scores)
+                    all_labels.append(t_labels)
+
+    return all_boxes, all_scores, all_labels
 
 
 def fuse_multiscale_detections(all_boxes, all_scores, all_labels, orig_h, orig_w):
@@ -228,16 +264,9 @@ def main():
             continue
         orig_h, orig_w = img.shape[:2]
 
-        # --- Multiscale YOLO: run at each scale ---
-        all_boxes = []
-        all_scores = []
-        all_labels = []
-        for scale_size in YOLO_SCALES:
-            boxes, scores, labels = run_yolo_at_scale(
-                yolo_sess, yolo_input, img, orig_h, orig_w, scale_size)
-            all_boxes.append(boxes)
-            all_scores.append(scores)
-            all_labels.append(labels)
+        # --- YOLO: full image + tiles for large images ---
+        all_boxes, all_scores, all_labels = run_yolo_with_tiles(
+            yolo_sess, yolo_input, img, orig_h, orig_w)
 
         # --- Fuse detections with WBF ---
         boxes, det_scores, yolo_labels = fuse_multiscale_detections(
