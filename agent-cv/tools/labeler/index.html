@@ -168,6 +168,7 @@ canvas{display:block;touch-action:none}
         <div class="progress-track"><div id="progress-bar" class="progress-fill"></div></div>
     </div>
     <div id="timer-display" style="color:var(--amber);font-size:13px;font-weight:600;flex-shrink:0">00:00</div>
+    <button onclick="quitApp()" class="btn btn-ghost" style="padding:4px 6px;min-width:32px;min-height:32px;opacity:0.5" aria-label="Quit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="2" x2="12" y2="6"/></svg></button>
 </div>
 
 <div class="stage" id="stage">
@@ -509,6 +510,12 @@ async function smartDetect(nx,ny){
     const r=await api('/api/smart-detect',{method:'POST',body:JSON.stringify({filename:currentImage.filename,tap_x:nx,tap_y:ny})});
     if(r&&r.ok&&r.bbox){bbox=r.bbox;draw();showToast('Detected')}
     else{showToast(r?.error||'Detection failed')}
+}
+
+async function quitApp(){
+    if(!confirm('Quit labeler?'))return;
+    await api('/api/quit');
+    document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:var(--muted);font-size:18px">Server stopped. Close this tab.</div>';
 }
 
 canvas.addEventListener('mousedown',handlePointerDown);

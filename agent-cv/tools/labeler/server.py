@@ -466,6 +466,13 @@ class LabelHandler(http.server.BaseHTTPRequestHandler):
             self.serve_file(resolved, ct)
             return
 
+        if path == "/api/quit":
+            self.send_json({"ok": True, "message": "Shutting down"})
+            print("\nQuit requested from UI. Stopping.")
+            import threading
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+            return
+
         self.send_error(404)
 
     def do_POST(self):
