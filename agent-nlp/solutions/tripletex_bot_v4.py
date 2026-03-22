@@ -778,20 +778,19 @@ async def exec_create_project(c: httpx.AsyncClient, base: str, tok: str, f: dict
 async def exec_create_invoice(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
     vat_map = await lookup_vat_map(c, base, tok)
 
-    # Step 1: Create customer directly (fresh sandbox = no existing customers, skip GET)
+    # Step 1: Find or create customer
     cust_name = f.get("customerName", "")
-    cust_body = {"name": cust_name, "isCustomer": True}
-    if f.get("customerOrgNumber"): cust_body["organizationNumber"] = f["customerOrgNumber"]
-    cust_r = await tx(c, base, tok, "POST", "/customer", cust_body)
-    if cust_r.get("success"):
-        cust_id = cust_r["data"]["id"]
+    cust_r = await find_customer(c, base, tok, cust_name, f.get("customerOrgNumber"))
+    if cust_r["success"]:
+        cust_id = cust_r["id"]
     else:
-        # Fallback: customer might exist (rare), try to find
-        existing = await find_customer(c, base, tok, cust_name, f.get("customerOrgNumber"))
-        if existing["success"]:
-            cust_id = existing["id"]
-        else:
-            return cust_r
+        # Not found, create new
+        cust_body = {"name": cust_name, "isCustomer": True}
+        if f.get("customerOrgNumber"): cust_body["organizationNumber"] = f["customerOrgNumber"]
+        create_r = await tx(c, base, tok, "POST", "/customer", cust_body)
+        if not create_r.get("success"):
+            return create_r
+        cust_id = create_r["data"]["id"]
 
     # Step 2: Register bank account (REQUIRED - invoices fail without it)
     # Only PUT if not already set (saves 1 write per run for efficiency)
@@ -935,23 +934,18 @@ async def exec_register_payment(c: httpx.AsyncClient, base: str, tok: str, f: di
 
     # Try multiple payment endpoints (/:payment 404s on some proxies)
     paid_currency_str = str(curr_amt) if curr_amt else str(pay_amount_nok)
-    pt_id = 1  # default payment type in fresh sandbox
-
-    # Try 1: PUT /:createPayment (alternative action endpoint)
-    pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:createPayment", params={
+    pay_params = {
         "paymentDate": pay_date,
         "paidAmount": str(pay_amount_nok),
         "paidAmountCurrency": paid_currency_str,
-        "paymentTypeId": str(pt_id),
-    })
+        "paymentTypeId": "1",  # default payment type in fresh sandbox
+    }
+
+    # Try 1: PUT /:createPayment (alternative action endpoint)
+    pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:createPayment", params=pay_params)
     if not pay_r.get("success"):
         # Try 2: PUT /:payment (original endpoint)
-        pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params={
-            "paymentDate": pay_date,
-            "paidAmount": str(pay_amount_nok),
-            "paidAmountCurrency": paid_currency_str,
-            "paymentTypeId": str(pt_id),
-        })
+        pay_r = await tx(c, base, tok, "PUT", f"/invoice/{inv_id}/:payment", params=pay_params)
     if not pay_r.get("success"):
         # Try 3: voucher posting fallback (creates ledger entries but doesn't update invoice)
         pay_r = await post_payment_voucher(c, base, tok, pay_amount_nok, pay_date,
@@ -1144,8 +1138,8 @@ async def exec_delete_employee(c: httpx.AsyncClient, base: str, tok: str, f: dic
     for e in emps:
         if e.get("firstName") == first and e.get("lastName") == last:
             return await tx(c, base, tok, "DELETE", f"/employee/{e['id']}")
-    # Fallback to first result if no exact match
-    return await tx(c, base, tok, "DELETE", f"/employee/{emps[0]['id']}")
+    # No exact match found - don't delete wrong person
+    return {"success": False, "error": f"No exact match for {first} {last}"}
 
 
 async def exec_delete_travel_expense(c: httpx.AsyncClient, base: str, tok: str, f: dict) -> dict:
@@ -1162,7 +1156,7 @@ async def exec_delete_travel_expense(c: httpx.AsyncClient, base: str, tok: str, 
                     target_emp_id = e["id"]
                     break
             if not target_emp_id:
-                target_emp_id = emps[0]["id"]
+                return {"success": False, "error": f"No exact match for {first} {last}"}
             te_r = await tx(c, base, tok, "GET", "/travelExpense", params={"employeeId": target_emp_id})
             if te_r.get("success") and te_r.get("data"):
                 tes = as_list(te_r["data"])
@@ -1814,9 +1808,10 @@ async def exec_analyze_ledger_create_projects(c: httpx.AsyncClient, base: str, t
         })
         if proj_r.get("success"):
             proj_id = proj_r["data"]["id"]
-            # Create activity for this project (activityType is required)
+            # Create activity linked to this project
             await tx(c, base, tok, "POST", "/activity", {
                 "name": proj_name,
+                "project": {"id": proj_id},
                 "activityType": "PROJECT_GENERAL_ACTIVITY",
                 "isProjectActivity": True,
             })
