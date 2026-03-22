@@ -224,8 +224,12 @@ def predict_and_submit_v2(session, round_id, detail, round_num,
     total_s, total_p, init_forest = count_terrain_classes(
         detail["initial_states"][0]["grid"], h, w)
 
-    # Per-regime Dirichlet alpha
-    alpha = {"death": 5, "stable": 30, "growth": 15}.get(regime, base_alpha)
+    # Per-regime Dirichlet alpha (dynamic for extreme growth)
+    avg_growth = float(np.mean(growth_ratios)) if growth_ratios else 1.0
+    if regime == "growth" and avg_growth > 5.0:
+        alpha = 3  # Extreme growth: trust observations over model
+    else:
+        alpha = {"death": 5, "stable": 30, "growth": 15}.get(regime, base_alpha)
 
     regime_flags = {
         "regime_death": 1 if regime == "death" else 0,
@@ -258,9 +262,11 @@ def predict_and_submit_v2(session, round_id, detail, round_num,
                 seed_init_s = sum(1 for y in range(h) for x in range(w)
                                   if TERRAIN_TO_CLASS.get(int(ig[y][x]), 0) in (1, 2))
                 obs_growth = obs_settle / max(seed_init_s, 1)
-                if obs_growth <= 9.7:
-                    traj["settle_growth_y25"] = obs_growth
-                    traj["settle_growth_y10"] = min(obs_growth, 4.1)
+                # Cap at verified training max (from master_dataset.npz)
+                TRAIN_MAX_Y25 = 4.846
+                TRAIN_MAX_Y10 = 2.062
+                traj["settle_growth_y25"] = min(obs_growth, TRAIN_MAX_Y25)
+                traj["settle_growth_y10"] = min(obs_growth, TRAIN_MAX_Y10)
 
         round_feats = {**regime_flags, "total_settlements": total_s,
                        "total_ports": total_p, **traj}
