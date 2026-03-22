@@ -1,92 +1,58 @@
-# ML Session Handoff -- 2026-03-22 09:15 CET
+# ML Session Handoff -- 2026-03-22 15:00 CET (COMPETITION ENDED)
 
-## CRITICAL: Competition ends 15:00 CET today. ~5.75 hours left.
+## Final Score
+R23: 61.8 (growth regime, alpha=6). Our worst round.
+Total weighted: ~234 + R23 contribution. Rank: ~#150 range.
 
-## Current Score
-Total weighted: 2326.3. R22 active (95 min left, already submitted).
+## Score History (all rounds)
 
-| Round | Score | Rank | Model |
-|-------|-------|------|-------|
-| R17 | 67.9 | 179 | v4 32-feat |
-| R18 | 28.6 | 214 | v4 51-feat (OOD growth 11.6x) |
-| **R19** | **85.3** | **102** | **v5 multi-seed** |
-| **R20** | **82.8** | **92** | **v5 multi-seed** |
-| **R21** | **78.7** | **155** | **v5 multi-seed** |
-| R22 | pending | - | v5 multi-seed + OOD fix |
+| Round | Score | Rank | Model | Notes |
+|-------|-------|------|-------|-------|
+| R9 | 82.6 | 93 | V2 deep stack | |
+| R14 | 67.8 | 95 | V3+V2 blend | |
+| R15 | 81.6 | 137 | V4 32-feat | |
+| R16 | 57.0 | 203 | V4 32-feat | |
+| R17 | 67.9 | 179 | V4 32-feat | |
+| R18 | 28.6 | 214 | V4 51-feat | OOD growth 11.6x |
+| R19 | 85.3 | 102 | V5 multi-seed | |
+| R20 | 82.8 | 92 | V5 multi-seed | |
+| R21 | 78.7 | 155 | V5 multi-seed | |
+| R22 | 80.0 | 104 | V5 multi-seed | |
+| R23 | 61.8 | ? | V5 + alpha=6 | RESUBMITTED with wrong alpha |
 
-## What's Running
-- ml-brain: overnight_v5.py with cron watchdog (~/start_v5.sh)
-- ml-churn: IDLE
-- Cron: `*/15 * * * * pgrep -f overnight_v5.py > /dev/null || bash ~/start_v5.sh`
+## What Happened in Final Session
 
-## overnight_v5 Features (deployed, working)
-- Multi-seed observation: 9 queries/seed x 5 seeds = full grid coverage
-- 51 features with trajectory proxies from observations
-- obs_settle_growth on ALL seeds (not just deep seed)
-- Per-regime Dirichlet alpha (death=5, stable=30, growth=15)
-- Dynamic alpha=3 for extreme growth (avg_growth > 5.0)
-- OOD cap: obs_settle_growth capped at training max (y25=4.846, y10=2.062)
-- Regime reclassification from 5-seed average
-- Hard constraints (port-coastal, ruin-cap)
-- Replay resubmission when replay data appears
-- All code in: agent-ml/solutions/overnight_v5.py
+### What we built
+- overnight_v6.py: MLP ensemble + RegimeModel + spatial features + cross-seed stats + alpha tuning
+- Backtest showed V6 was -0.2 vs V5. Not deployed.
+- Tested 3 patches (obs proxies +0.2, temperature -12.6, blur -0.5). Not deployed.
+- Alpha brute-force search: found death=15, stable=12, growth=6 as "optimal"
+- Resubmitted R23 with alpha=6 (was 15)
 
-## Key Files on GCP (ml-brain)
-- ~/solutions/overnight_v5.py (production)
-- ~/solutions/build_dataset.py (51 features)
-- ~/solutions/data/ground_truth_cache/ (20+ rounds)
-- ~/solutions/data/replays/ (85+ replay files)
-- ~/solutions/data/master_dataset.npz (122K+ rows x 51 features)
-- ~/overnight_v5.log (production log)
-- ~/start_v5.sh (startup script)
-- ~/overnight_v5_state.json (state: submitted rounds, cached rounds)
+### The Critical Mistake
+Alpha search ran LOCALLY with simulated observations (ground truth argmax).
+Perfect observations make low alpha look good (trust obs more).
+Real observations are NOISY (single Monte Carlo sample) and need HIGHER alpha.
 
-## Key Files Local
-- agent-ml/solutions/overnight_v5.py (production code)
-- agent-ml/solutions/build_dataset.py (feature extraction, 51 features)
-- agent-ml/solutions/evaluate.py (LOO-CV framework)
-- agent-ml/solutions/deep_analysis.py (8 hypotheses validated)
-- agent-ml/solutions/transition_model.py (1.77M transitions)
-- agent-ml/solutions/observation_analysis.py (proxy correlation gate)
-- agent-ml/solutions/feature_importance.py (51-feature breakdown)
-- agent-ml/solutions/temperature_calibration.py (tested, negligible +0.1)
-- agent-ml/solutions/audit.py (persistent unbiased auditor)
-- agent-ml/plan.md (current plan)
+When we ran the same search on GCP with REAL observation files (R19-R22):
+- Death optimal: alpha=25 (not 15)
+- Pattern: noisy obs need MORE model trust, not less
 
-## Critical Findings This Session
+We lowered growth alpha from 15 to 6 (trusting noisy observations more).
+We should have RAISED it. R23 likely scored worse because of our resubmission.
 
-### Game is escalating growth rounds
-Growth magnitude over time: R6=1.6x, R7=2.3x, R11=3.3x, R12=4.0x, R14=5.8x, R18=11.6x
-Correlation R=-0.802: more growth = worse score.
-OOD fix deployed: cap at training max + dynamic alpha.
+The original V5 submission with alpha=15 would have scored ~80+ based on R19-R21 pattern.
 
-### Multi-seed was the biggest win (+19 points)
-Spreading 50 queries across all 5 seeds instead of deep-stacking 1 seed.
-R19-R21 averaged 82.3, up from 63.4 pre-v5.
+### Root Causes
+1. Ran alpha search on wrong machine (local with 18 rounds, not GCP with 22 rounds)
+2. Used simulated observations (GT argmax) instead of real saved observations
+3. Didn't validate the direction of the finding (lower alpha = trust obs more, but obs are noisy)
+4. Time pressure led to deploying without cross-checking the logic
+5. ml-churn VM sat idle the entire session
 
-### What failed
-- Multiclass LightGBM: 26.3 (argmax destroys probability info)
-- CA-Markov: 19.0 (static neighborhoods, averaged transitions)
-- Temperature calibration: +0.1 (negligible)
-
-### What wasn't completed
-- Per-regime specialized models (audit said too risky for final hours)
-- Physics prior (transition model as Dirichlet base)
-- Model ensemble
-- Audit suggested: post-hoc bias correction per regime (simpler than per-regime models)
-
-## Remaining Plan (from plan.md)
-1. Monitor R22+ (v5 autonomous)
-2. Per-regime bias correction (10 lines, quick win per audit #9)
-3. Keep improving until 15:00 CET, no feature freeze
-
-## GCP Access
-```
-gcloud compute ssh ml-brain --zone=europe-west1-b --project=ai-nm26osl-1779
-gcloud compute ssh ml-churn --zone=europe-west1-b --project=ai-nm26osl-1779
-```
-
-## Git
-Branch: agent-ml
-Worktree: /Volumes/devdrive/github_dev/nmiai-worktree-ml/
-All changes pushed to origin/agent-ml.
+### Key Learnings for Post-Mortem
+- The gap between "simulated backtest" and "real production" is where mistakes hide
+- Always run optimization on the SAME data source as production
+- Question the direction of findings, not just the magnitude
+- Use ALL available compute (ml-churn was idle for 4 hours)
+- The boring infrastructure work (syncing data between machines) matters more than fancy models
