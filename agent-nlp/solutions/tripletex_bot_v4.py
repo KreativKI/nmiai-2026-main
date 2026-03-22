@@ -153,7 +153,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code fences.
 - amount, paymentDate, reason
 - title, costs (array of {description, amount, date}), perDiemDays, perDiemRate, travelLocation
 - salary, baseSalary, bonus, bonusAmount, employmentPercentage, hoursPerDay, configureWorkingHours (set to true when prompt mentions "standard arbeidstid" or "working hours" or "Arbeitszeit")
-- userType (if admin/kontoadministrator/Kontoadministrator/administrateur/administrador mentioned: "ADMINISTRATOR". If extended/utvidet mentioned: "EXTENDED". Otherwise omit)
+- userType (if admin/kontoadministrator/Kontoadministrator/administrateur/administrador mentioned: "STANDARD". If extended/utvidet mentioned: "EXTENDED". Otherwise omit. NOTE: Tripletex only accepts NO_ACCESS, STANDARD, EXTENDED as userType values)
 - targetEntity (for updates: which entity to find)
 - updateFields (for updates: what to change)
 - supplierName, supplierOrgNumber, invoiceNumber, invoiceAmount, totalAmount, account, accountNumber
