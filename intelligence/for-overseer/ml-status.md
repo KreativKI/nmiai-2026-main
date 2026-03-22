@@ -1,42 +1,46 @@
 ---
 from: agent-ml
-timestamp: 2026-03-20 21:55 UTC
+timestamp: 2026-03-22 01:15 CET
 priority: INFO
 ---
 
-## ML Track Status — Session 6 (Overnight Deployment)
+## ML Track Status -- v5 Multi-Seed Live
 
-### Scores
-| Round | Score | Rank | Weight |
-|-------|-------|------|--------|
-| R3 | 39.7 | 33/100 | 1.158 |
-| R4 | 71.8 | 49/86 | 1.216 |
-| R5 | 67.6 | 69/144 | 1.276 |
-| R6 | 70.4 | 52/186 | 1.340 |
-| R7 | 55.1 | 112/199 | 1.407 |
-| R8 | 61.8 | 126/214 | 1.478 |
-| R9 | **82.6** | 93/221 | 1.551 |
-| R10 | pending | - | 1.629 |
+### Latest Scores
+| Round | Score | Rank | Weight | Model |
+|-------|-------|------|--------|-------|
+| R17 | 67.9 | 179 | 2.292 | v4 32-feat + hard constraints |
+| R18 | 28.6 | 214 | 2.407 | v4 51-feat + obs proxy (OOD growth) |
+| R19 | pending | - | ~2.53 | **v5 multi-seed, regime=death** |
 
-Best: 82.6 (R9, rank 93/221)
+### Current Approach
+overnight_v5 deployed on ml-brain. Key changes from v4:
+- Multi-seed observation: 9 queries per seed x 5 seeds = full grid coverage
+- All 5 seeds get obs_settle_growth proxy (was only deep seed)
+- All 5 seeds get Dirichlet blending (was only deep seed)
+- Per-regime alpha (death=5, stable=30, growth=15)
+- Regime reclassification from full-grid observations
 
-### What was done
-A. Cached R8+R9 ground truth (were missing)
-B. Retrained V2 model: 72K cells from 9 rounds, backtest avg 65.6 (was 64.5 with 7 rounds)
-C. Resubmitted R10 with retrained model + observations for all 5 seeds
-D. Built overnight_runner.py: autonomous round handler with full lifecycle management
-E. Deployed to GCP VM (PID 8653, 5-min interval)
+### R18 Post-Mortem
+R18 was explosive growth (11.6x, 2602 new settlements). Our training max was 4.8x.
+The model was out-of-distribution. Regime was correctly detected as growth.
+The score (28.6) was from wrong predictions, not wrong regime.
 
-### Incident
-VM initially submitted bad model-only predictions with false extinction calibration for R10 (budget was exhausted, couldn't query, so 0 observations = 0% survival = false extinction). Fixed by:
-1. Resubmitting from local with correct observations
-2. Patching overnight_runner.py to check budget before attempting observations
-3. Added disk fallback for observations and regime data
+### Key Finding: Game Is Escalating
+Growth magnitude is increasing over time:
+R6=1.6x, R7=2.3x, R11=3.3x, R12=4.0x, R14=5.8x, R18=11.6x
+Competition is making growth rounds progressively harder.
+Our 80+ scores (R9, R15) were both death rounds (easy to predict).
 
-### GCP VM overnight_runner.py
-- Running: PID 8653, 5-min cycle
-- Will auto-submit R11+ rounds (observe all seeds, detect regime, submit)
-- Will auto-cache ground truth and retrain model after each round closes
-- State: knows R10 submitted, 9 rounds cached
+### Blockers
+None. v5 is autonomous with cron watchdog.
 
-### No action needed until morning review (Sunday ~09:00 CET)
+### What's Running
+- ml-brain: overnight_v5 (multi-seed, 51 features, obs proxies, cron active)
+- ml-churn: IDLE
+- Temperature calibration: tested, +0.1 improvement (negligible, not deployed)
+
+### Next Steps
+- Monitor R19 score (first v5 multi-seed submission)
+- Investigate how to handle escalating growth magnitudes
+- Feature freeze 09:00 CET
