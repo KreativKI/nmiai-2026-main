@@ -89,12 +89,14 @@ except Exception as e:
 EXTRACTION_PROMPT = """You are a task classifier for a Norwegian accounting system (Tripletex).
 Given an accounting task prompt (in any of 7 languages: Norwegian, English, Spanish, Portuguese, Nynorsk, German, French), extract the task type and all field values.
 
+CRITICAL: When PDF or image attachments are included, extract ALL relevant field values from BOTH the prompt text AND the attachment. The attachment often contains fields not mentioned in the prompt (e.g., national identity number, occupation code, salary, start date, department, bank account). Read the full attachment and extract every value that maps to a field name listed in the "Field names to use" section below.
+
 Return ONLY valid JSON. No markdown, no explanation, no code fences.
 
 ## Task types (pick exactly one):
 - create_customer
 - create_employee
-- create_employee_with_employment (use when prompt mentions salary/arslonn, employment percentage/stillingsprosent, start date/startdato, or employment/ansettelse)
+- create_employee_with_employment (use when prompt mentions salary/arslonn, employment percentage/stillingsprosent, start date/startdato, employment/ansettelse, employment contract/arbeidskontrakt/contrato de trabajo/contrato de trabalho/contrat de travail/Arbeitsvertrag, offer letter/tilbudsbrev/carta de oferta/lettre d'offre, or any attached PDF with employee details)
 - create_product
 - create_department
 - create_project
