@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Shared CV toolchain: validates submission ZIPs before upload to competition platform.
 """
 NM i AI 2026 — CV Submission ZIP Validator (shared/tools/validate_cv_zip.py)
 
