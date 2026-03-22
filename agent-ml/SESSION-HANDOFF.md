@@ -1,56 +1,92 @@
-# ML Session Handoff -- 2026-03-22 01:30 CET
+# ML Session Handoff -- 2026-03-22 09:15 CET
 
-## Score: R18=28.6 (worst). R19 pending (v5 multi-seed, death regime).
-## Total weighted: ~1603 + R18(68.9) = ~1672
+## CRITICAL: Competition ends 15:00 CET today. ~5.75 hours left.
+
+## Current Score
+Total weighted: 2326.3. R22 active (95 min left, already submitted).
+
+| Round | Score | Rank | Model |
+|-------|-------|------|-------|
+| R17 | 67.9 | 179 | v4 32-feat |
+| R18 | 28.6 | 214 | v4 51-feat (OOD growth 11.6x) |
+| **R19** | **85.3** | **102** | **v5 multi-seed** |
+| **R20** | **82.8** | **92** | **v5 multi-seed** |
+| **R21** | **78.7** | **155** | **v5 multi-seed** |
+| R22 | pending | - | v5 multi-seed + OOD fix |
 
 ## What's Running
-- ml-brain: overnight_v5 (multi-seed observation, cron watchdog active)
+- ml-brain: overnight_v5.py with cron watchdog (~/start_v5.sh)
 - ml-churn: IDLE
-- R19 submitted at 00:09 UTC with death regime classification
+- Cron: `*/15 * * * * pgrep -f overnight_v5.py > /dev/null || bash ~/start_v5.sh`
 
-## Critical Finding: Game Progression (JC's hypothesis CONFIRMED)
+## overnight_v5 Features (deployed, working)
+- Multi-seed observation: 9 queries/seed x 5 seeds = full grid coverage
+- 51 features with trajectory proxies from observations
+- obs_settle_growth on ALL seeds (not just deep seed)
+- Per-regime Dirichlet alpha (death=5, stable=30, growth=15)
+- Dynamic alpha=3 for extreme growth (avg_growth > 5.0)
+- OOD cap: obs_settle_growth capped at training max (y25=4.846, y10=2.062)
+- Regime reclassification from 5-seed average
+- Hard constraints (port-coastal, ruin-cap)
+- Replay resubmission when replay data appears
+- All code in: agent-ml/solutions/overnight_v5.py
 
-Growth rounds are escalating in magnitude over time:
+## Key Files on GCP (ml-brain)
+- ~/solutions/overnight_v5.py (production)
+- ~/solutions/build_dataset.py (51 features)
+- ~/solutions/data/ground_truth_cache/ (20+ rounds)
+- ~/solutions/data/replays/ (85+ replay files)
+- ~/solutions/data/master_dataset.npz (122K+ rows x 51 features)
+- ~/overnight_v5.log (production log)
+- ~/start_v5.sh (startup script)
+- ~/overnight_v5_state.json (state: submitted rounds, cached rounds)
+
+## Key Files Local
+- agent-ml/solutions/overnight_v5.py (production code)
+- agent-ml/solutions/build_dataset.py (feature extraction, 51 features)
+- agent-ml/solutions/evaluate.py (LOO-CV framework)
+- agent-ml/solutions/deep_analysis.py (8 hypotheses validated)
+- agent-ml/solutions/transition_model.py (1.77M transitions)
+- agent-ml/solutions/observation_analysis.py (proxy correlation gate)
+- agent-ml/solutions/feature_importance.py (51-feature breakdown)
+- agent-ml/solutions/temperature_calibration.py (tested, negligible +0.1)
+- agent-ml/solutions/audit.py (persistent unbiased auditor)
+- agent-ml/plan.md (current plan)
+
+## Critical Findings This Session
+
+### Game is escalating growth rounds
+Growth magnitude over time: R6=1.6x, R7=2.3x, R11=3.3x, R12=4.0x, R14=5.8x, R18=11.6x
+Correlation R=-0.802: more growth = worse score.
+OOD fix deployed: cap at training max + dynamic alpha.
+
+### Multi-seed was the biggest win (+19 points)
+Spreading 50 queries across all 5 seeds instead of deep-stacking 1 seed.
+R19-R21 averaged 82.3, up from 63.4 pre-v5.
+
+### What failed
+- Multiclass LightGBM: 26.3 (argmax destroys probability info)
+- CA-Markov: 19.0 (static neighborhoods, averaged transitions)
+- Temperature calibration: +0.1 (negligible)
+
+### What wasn't completed
+- Per-regime specialized models (audit said too risky for final hours)
+- Physics prior (transition model as Dirichlet base)
+- Model ensemble
+- Audit suggested: post-hoc bias correction per regime (simpler than per-regime models)
+
+## Remaining Plan (from plan.md)
+1. Monitor R22+ (v5 autonomous)
+2. Per-regime bias correction (10 lines, quick win per audit #9)
+3. Keep improving until 15:00 CET, no feature freeze
+
+## GCP Access
 ```
-R6:  1.6x growth    score=70
-R7:  2.3x           score=55
-R11: 3.3x           score=69
-R12: 4.0x           score=50
-R14: 5.8x           score=68
-R18: 11.6x          score=29   <-- all-time low
+gcloud compute ssh ml-brain --zone=europe-west1-b --project=ai-nm26osl-1779
+gcloud compute ssh ml-churn --zone=europe-west1-b --project=ai-nm26osl-1779
 ```
 
-Correlation: R=-0.802 between growth_rate and our score.
-Our 80+ scores (R9=82.6, R15=81.6) were both death rounds.
-Death = predictable. Growth = escalating challenge.
-
-## R18 Post-Mortem (from actual data)
-- Regime: growth (correctly classified)
-- Growth: 11.6x (2602 new settlements). Training max was 4.8x.
-- All 5 seeds showed 12-15x growth in replays
-- Model was out-of-distribution by 2.4x
-- Problem: model can't extrapolate to unseen growth magnitudes
-
-## Temperature Calibration Result
-- T=1.05 optimal, +0.1 improvement (negligible)
-- NOT the fix needed. The model is well-calibrated for seen data.
-
-## What Was Built This Session
-- overnight_v5.py: multi-seed observation (all 5 seeds get full maps)
-- deep_analysis.py: 8 hypotheses validated on 80 replays
-- build_dataset.py: 51 features (up from 32)
-- evaluate.py: LOO-CV framework
-- transition_model.py: 1.77M transition tables
-- observation_analysis.py: proxy correlation gate
-- feature_importance.py: 51-feature breakdown
-- temperature_calibration.py: per-regime T search
-- model_a_lgbm.py: multiclass attempt (failed, 26.3)
-- model_c_camarkov.py: CA-Markov attempt (failed, 19.0)
-
-## Open Questions for Next Session
-1. How to handle escalating growth? The model can't extrapolate.
-   Options: log-transform obs_settle_growth, dynamic alpha based on magnitude,
-   or direct use of observed terrain as stronger signal.
-2. R19 score will test multi-seed observation (first v5 round)
-3. Should we pivot strategy based on game progression?
-4. Competition ends 15:00 CET. Feature freeze 09:00 CET.
+## Git
+Branch: agent-ml
+Worktree: /Volumes/devdrive/github_dev/nmiai-worktree-ml/
+All changes pushed to origin/agent-ml.
