@@ -1,0 +1,653 @@
+#!/usr/bin/env python3
+"""
+Autonomous Round Handler V6 for Astar Island.
+
+Five improvements over V5:
+  A. MLP Neural Network Ensemble (sklearn MLPRegressor blended with LightGBM)
+  B. Monte Carlo Simulator Blend (RegimeModel transition priors)
+  C. Spatial Convolution Features (56 features via build_dataset_v6)
+  D. Cross-Seed Information Transfer (growth stats propagated across seeds)
+  E. Regime-Specific Observation Weighting (confidence-based Dirichlet alpha)
+
+Usage:
+  python overnight_v6.py --token TOKEN --continuous
+"""
+
+import argparse
+import json
+import sys
+import time
+import traceback
+from pathlib import Path
+from datetime import datetime, timezone
+
+import numpy as np
+import requests
+import lightgbm as lgb
+
+try:
+    from sklearn.neural_network import MLPRegressor
+    from sklearn.preprocessing import StandardScaler
+    HAS_SKLEARN = True
+except ImportError:
+    HAS_SKLEARN = False
+
+sys.path.insert(0, str(Path(__file__).parent))
+from backtest import (
+    load_cached_rounds, get_session, cache_round,
+    TERRAIN_TO_CLASS, STATIC_TERRAIN, NUM_CLASSES, PROB_FLOOR, BASE,
+)
+from build_dataset_v6 import (
+    build_master_dataset, FEATURE_NAMES, extract_cell_features,
+    _compute_trajectory_features,
+)
+from regime_model import RegimeModel
+
+OCEAN_RAW = {10, 11}
+DATA_DIR = Path(__file__).parent / "data"
+REPLAY_DIR = DATA_DIR / "replays"
+STATE_FILE = Path(__file__).parent.parent / "overnight_v6_state.json"
+LOG_FILE = Path.home() / "overnight_v6.log"
+PARAMS_FILE = DATA_DIR / "brain_v4_params.json"
+
+COMPETITION_END = datetime(2026, 3, 22, 14, 0, 0, tzinfo=timezone.utc)
+
+# Caps for obs-derived growth proxies (from master_dataset.npz training range)
+TRAIN_MAX_Y25 = 4.846
+TRAIN_MAX_Y10 = 2.062
+
+DEFAULT_PARAMS = {
+    "n_estimators": 50, "num_leaves": 31, "learning_rate": 0.05,
+    "min_child_samples": 20, "subsample": 0.8, "colsample_bytree": 0.8,
+    "alpha_dirichlet": 20.0,
+}
+
+# Blend weights: LightGBM, MLP, RegimeModel
+W_LGB = 0.40
+W_MLP = 0.30
+W_TRANSITION = 0.30
+
+
+def log(msg):
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    line = f"[{ts}] {msg}"
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(line + "\n")
+    except Exception:
+        print(line, file=sys.stderr, flush=True)
+
+
+# -- State --
+
+def load_state():
+    if STATE_FILE.exists():
+        return json.loads(STATE_FILE.read_text())
+    return {"submitted_rounds": [], "cached_rounds": []}
+
+
+def save_state(state):
+    STATE_FILE.write_text(json.dumps(state, indent=2))
+
+
+def load_lgb_params():
+    if PARAMS_FILE.exists():
+        try:
+            with open(PARAMS_FILE) as f:
+                p = json.load(f)
+            return {k: p[k] for k in DEFAULT_PARAMS if k in p}
+        except Exception:
+            pass
+    return DEFAULT_PARAMS.copy()
+
+
+# -- Observation (same as V5) --
+
+def accumulate_obs(obs, obs_counts, obs_total):
+    vp = obs["viewport"]
+    for dy, row in enumerate(obs["grid"]):
+        for dx, terrain in enumerate(row):
+            ya, xa = vp["y"] + dy, vp["x"] + dx
+            obs_counts[ya, xa, TERRAIN_TO_CLASS.get(terrain, 0)] += 1
+            obs_total[ya, xa] += 1
+
+
+def query_viewport(session, round_id, seed_idx, x, y, w=15, h=15):
+    resp = session.post(f"{BASE}/astar-island/simulate", json={
+        "round_id": round_id, "seed_index": seed_idx,
+        "viewport_x": x, "viewport_y": y, "viewport_w": w, "viewport_h": h,
+    })
+    resp.raise_for_status()
+    time.sleep(0.22)
+    return resp.json()
+
+
+def observe_round_v2(session, round_id, detail, round_num):
+    """Observe ALL 5 seeds with full grid coverage (9 queries each)."""
+    h, w = detail["map_height"], detail["map_width"]
+    seeds_count = detail.get("seeds_count", 5)
+
+    viewports = []
+    for vy in range(0, h, 15):
+        for vx in range(0, w, 15):
+            viewports.append((vx, vy, min(15, w - vx), min(15, h - vy)))
+
+    per_seed_obs = {}
+    budget_used = 0
+
+    for seed_idx in range(seeds_count):
+        oc = np.zeros((h, w, NUM_CLASSES))
+        ot = np.zeros((h, w))
+
+        for vx, vy, vw, vh in viewports:
+            if budget_used >= 50:
+                break
+            try:
+                obs = query_viewport(session, round_id, seed_idx, vx, vy, vw, vh)
+                accumulate_obs(obs, oc, ot)
+                budget_used += 1
+            except Exception as e:
+                log(f"  Query failed seed {seed_idx} ({vx},{vy}): {e}")
+                continue
+
+        per_seed_obs[seed_idx] = (oc, ot)
+        np.save(DATA_DIR / f"obs_counts_r{round_num}_seed{seed_idx}_full.npy", oc)
+        np.save(DATA_DIR / f"obs_total_r{round_num}_seed{seed_idx}_full.npy", ot)
+        covered = int((ot > 0).sum())
+        log(f"  Seed {seed_idx}: {covered}/1600 cells covered ({budget_used} queries used)")
+
+    # Extra queries on seed 0
+    remaining = 50 - budget_used
+    if remaining > 0 and 0 in per_seed_obs:
+        oc0, ot0 = per_seed_obs[0]
+        for i in range(remaining):
+            if budget_used >= 50:
+                break
+            try:
+                vx, vy, vw, vh = viewports[i % len(viewports)]
+                obs = query_viewport(session, round_id, 0, vx, vy, vw, vh)
+                accumulate_obs(obs, oc0, ot0)
+                budget_used += 1
+            except Exception:
+                break
+        log(f"  Seed 0 extra: {int(ot0.mean()):.1f} avg obs/cell ({budget_used} total queries)")
+
+    # Compute per-seed growth ratios
+    growth_ratios = []
+    for seed_idx in range(seeds_count):
+        if seed_idx not in per_seed_obs:
+            growth_ratios.append(1.0)
+            continue
+        ig = detail["initial_states"][seed_idx]["grid"]
+        oc, ot = per_seed_obs[seed_idx]
+        obs_argmax = oc.argmax(axis=2)
+        observed = ot > 0
+        settle_count = int(((obs_argmax == 1) | (obs_argmax == 2))[observed].sum())
+        init_settle = sum(1 for y in range(h) for x in range(w)
+                          if TERRAIN_TO_CLASS.get(int(ig[y][x]), 0) in (1, 2))
+        growth_ratios.append(settle_count / max(init_settle, 1))
+
+    avg_growth = np.mean(growth_ratios)
+    if avg_growth < 0.9:
+        regime = "death"
+    elif avg_growth > 1.4:
+        regime = "growth"
+    else:
+        regime = "stable"
+
+    log(f"  Multi-seed regime: {regime} (avg_growth={avg_growth:.2f}, "
+        f"per_seed=[{', '.join(f'{g:.1f}' for g in growth_ratios)}])")
+
+    return per_seed_obs, regime, growth_ratios
+
+
+# -- Change D: Cross-Seed Statistics --
+
+def compute_cross_seed_stats(growth_ratios):
+    """Compute statistics across all 5 seeds for regime confidence."""
+    gr = np.array(growth_ratios, dtype=np.float64)
+    return {
+        "avg": float(np.mean(gr)),
+        "std": float(np.std(gr)),
+        "max": float(np.max(gr)),
+        "min": float(np.min(gr)),
+        "range": float(np.max(gr) - np.min(gr)),
+    }
+
+
+# -- Change E: Confidence-Based Alpha --
+
+def compute_alpha_v6(regime, cross_seed_stats):
+    """Compute Dirichlet alpha based on regime and cross-seed confidence.
+
+    Lower alpha = trust observations more.
+    Higher alpha = trust model more.
+
+    Stable rounds are hardest to predict, so we REDUCE alpha there
+    (opposite of V5 which used alpha=30 for stable).
+    """
+    avg_growth = cross_seed_stats["avg"]
+    growth_std = cross_seed_stats["std"]
+
+    if regime == "death":
+        # Model and observations agree for death. Keep moderate trust in model.
+        return 5
+
+    if regime == "growth":
+        if avg_growth > 5.0:
+            # Extreme growth: model extrapolates badly. Trust observations.
+            return 3
+        if avg_growth > 3.0:
+            # Strong growth: model less reliable. Lean toward observations.
+            return 8
+        # Moderate growth: balanced.
+        return 12
+
+    # Stable regime: hardest to predict. Use cross-seed variance for confidence.
+    if growth_std < 0.1:
+        # Seeds agree: moderate confidence, but stable is still hard.
+        return 15
+    # Seeds disagree: low confidence. Trust observations more.
+    return 8
+
+
+# -- Prediction --
+
+def count_terrain_classes(grid, h, w):
+    total_s, total_p, total_f = 0, 0, 0
+    for y in range(h):
+        for x in range(w):
+            cls = TERRAIN_TO_CLASS.get(int(grid[y][x]), 0)
+            if cls == 1:
+                total_s += 1
+            elif cls == 2:
+                total_p += 1
+            elif cls == 4:
+                total_f += 1
+    return total_s, total_p, total_f
+
+
+def predict_and_submit_v6(session, round_id, detail, round_num,
+                          per_seed_obs, regime, growth_ratios):
+    """V6: LightGBM + MLP + RegimeModel ensemble with 56 features."""
+    h, w = detail["map_height"], detail["map_width"]
+    seeds_count = detail["seeds_count"]
+
+    lgb_params = load_lgb_params()
+    lgb_params.pop("alpha_dirichlet", None)
+    lgb_params["objective"] = "regression"
+    lgb_params["metric"] = "mse"
+    lgb_params["verbose"] = -1
+
+    # Build dataset with V6 features (56)
+    rounds_data = load_cached_rounds()
+    X, Y, _ = build_master_dataset(rounds_data)
+    log(f"  Training V6: {X.shape[0]} rows, {X.shape[1]} features")
+
+    # Train LightGBM (6 independent regressors)
+    lgb_models = {}
+    for cls in range(NUM_CLASSES):
+        m = lgb.LGBMRegressor(**lgb_params)
+        m.fit(X, Y[:, cls])
+        lgb_models[cls] = m
+
+    # Change A: Train MLP ensemble
+    mlp_models = {}
+    scaler = None
+    if HAS_SKLEARN:
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+        for cls in range(NUM_CLASSES):
+            m = MLPRegressor(
+                hidden_layer_sizes=(128, 64),
+                max_iter=500,
+                early_stopping=True,
+                validation_fraction=0.1,
+                random_state=42,
+                learning_rate_init=0.001,
+            )
+            m.fit(X_scaled, Y[:, cls])
+            mlp_models[cls] = m
+        log(f"  MLP trained: 6 models (128->64), {X_scaled.shape[1]} features")
+    else:
+        log("  WARNING: sklearn not available, MLP disabled")
+
+    # Change B: Train RegimeModel (transition lookup table)
+    regime_model = RegimeModel()
+    for rd in rounds_data:
+        regime_model.add_training_data(rd)
+    regime_model.finalize()
+    log(f"  RegimeModel trained on {len(rounds_data)} rounds")
+
+    total_s, total_p, _ = count_terrain_classes(
+        detail["initial_states"][0]["grid"], h, w)
+
+    # Change D: Cross-seed statistics
+    cross_seed_stats = compute_cross_seed_stats(growth_ratios)
+    log(f"  Cross-seed stats: avg={cross_seed_stats['avg']:.2f} "
+        f"std={cross_seed_stats['std']:.2f} range={cross_seed_stats['range']:.2f}")
+
+    # Change E: Confidence-based alpha
+    alpha = compute_alpha_v6(regime, cross_seed_stats)
+    log(f"  Alpha={alpha} (regime={regime})")
+
+    # Determine blend weights based on sklearn availability
+    if HAS_SKLEARN:
+        w_lgb, w_mlp, w_trans = W_LGB, W_MLP, W_TRANSITION
+    else:
+        w_lgb, w_mlp, w_trans = 0.7, 0.0, 0.3
+
+    regime_flags = {
+        "regime_death": 1 if regime == "death" else 0,
+        "regime_growth": 1 if regime == "growth" else 0,
+        "regime_stable": 1 if regime == "stable" else 0,
+    }
+
+    skip_cells = STATIC_TERRAIN | OCEAN_RAW
+
+    for seed_idx in range(seeds_count):
+        ig = detail["initial_states"][seed_idx]["grid"]
+
+        # Load replay if available
+        replay_path = REPLAY_DIR / f"r{round_num}_seed{seed_idx}.json"
+        replay_data = None
+        if replay_path.exists():
+            try:
+                with open(replay_path) as f:
+                    replay_data = json.load(f)
+            except Exception:
+                pass
+        traj = _compute_trajectory_features(replay_data, total_s)
+
+        # Obs-derived proxy for this seed
+        if not replay_data and seed_idx in per_seed_obs:
+            oc_s, ot_s = per_seed_obs[seed_idx]
+            if (ot_s > 0).any():
+                obs_argmax = oc_s.argmax(axis=2)
+                observed = ot_s > 0
+                obs_settle = int(((obs_argmax == 1) | (obs_argmax == 2))[observed].sum())
+                seed_init_s = sum(1 for y in range(h) for x in range(w)
+                                  if TERRAIN_TO_CLASS.get(int(ig[y][x]), 0) in (1, 2))
+                obs_growth = obs_settle / max(seed_init_s, 1)
+                traj["settle_growth_y25"] = min(obs_growth, TRAIN_MAX_Y25)
+                traj["settle_growth_y10"] = min(obs_growth, TRAIN_MAX_Y10)
+
+        round_feats = {**regime_flags, "total_settlements": total_s,
+                       "total_ports": total_p, **traj}
+
+        cells, coords = [], []
+        for y in range(h):
+            for x in range(w):
+                if int(ig[y][x]) in STATIC_TERRAIN:
+                    continue
+                fd = extract_cell_features(ig, y, x, h, w, replay_data=replay_data)
+                fd.update(round_feats)
+                cells.append([fd.get(n, 0) for n in FEATURE_NAMES])
+                coords.append((y, x))
+
+        pred = np.zeros((h, w, NUM_CLASSES))
+        if cells:
+            Xp = np.array(cells, dtype=np.float32)
+
+            # LightGBM predictions
+            lgb_pred = np.zeros((len(cells), NUM_CLASSES))
+            for cls in range(NUM_CLASSES):
+                lgb_pred[:, cls] = lgb_models[cls].predict(Xp)
+
+            # Change A: MLP predictions
+            mlp_pred = np.zeros((len(cells), NUM_CLASSES))
+            if HAS_SKLEARN and scaler is not None:
+                Xp_scaled = scaler.transform(Xp)
+                for cls in range(NUM_CLASSES):
+                    mlp_pred[:, cls] = mlp_models[cls].predict(Xp_scaled)
+
+            # Change B: RegimeModel transition predictions
+            trans_pred = np.zeros((len(cells), NUM_CLASSES))
+            for i, (cy, cx) in enumerate(coords):
+                trans_pred[i] = regime_model.predict_cell(ig, cy, cx, h, w, regime)
+
+            # Blend all three models
+            blended = w_lgb * lgb_pred + w_mlp * mlp_pred + w_trans * trans_pred
+
+            for i, (cy, cx) in enumerate(coords):
+                pred[cy, cx] = blended[i]
+
+        # Static cells
+        for y in range(h):
+            for x in range(w):
+                if int(ig[y][x]) in STATIC_TERRAIN:
+                    cls = TERRAIN_TO_CLASS.get(int(ig[y][x]), 0)
+                    pred[y, x] = PROB_FLOOR
+                    pred[y, x, cls] = 1.0 - (NUM_CLASSES - 1) * PROB_FLOOR
+
+        # Dirichlet blending on THIS seed's observations
+        if seed_idx in per_seed_obs:
+            oc_s, ot_s = per_seed_obs[seed_idx]
+            for y in range(h):
+                for x in range(w):
+                    if ot_s[y, x] == 0:
+                        continue
+                    a = alpha * pred[y, x]
+                    a = np.maximum(a, PROB_FLOOR)
+                    pred[y, x] = (a + oc_s[y, x]) / (a.sum() + ot_s[y, x])
+
+        # Hard constraints
+        for y in range(h):
+            for x in range(w):
+                if int(ig[y][x]) in skip_cells:
+                    continue
+                has_ocean = any(
+                    0 <= y + dy < h and 0 <= x + dx < w
+                    and int(ig[y + dy][x + dx]) in OCEAN_RAW
+                    for dy in (-1, 0, 1) for dx in (-1, 0, 1)
+                    if (dy, dx) != (0, 0)
+                )
+                if not has_ocean:
+                    pred[y, x, 2] = PROB_FLOOR
+                pred[y, x, 3] = min(pred[y, x, 3], 0.05)
+
+        pred = np.maximum(pred, PROB_FLOOR)
+        pred /= pred.sum(axis=-1, keepdims=True)
+
+        conf = pred.max(axis=-1).mean()
+        has_obs = "obs" if seed_idx in per_seed_obs else "blind"
+        for attempt in range(5):
+            try:
+                resp = session.post(f"{BASE}/astar-island/submit", json={
+                    "round_id": round_id, "seed_index": seed_idx,
+                    "prediction": pred.tolist(),
+                })
+                resp.raise_for_status()
+                log(f"  Seed {seed_idx}: SUBMITTED ({has_obs}, conf={conf:.3f}, "
+                    f"blend={w_lgb:.0%}lgb+{w_mlp:.0%}mlp+{w_trans:.0%}trans)")
+                break
+            except requests.HTTPError as e:
+                if e.response and e.response.status_code == 429:
+                    time.sleep(3 * (attempt + 1))
+                    continue
+                log(f"  Seed {seed_idx}: FAILED - {e}")
+                break
+        time.sleep(0.5)
+
+
+# -- Post-Round Pipeline --
+
+def post_round_pipeline(session, round_data, state):
+    rn = round_data["round_number"]
+    if rn in state["cached_rounds"]:
+        return
+
+    log(f"  Post-round pipeline for R{rn}...")
+
+    try:
+        cache_round(session, round_data)
+        state["cached_rounds"].append(rn)
+        log(f"  R{rn} ground truth cached")
+    except Exception as e:
+        log(f"  R{rn} cache failed: {e}")
+        return
+
+    REPLAY_DIR.mkdir(parents=True, exist_ok=True)
+    for si in range(5):
+        path = REPLAY_DIR / f"r{rn}_seed{si}.json"
+        if path.exists():
+            continue
+        try:
+            r = session.post(f"{BASE}/astar-island/replay", json={
+                "round_id": round_data["id"], "seed_index": si
+            })
+            if r.status_code == 200:
+                with open(path, "w") as f:
+                    json.dump(r.json(), f)
+            time.sleep(1)
+        except Exception:
+            pass
+    log(f"  R{rn} replays downloaded")
+
+    try:
+        rounds_data = load_cached_rounds()
+        X, Y, _ = build_master_dataset(rounds_data)
+        np.savez_compressed(DATA_DIR / "master_dataset_v6.npz", X=X, Y=Y)
+        log(f"  V6 dataset rebuilt: {X.shape[0]} rows, {X.shape[1]} features")
+    except Exception as e:
+        log(f"  Dataset rebuild failed: {e}")
+
+    try:
+        my_rounds = session.get(f"{BASE}/astar-island/my-rounds").json()
+        for rd in my_rounds:
+            if rd.get("round_number") == rn:
+                actual = rd.get("round_score")
+                rank = rd.get("rank")
+                weighted = actual * rd.get("round_weight", 0) if actual else 0
+                log(f"  R{rn} SCORE: {actual} rank={rank} weighted={weighted:.1f}")
+                break
+    except Exception as e:
+        log(f"  Score fetch failed: {e}")
+
+    save_state(state)
+
+
+# -- Main Loop --
+
+def parse_closes_at(closes_at_str):
+    closes = datetime.fromisoformat(closes_at_str.replace("Z", "+00:00"))
+    if closes.tzinfo is None:
+        closes = closes.replace(tzinfo=timezone.utc)
+    return closes
+
+
+def run_cycle(session, state):
+    now = datetime.now(timezone.utc)
+    if now >= COMPETITION_END:
+        log("COMPETITION ENDED.")
+        return False
+
+    try:
+        resp = session.get(f"{BASE}/astar-island/rounds")
+        resp.raise_for_status()
+        rounds = resp.json()
+    except Exception as e:
+        log(f"  API error: {e}")
+        return True
+
+    for r in rounds:
+        if r["status"] == "completed" and r["round_number"] not in state["cached_rounds"]:
+            try:
+                post_round_pipeline(session, r, state)
+            except Exception as e:
+                log(f"  Pipeline R{r['round_number']} failed: {e}")
+
+    active = next((r for r in rounds if r["status"] == "active"), None)
+    if active is None:
+        log("No active round. Waiting...")
+        return True
+
+    round_id = active["id"]
+    round_num = active["round_number"]
+    closes = parse_closes_at(active["closes_at"])
+    remaining = (closes - now).total_seconds() / 60
+
+    log(f"R{round_num} active, {remaining:.0f} min left, weight={active['round_weight']:.4f}")
+
+    if round_num in state["submitted_rounds"]:
+        # Replay resubmit opportunity
+        if remaining > 10:
+            replay_exists = (REPLAY_DIR / f"r{round_num}_seed0.json").exists()
+            obs_exists = (DATA_DIR / f"obs_counts_r{round_num}_seed0_full.npy").exists()
+            if replay_exists and obs_exists and not state.get(f"replay_resubmit_r{round_num}"):
+                log(f"  Replay data available, resubmitting V6...")
+                detail = session.get(f"{BASE}/astar-island/rounds/{round_id}").json()
+                per_seed_obs = {}
+                for si in range(5):
+                    oc_path = DATA_DIR / f"obs_counts_r{round_num}_seed{si}_full.npy"
+                    ot_path = DATA_DIR / f"obs_total_r{round_num}_seed{si}_full.npy"
+                    if oc_path.exists() and ot_path.exists():
+                        per_seed_obs[si] = (np.load(oc_path), np.load(ot_path))
+                regime = state.get(f"regime_r{round_num}", "stable")
+                growth_ratios = state.get(f"growth_ratios_r{round_num}", [1.0] * 5)
+                predict_and_submit_v6(session, round_id, detail, round_num,
+                                      per_seed_obs, regime, growth_ratios)
+                state[f"replay_resubmit_r{round_num}"] = True
+                save_state(state)
+                log(f"  R{round_num} RESUBMITTED V6 with replay-enhanced features")
+        else:
+            log(f"  R{round_num} already submitted.")
+        return True
+
+    # New round
+    log(f"  NEW ROUND {round_num}! (V6 ensemble)")
+    detail = session.get(f"{BASE}/astar-island/rounds/{round_id}").json()
+
+    try:
+        per_seed_obs, regime, growth_ratios = observe_round_v2(
+            session, round_id, detail, round_num)
+        state[f"regime_r{round_num}"] = regime
+        state[f"growth_ratios_r{round_num}"] = [round(float(g), 2) for g in growth_ratios]
+        predict_and_submit_v6(session, round_id, detail, round_num,
+                              per_seed_obs, regime, growth_ratios)
+        state["submitted_rounds"].append(round_num)
+        save_state(state)
+        log(f"  R{round_num} SUBMITTED (V6 ensemble, regime={regime})")
+    except Exception as e:
+        log(f"  R{round_num} FAILED: {e}")
+        traceback.print_exc()
+
+    return True
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Autonomous Round Handler V6")
+    parser.add_argument("--token", required=True)
+    parser.add_argument("--continuous", action="store_true")
+    parser.add_argument("--interval", type=int, default=300)
+    args = parser.parse_args()
+
+    session = get_session(args.token)
+    state = load_state()
+
+    log("=" * 60)
+    log("OVERNIGHT V6 -- ENSEMBLE (LGB+MLP+TRANSITION)")
+    log(f"  Features: {len(FEATURE_NAMES)} (V6 spatial)")
+    log(f"  Blend: {W_LGB:.0%} LGB + {W_MLP:.0%} MLP + {W_TRANSITION:.0%} Transition")
+    log(f"  sklearn: {'available' if HAS_SKLEARN else 'MISSING (MLP disabled)'}")
+    log(f"  Submitted: {state['submitted_rounds']}")
+    log(f"  Cached: {state['cached_rounds']}")
+    log("=" * 60)
+
+    if args.continuous:
+        while True:
+            try:
+                keep_going = run_cycle(session, state)
+                if not keep_going:
+                    break
+            except Exception as e:
+                log(f"CYCLE ERROR: {e}")
+                traceback.print_exc()
+            log(f"  Sleeping {args.interval}s...")
+            time.sleep(args.interval)
+    else:
+        run_cycle(session, state)
+
+
+if __name__ == "__main__":
+    main()
